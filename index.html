@@ -277,8 +277,12 @@ match io::stdin().read_line(&amp;mut input) {
 <p>This type signature and example use Rust features we haven't discussed yet. That's expected — another core skill in the Rust It Yourself series is working with code that uses features you don't fully understand. So let's try and learn something from this example anyway.</p>
 <p>The <code>read_line</code> method demonstrates two key aspects of Rust:</p>
 <ol>
-<li><strong>Mutability:</strong> Rust requires you to be more explicit about when data is mutated in-place. Here, calling <code>read_line</code> mutates <code>input</code> in-place. That is represented by the fact that the second argument is not a plain <code>String</code>, but instead a mutable reference <code>&amp;mut String</code>. Additionally, the variable <code>input</code> must be declared as <code>mut</code> so we are allowed to mutate it.</li>
-<li><strong>Error handling:</strong> Rust does not have a concept of <code>undefined</code> (as in JS) or <code>None</code> (as in Python) or <code>NULL</code> (as in C++) or <code>nil</code> (as in Go). Rust also does not have exceptions. Instead, to represent "this operation can succeed and return <code>X</code> or fail and return <code>Y</code>", Rust uses enums in combination with pattern matching via operators like <code>match</code>. Unlike enums in other languages, Rust's enums can have fields (similar to tagged unions in C).</li>
+<li>
+<p><strong>Mutability:</strong> Rust requires you to be more explicit about when data is mutated in-place. Here, calling <code>read_line</code> mutates <code>input</code> in-place. That is represented by the fact that the second argument is not a plain <code>String</code>, but instead a mutable reference <code>&amp;mut String</code>. Additionally, the variable <code>input</code> must be declared as <code>mut</code> so we are allowed to mutate it.</p>
+</li>
+<li>
+<p><strong>Error handling:</strong> Rust does not have a concept of <code>undefined</code> (as in JS) or <code>None</code> (as in Python) or <code>NULL</code> (as in C++) or <code>nil</code> (as in Go). Rust also does not have exceptions. Instead, to represent "this operation can succeed and return <code>X</code> or fail and return <code>Y</code>", Rust uses enums in combination with pattern matching via operators like <code>match</code>. Unlike enums in other languages, Rust's enums can have fields (similar to tagged unions in C).</p>
+</li>
 </ol>
 <p>Now, try copy-pasting this example into the bottom of your <code>main</code> function. Run the code (with <code>cargo run</code>), see how it works, and try editing the example so it completes Task 2.</p>
 
