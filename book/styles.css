@@ -1,0 +1,47 @@
+.ayu {
+  --mdbook-highlight: #46480f;
+}
+
+.coal {
+  --mdbook-highlight: #46480f;
+}
+
+.light {
+  --mdbook-highlight: #ffffc1;
+}
+
+.navy {
+  --mdbook-highlight: #46480f;
+}
+
+.rust {
+  --mdbook-highlight: #fdf2ca;
+}
+
+summary {
+  font-size: 80%;
+  font-style: italic;
+  display: flex;
+  justify-content: end;
+  cursor: pointer;
+}
+
+task {
+  display: block;
+  margin-block: 1em;
+  border: 1px solid var(--searchresults-border-color);
+  background: var(--mdbook-highlight);
+  padding: 0.5em;
+}
+
+task > :last-child {
+  margin-bottom: 0;
+}
+
+task > span {
+  font-weight: bold;
+}
+
+li {
+  margin-bottom: 1em;
+}
