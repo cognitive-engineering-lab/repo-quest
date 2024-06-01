@@ -133,7 +133,9 @@ The first line is the **type signature** of `read_line`. It says: "I am a method
 This type signature and example use Rust features we haven't discussed yet. That's expected &mdash; another core skill in the Rust It Yourself series is working with code that uses features you don't fully understand. So let's try and learn something from this example anyway.
 
 The `read_line` method demonstrates two key aspects of Rust: 
+
 1. **Mutability:** Rust requires you to be more explicit about when data is mutated in-place. Here, calling `read_line` mutates `input` in-place. That is represented by the fact that the second argument is not a plain `String`, but instead a mutable reference `&mut String`. Additionally, the variable `input` must be declared as `mut` so we are allowed to mutate it. 
+
 2. **Error handling:** Rust does not have a concept of `undefined` (as in JS) or `None` (as in Python) or `NULL` (as in C++) or `nil` (as in Go). Rust also does not have exceptions. Instead, to represent "this operation can succeed and return `X` or fail and return `Y`", Rust uses enums in combination with pattern matching via operators like `match`. Unlike enums in other languages, Rust's enums can have fields (similar to tagged unions in C).
 
 Now, try copy-pasting this example into the bottom of your `main` function. Run the code (with `cargo run`), see how it works, and try editing the example so it completes Task 2.

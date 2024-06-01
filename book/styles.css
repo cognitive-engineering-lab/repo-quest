@@ -41,7 +41,3 @@ task > :last-child {
 task > span {
   font-weight: bold;
 }
-
-li {
-  margin-bottom: 1em;
-}
