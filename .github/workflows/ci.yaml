@@ -15,3 +15,5 @@ jobs:
         uses: actions/checkout@v4
       - name: Tests
         run: cargo test
+      - name: Lints
+        run: cargo clippy -- -D warnings
