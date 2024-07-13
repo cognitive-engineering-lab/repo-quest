@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use octocrab::{
   issues::IssueHandler,
   models::{
@@ -16,7 +16,7 @@ use serde_json::json;
 use std::sync::Arc;
 use tokio::sync::OnceCell;
 
-pub struct Repo {
+pub struct GithubRepo {
   user: String,
   name: String,
   gh: Arc<Octocrab>,
@@ -24,15 +24,19 @@ pub struct Repo {
   issues: OnceCell<Vec<Issue>>,
 }
 
-impl Repo {
+impl GithubRepo {
   pub fn new(user: &str, name: &str) -> Self {
-    Repo {
+    GithubRepo {
       user: user.to_string(),
       name: name.to_string(),
       gh: octocrab::instance(),
       prs: OnceCell::new(),
       issues: OnceCell::new(),
     }
+  }
+
+  pub fn remote(&self) -> String {
+    format!("git@github.com:{}/{}.git", self.user, self.name)
   }
 
   pub async fn exists(&self) -> Result<bool> {
@@ -50,21 +54,14 @@ impl Repo {
     }
   }
 
-  pub async fn fork_from(&self, base: &Repo) -> Result<()> {
-    base.repo_handler().create_fork().send().await?;
-
-    let repo_route = format!("/repos/{}/{}", self.user, self.name);
-    let _response = self
-      .gh
-      .patch::<serde_json::Value, _, _>(
-        &repo_route,
-        Some(&json!({
-          "has_issues": true
-        })),
-      )
+  pub async fn copy_from(&self, base: &GithubRepo) -> Result<()> {
+    base
+      .repo_handler()
+      .generate(&self.name)
+      .owner(&self.user)
+      .private(true)
+      .send()
       .await?;
-
-    // TODO: any way to enable actions?
 
     Ok(())
   }
@@ -108,20 +105,21 @@ impl Repo {
       .await
   }
 
-  pub async fn issue(&self, title: &str) -> Option<&Issue> {
+  pub async fn issue(&self, label_name: &str) -> Option<&Issue> {
     let issues = self.issues().await;
-    issues
-      .iter()
-      .find(|issue| !matches!(issue.state, IssueState::Closed) && issue.title == title)
+    issues.iter().find(|issue| {
+      !matches!(issue.state, IssueState::Closed)
+        && issue.labels.iter().any(|label| label.name == label_name)
+    })
   }
 
-  pub async fn copy_pr(&self, base: &Repo, base_pr: &PullRequest) -> Result<()> {
+  pub async fn copy_pr(&self, base: &GithubRepo, base_pr: &PullRequest, head: &str) -> Result<()> {
     let pulls = self.pr_handler();
     let request = pulls
       .create(
         base_pr.title.as_ref().unwrap(),
         &base_pr.head.ref_field,
-        &base_pr.base.ref_field,
+        "main", // don't copy base
       )
       .body(base_pr.body.as_ref().unwrap());
     let self_pr = request.send().await?;
@@ -133,19 +131,31 @@ impl Repo {
       .await?;
     let comments = comment_pages.into_iter().collect::<Vec<_>>();
 
-    for comment in &comments {
-      self.copy_pr_comment(self_pr.number, comment).await?;
+    for comment in comments {
+      self.copy_pr_comment(self_pr.number, &comment, head).await?;
     }
 
     Ok(())
   }
 
-  pub async fn copy_pr_comment(&self, pr: u64, comment: &pulls::Comment) -> Result<()> {
+  pub async fn copy_pr_comment(
+    &self,
+    pr: u64,
+    comment: &pulls::Comment,
+    commit: &str,
+  ) -> Result<()> {
     let route = format!("/repos/{}/{}/pulls/{pr}/comments", self.user, self.name);
+    let comment_json = json!({
+      "path": comment.path,
+      "commit_id": commit,
+      "body": comment.body,
+      "line": comment.line
+    });
     let _response = self
       .gh
-      .post::<_, serde_json::Value>(route, Some(&comment))
-      .await?;
+      .post::<_, serde_json::Value>(route, Some(&comment_json))
+      .await
+      .with_context(|| format!("Failed to copy PR comment: {comment_json:#?}"))?;
     Ok(())
   }
 
