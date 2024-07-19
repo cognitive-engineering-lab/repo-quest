@@ -75,7 +75,7 @@ fn QuestView(quest: QuestRef) -> Element {
           quest_ref.infer_state_update().await;
         });
       },
-      "Reload"
+      "⟳"
     }
 
     ol {
@@ -164,28 +164,33 @@ fn QuestLoader(user: String) -> Element {
   let mut quest_slot = use_signal_sync(|| None::<QuestRef>);
   match (&*quest_slot.read_unchecked(), &*quest_name.read_unchecked()) {
     (Some(quest), _) => rsx! { QuestView { quest: quest.clone() }},
-    (None, Some(quest_name)) => {
-      println!("{quest_name}");
-      let quest_name = quest_name.clone();
-      let res = use_resource(move || {
-        let user = user.clone();
-        let quest_name = quest_name.clone();
-        async move {
-          let quest = Quest::load(&user, &quest_name, state).await?;
-          quest_slot.set(Some(QuestRef(Arc::new(quest))));
-          Ok::<_, anyhow::Error>(())
+    (a, b) => rsx! {
+      h1 { "RepoQuest" }
+      {match (a, b) {
+        (None, Some(quest_name)) => {
+          let quest_name = quest_name.clone();
+          let res = use_resource(move || {
+            let user = user.clone();
+            let quest_name = quest_name.clone();
+            async move {
+              let quest = Quest::load(&user, &quest_name, state).await?;
+              quest_slot.set(Some(QuestRef(Arc::new(quest))));
+              Ok::<_, anyhow::Error>(())
+            }
+          });
+          match &*res.read_unchecked() {
+            None => rsx! { "Loading current quest..." },
+            Some(Ok(())) => rsx! { "Unreachable?" },
+            Some(Err(e)) => rsx! {
+              div { "Failed to load quest with error:" },
+              pre { "{e:?}" }
+            },
+          }
         }
-      });
-      match &*res.read_unchecked() {
-        None => rsx! { "Loading current quest..." },
-        Some(Ok(())) => rsx! { "Unreachable?" },
-        Some(Err(e)) => rsx! {
-          div { "Failed to load quest with error:" },
-          pre { "{e:?}" }
-        },
-      }
-    }
-    (None, None) => rsx! { InitForm { user, quest_slot, state } },
+        (None, None) => rsx! { InitForm { user, quest_slot, state } },
+        _ => unreachable!()
+      }}
+    },
   }
 }
 
@@ -195,7 +200,7 @@ fn InitForm(
   quest_slot: SyncSignal<Option<QuestRef>>,
   state: SyncSignal<Option<QuestState>>,
 ) -> Element {
-  let mut repo = use_signal(|| String::new());
+  let mut repo = use_signal(String::new);
   let mut start_init = use_signal(|| false);
 
   rsx! {

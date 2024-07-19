@@ -13,6 +13,8 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+      - name: Install system dependencies
+        run: apt update -y && apt install -y libgtk-3-dev
       - name: Tests
         run: cargo test
       - name: Lints

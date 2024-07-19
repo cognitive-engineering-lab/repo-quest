@@ -66,40 +66,59 @@ impl GithubRepo {
       .send()
       .await?;
 
-    // There is some unknown delay between creating a repo from a template and its contents being added.
-    // We have to wait until that happens.
+    {
+      // There is some unknown delay between creating a repo from a template and its contents being added.
+      // We have to wait until that happens.
 
-    const RETRY_INTERVAL: u64 = 500;
-    const RETRY_TIMEOUT: u64 = 5000;
+      const RETRY_INTERVAL: u64 = 500;
+      const RETRY_TIMEOUT: u64 = 5000;
 
-    let strategy = tokio_retry::strategy::FixedInterval::from_millis(RETRY_INTERVAL);
-    let has_content = tokio_retry::Retry::spawn(strategy, || async {
-      match self.has_content().await {
-        Ok(true) => Ok(()),
-        _ => Err(()),
-      }
-    });
-    let _ = timeout(Duration::from_millis(RETRY_TIMEOUT), has_content)
-      .await
-      .context("Repo is still empty after timeout")?;
+      let strategy = tokio_retry::strategy::FixedInterval::from_millis(RETRY_INTERVAL);
+      let has_content = tokio_retry::Retry::spawn(strategy, || async {
+        match self.has_content().await {
+          Ok(true) => Ok(()),
+          _ => Err(()),
+        }
+      });
+      let _ = timeout(Duration::from_millis(RETRY_TIMEOUT), has_content)
+        .await
+        .context("Repo is still empty after timeout")?;
+    }
 
-    let mut page = base.issue_handler().list_labels_for_repo().send().await?;
-    let labels = page.take_items();
+    {
+      let route = format!("/repos/{}/{}/subscription", self.user, self.name);
+      let _response = self
+        .gh
+        .put::<serde_json::Value, _, _>(
+          route,
+          Some(&json!({
+              "subscribed": false,
+              "ignored": true
+          })),
+        )
+        .await
+        .context("Failed to unsubscribe from repo")?;
+    }
 
-    let issues = self.issue_handler();
-    try_join_all(
-      labels
-        .into_iter()
-        .filter(|label| !label.default)
-        .map(|label| {
-          issues.create_label(
-            label.name,
-            label.color,
-            label.description.unwrap_or_default(),
-          )
-        }),
-    )
-    .await?;
+    {
+      let mut page = base.issue_handler().list_labels_for_repo().send().await?;
+      let labels = page.take_items();
+
+      let issues = self.issue_handler();
+      try_join_all(
+        labels
+          .into_iter()
+          .filter(|label| !label.default)
+          .map(|label| {
+            issues.create_label(
+              label.name,
+              label.color,
+              label.description.unwrap_or_default(),
+            )
+          }),
+      )
+      .await?;
+    }
 
     Ok(())
   }
