@@ -1,14 +1,13 @@
 #![allow(non_snake_case)]
 
-use anyhow::{anyhow, ensure, Context, Result};
+use anyhow::{Context, Result};
 use dioxus::prelude::*;
 use futures_util::FutureExt;
 use octocrab::Octocrab;
 use quest::{Quest, QuestState};
-use regex::Regex;
 use stage::StagePart;
-use std::{ops::Deref, process::Command, sync::Arc};
-use tracing::{debug, Level};
+use std::{ops::Deref, process::Command, rc::Rc, sync::Arc};
+use tracing::Level;
 
 mod git_repo;
 mod github_repo;
@@ -59,8 +58,8 @@ fn QuestView(quest: QuestRef) -> Element {
     tokio::spawn(async move { quest_ref.infer_state_loop().await });
   });
 
-  let state = quest.state.read().as_ref().unwrap().clone();
-  let cur_stage = state.stage.idx();
+  let state = quest.state_signal.read().as_ref().unwrap().clone();
+  let cur_stage = state.stage.idx;
 
   let loading = *loading_signal.read();
   rsx! {
@@ -68,11 +67,15 @@ fn QuestView(quest: QuestRef) -> Element {
       pre { "{err:?}" }
     }
 
+    h1 {
+      {quest.config.title.clone()}
+    }
+
     button {
       onclick: move |_| {
         let quest_ref = quest.clone();
         tokio::spawn(async move {
-          quest_ref.infer_state_update().await;
+          quest_ref.infer_state_update().await.unwrap();
         });
       },
       "⟳"
@@ -81,7 +84,7 @@ fn QuestView(quest: QuestRef) -> Element {
     ol {
       for stage in 0 ..= cur_stage {
         li {
-          div { {quest.stages[stage].name.clone()} }
+          div { {quest.stages[stage].config.name.clone()} }
           if stage == cur_stage {
             div {
               button {
@@ -132,80 +135,52 @@ fn QuestView(quest: QuestRef) -> Element {
   }
 }
 
-fn infer_quest_name() -> Result<String> {
-  let output = Command::new("git")
-    .args(["remote", "get-url", "upstream"])
-    .output()
-    .context("git failed")?;
-  ensure!(
-    output.status.success(),
-    "git exited with non-zero status code"
-  );
-  let stdout = String::from_utf8(output.stdout)?.trim_end().to_string();
-
-  // TODO: parsing with a regex is hacky, but the url crate seemed to not work on SSH URLs...
-  let re = Regex::new(r"^git@github.com:[^/]+/([\w\d-]+)\.git$").unwrap();
-  let cap = re
-    .captures(&stdout)
-    .ok_or_else(|| anyhow!("Failed to parse: {stdout}"))?;
-  Ok(cap.get(1).unwrap().as_str().to_string())
-}
-
-#[component]
-fn QuestLoader(user: String) -> Element {
-  let quest_name = use_signal(|| match infer_quest_name() {
-    Ok(name) => Some(name),
-    Err(e) => {
-      debug!("Failed to infer quest name with error:\n{e:?}");
-      None
-    }
-  });
-  let state = use_signal_sync(|| None::<QuestState>);
+fn QuestLoader() -> Element {
   let mut quest_slot = use_signal_sync(|| None::<QuestRef>);
-  match (&*quest_slot.read_unchecked(), &*quest_name.read_unchecked()) {
-    (Some(quest), _) => rsx! { QuestView { quest: quest.clone() }},
-    (a, b) => rsx! {
+  let state_signal = use_signal_sync(|| None::<QuestState>);
+  match &*quest_slot.read_unchecked() {
+    Some(quest) => rsx! { QuestView { quest: quest.clone() }},
+    None => rsx! {
       h1 { "RepoQuest" }
-      {match (a, b) {
-        (None, Some(quest_name)) => {
-          let quest_name = quest_name.clone();
-          let res = use_resource(move || {
-            let user = user.clone();
-            let quest_name = quest_name.clone();
-            async move {
-              let quest = Quest::load(&user, &quest_name, state).await?;
-              quest_slot.set(Some(QuestRef(Arc::new(quest))));
-              Ok::<_, anyhow::Error>(())
+      {
+        let config = quest::load_config_from_current_dir();
+        match config {
+          Ok(config) => {
+            let res = use_resource(move || {
+              let config = config.clone();
+              async move {
+                let quest = Quest::load(config, state_signal).await?;
+                quest_slot.set(Some(QuestRef(Arc::new(quest))));
+                Ok::<_, anyhow::Error>(())
+              }
+            });
+            match &*res.read_unchecked() {
+              None => rsx! { "Loading current quest..." },
+              Some(Ok(())) => rsx! { "Unreachable?" },
+              Some(Err(e)) => rsx! {
+                div { "Failed to load quest with error:" },
+                pre { "{e:?}" }
+              },
             }
-          });
-          match &*res.read_unchecked() {
-            None => rsx! { "Loading current quest..." },
-            Some(Ok(())) => rsx! { "Unreachable?" },
-            Some(Err(e)) => rsx! {
-              div { "Failed to load quest with error:" },
-              pre { "{e:?}" }
-            },
           }
+          Err(_) => rsx! { InitForm { quest_slot, state_signal } }
         }
-        (None, None) => rsx! { InitForm { user, quest_slot, state } },
-        _ => unreachable!()
-      }}
+      }
     },
   }
 }
 
 #[component]
 fn InitForm(
-  user: String,
   quest_slot: SyncSignal<Option<QuestRef>>,
-  state: SyncSignal<Option<QuestState>>,
+  state_signal: SyncSignal<Option<QuestState>>,
 ) -> Element {
   let mut repo = use_signal(String::new);
   let mut start_init = use_signal(|| false);
 
   rsx! {
     if *start_init.read() {
-      InitView { user, repo: repo.read_unchecked().clone(), quest_slot, state }
+      InitView { repo: repo.read_unchecked().clone(), quest_slot, state_signal }
     } else {
       input { oninput: move |event| repo.set(event.value()) }
       button {
@@ -218,17 +193,16 @@ fn InitForm(
 
 #[component]
 fn InitView(
-  user: String,
   repo: String,
   quest_slot: SyncSignal<Option<QuestRef>>,
-  state: SyncSignal<Option<QuestState>>,
+  state_signal: SyncSignal<Option<QuestState>>,
 ) -> Element {
   let quest = use_resource(move || {
-    let user = user.clone();
     let repo = repo.clone();
     async move {
       tokio::spawn(async move {
-        let quest = Quest::load(&user, &repo, state).await?;
+        let config = quest::load_config_from_remote("cognitive-engineering-lab", &repo).await?;
+        let quest = Quest::load(config, state_signal).await?;
         quest.create_repo().await?;
         quest_slot.set(Some(QuestRef(Arc::new(quest))));
         Ok::<_, anyhow::Error>(())
@@ -250,25 +224,16 @@ fn InitView(
 
 #[component]
 fn App() -> Element {
-  let user_res = use_resource(|| async move {
-    init_octocrab()?;
-    let user = octocrab::instance()
-      .current()
-      .user()
-      .await
-      .context("Failed to get current user")?;
-    Ok::<_, anyhow::Error>(user.login)
-  });
+  let init_res = use_hook(|| Rc::new(init_octocrab()));
 
   rsx! {
       link { rel: "stylesheet", href: "main.css" }
-      {match &*user_res.read_unchecked() {
-        Some(Ok(user)) => rsx!{ QuestLoader { user } },
-        Some(Err(e)) => rsx!{
+      {match &*init_res {
+        Ok(()) => rsx!{ QuestLoader { } },
+        Err(e) => rsx!{
           div { "Failed to load Github API. Full error:" }
           pre { "{e:?}" }
         },
-        None => rsx!{ "Loading Github API..." }
       }}
   }
 }

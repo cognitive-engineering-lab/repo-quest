@@ -1,19 +1,30 @@
-use std::{env, time::Duration};
+use std::{collections::HashMap, env, fs, path::Path, process::Command, time::Duration};
 
 use crate::{
   git_repo::GitRepo,
   github_repo::GithubRepo,
-  stage::{Stage, StagePart, StagePartStatus},
+  stage::{Stage, StageConfig, StagePart, StagePartStatus},
 };
-use anyhow::{Context, Result};
+use anyhow::{ensure, Context, Result};
 use dioxus::signals::{SyncSignal, Writable};
+use futures_util::future::try_join;
+use http::StatusCode;
 use octocrab::{
-  models::IssueState,
+  models::{pulls::PullRequest, IssueState},
   params::{issues, pulls, Direction},
+  GitHubError,
 };
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 use tokio::time::sleep;
-use tracing::debug;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct QuestConfig {
+  pub title: String,
+  pub author: String,
+  pub repo: String,
+  pub stages: Vec<StageConfig>,
+}
 
 #[derive(Clone, Debug)]
 pub struct QuestState {
@@ -24,160 +35,213 @@ pub struct QuestState {
 
 pub struct Quest {
   user: String,
-  quest: String,
   upstream: GithubRepo,
   origin: GithubRepo,
   origin_git: GitRepo,
+  stage_index: HashMap<String, usize>,
+
+  pub config: QuestConfig,
+  pub state_signal: SyncSignal<Option<QuestState>>,
   pub stages: Vec<Stage>,
-  pub state: SyncSignal<Option<QuestState>>,
 }
 
-const UPSTREAM_ORG: &str = "cognitive-engineering-lab";
+pub fn load_config_from_current_dir() -> Result<QuestConfig> {
+  let output = Command::new("git")
+    .args(["rev-parse", "--show-toplevel"])
+    .output()
+    .context("git failed")?;
+  ensure!(
+    output.status.success(),
+    "git exited with non-zero status code"
+  );
+  let stdout = String::from_utf8(output.stdout)?.trim().to_string();
+
+  let config_path = Path::new(&stdout).join(".rqst.toml");
+  let config_contents = fs::read_to_string(&config_path)
+    .with_context(|| format!("Failed to read config: {}", config_path.display()))?;
+  let config = toml::de::from_str::<QuestConfig>(&config_contents)?;
+
+  Ok(config)
+}
+
+pub async fn load_config_from_remote(owner: &str, repo: &str) -> Result<QuestConfig> {
+  let items = octocrab::instance()
+    .repos(owner, repo)
+    .get_content()
+    .path(".rqst.toml")
+    .r#ref("main")
+    .send()
+    .await?;
+  let config_contents = items.items[0].decoded_content().expect("Missing content");
+  let config = toml::de::from_str::<QuestConfig>(&config_contents)?;
+  Ok(config)
+}
+
+async fn load_user() -> Result<String> {
+  let user = octocrab::instance()
+    .current()
+    .user()
+    .await
+    .context("Failed to get current user")?;
+  Ok(user.login)
+}
 
 impl Quest {
   pub async fn load(
-    user: &str,
-    quest: &str,
-    state: SyncSignal<Option<QuestState>>,
+    config: QuestConfig,
+    state_signal: SyncSignal<Option<QuestState>>,
   ) -> Result<Self> {
-    let upstream = GithubRepo::new(UPSTREAM_ORG, quest);
-    let origin = GithubRepo::new(user, quest);
+    let user = load_user().await?;
+    let upstream = GithubRepo::new(&config.author, &config.repo);
+    let origin = GithubRepo::new(&user, &config.repo);
     let origin_git = GitRepo::new();
-    let stages = Self::infer_stages(&upstream).await?;
-    debug!("Inferred state: {state:#?}");
+    let stages = config
+      .stages
+      .iter()
+      .enumerate()
+      .map(|(i, stage)| Stage::new(i, stage.clone()))
+      .collect::<Vec<_>>();
+    let stage_index = stages
+      .iter()
+      .map(|stage| (stage.config.label.clone(), stage.idx))
+      .collect::<HashMap<_, _>>();
 
     let q = Quest {
-      user: user.to_string(),
-      quest: quest.to_string(),
+      user,
+      config,
       upstream,
       origin,
       origin_git,
+      stage_index,
       stages,
-      state,
+      state_signal,
     };
+    q.infer_state_update().await?;
     Ok(q)
   }
 
-  async fn infer_stages(upstream: &GithubRepo) -> Result<Vec<Stage>> {
-    let branches = upstream.branches().await?;
-    let re = Regex::new(r"^(\d+)\w-([\d\w-]+)$").unwrap();
-    let mut stages = branches
-      .iter()
-      .filter_map(|branch| {
-        let cap = re.captures(&branch.name)?;
-        let (_, [number, name]) = cap.extract();
-        Some((number, name))
-      })
-      .map(|(number, name)| {
-        let number = number.parse::<usize>()?;
-        Ok(Stage::new(number, name))
-      })
-      .collect::<Result<Vec<_>>>()?;
-    stages.dedup();
-    stages.sort_by_key(|stage| stage.idx());
-    Ok(stages)
+  fn parse_stage(&self, pr: &PullRequest) -> Option<(Stage, StagePart)> {
+    let branch = &pr.head.ref_field;
+    let re = Regex::new("^(.*)-([abc])$").unwrap();
+    let (_, [name, part_str]) = re.captures(branch)?.extract();
+    let stage = self.stage_index.get(name)?;
+    let part = StagePart::parse(part_str)?;
+    Some((self.stages[*stage].clone(), part))
   }
 
-  async fn infer_state(origin: &GithubRepo, stages: &[Stage]) -> QuestState {
-    async fn inner(origin: &GithubRepo, stages: &[Stage]) -> Result<QuestState> {
-      let mut pr_page = origin
-        .pr_handler()
-        .list()
-        .state(octocrab::params::State::All)
-        .sort(pulls::Sort::Created)
-        .direction(Direction::Descending)
-        .per_page(10)
-        .send()
-        .await?;
-      let prs = pr_page.take_items();
+  async fn infer_state(&self) -> Result<QuestState> {
+    let pr_handler = self.origin.pr_handler();
+    let pr_page_future = pr_handler
+      .list()
+      .state(octocrab::params::State::All)
+      .sort(pulls::Sort::Created)
+      .direction(Direction::Descending)
+      .per_page(10)
+      .send();
 
-      let mut issue_page = origin
-        .issue_handler()
-        .list()
-        .state(octocrab::params::State::All)
-        .sort(issues::Sort::Created)
-        .direction(Direction::Descending)
-        .per_page(10)
-        .send()
-        .await?;
-      let issues = issue_page.take_items();
+    let issue_handler = self.origin.issue_handler();
+    let issue_page_future = issue_handler
+      .list()
+      .state(octocrab::params::State::All)
+      .sort(issues::Sort::Created)
+      .direction(Direction::Descending)
+      .per_page(10)
+      .send();
 
-      let (stage, part, finished) = prs
-        .iter()
-        .filter_map(|pr| {
-          let (stage, part) = Stage::parse(&pr.head.ref_field)?;
-          let finished = matches!(pr.state, Some(IssueState::Closed))
-            && match part {
-              StagePart::Solution => {
-                let issue = issues.iter().find(|issue| {
-                  issue
-                    .labels
-                    .iter()
-                    .any(|label| label.name == stage.issue_label())
-                })?;
-                matches!(issue.state, IssueState::Closed)
-              }
-              StagePart::Feature | StagePart::Test => true,
-            };
-          Some((stage, part, finished))
+    let (mut pr_page, mut issue_page) = match try_join(pr_page_future, issue_page_future).await {
+      Ok(result) => result,
+      Err(octocrab::Error::GitHub {
+        source: GitHubError {
+          status_code: StatusCode::NOT_FOUND,
+          ..
+        },
+        ..
+      }) => {
+        return Ok(QuestState {
+          stage: self.stages[0].clone(),
+          part: StagePart::Feature,
+          status: StagePartStatus::Start,
         })
-        .max_by_key(|(stage, part, _)| (stage.clone(), *part))
-        .context("No PRs")?;
+      }
+      Err(e) => return Err(e.into()),
+    };
 
-      Ok(if finished {
-        match part.next_part() {
-          Some(next_part) => QuestState {
-            stage,
-            part: next_part,
-            status: StagePartStatus::Start,
-          },
-          None => QuestState {
-            stage: stages[stage.idx() + 1].clone(),
-            part: StagePart::Feature,
-            status: StagePartStatus::Start,
-          },
-        }
-      } else {
-        QuestState {
-          stage,
-          part,
-          status: StagePartStatus::Ongoing,
-        }
+    let prs = pr_page.take_items();
+    let issues = issue_page.take_items();
+
+    let Some((stage, part, finished)) = prs
+      .iter()
+      .filter_map(|pr| {
+        let (stage, part) = self.parse_stage(pr)?;
+        let finished = pr.merged_at.is_some()
+          && match part {
+            StagePart::Solution => {
+              let issue = issues.iter().find(|issue| {
+                issue
+                  .labels
+                  .iter()
+                  .any(|label| label.name == stage.config.label)
+              })?;
+              matches!(issue.state, IssueState::Closed)
+            }
+            StagePart::Feature | StagePart::Test => true,
+          };
+        Some((stage, part, finished))
       })
-    }
-
-    match inner(origin, stages).await {
-      Ok(state) => state,
-      Err(_) => QuestState {
-        stage: stages[0].clone(),
+      .max_by_key(|(stage, part, _)| (stage.idx, *part))
+    else {
+      return Ok(QuestState {
+        stage: self.stages[0].clone(),
         part: StagePart::Feature,
         status: StagePartStatus::Start,
-      },
-    }
+      });
+    };
+
+    Ok(if finished {
+      match part.next_part() {
+        Some(next_part) => QuestState {
+          stage,
+          part: next_part,
+          status: StagePartStatus::Start,
+        },
+        None => QuestState {
+          stage: self.stages[stage.idx + 1].clone(),
+          part: StagePart::Feature,
+          status: StagePartStatus::Start,
+        },
+      }
+    } else {
+      QuestState {
+        stage,
+        part,
+        status: StagePartStatus::Ongoing,
+      }
+    })
   }
 
-  pub async fn infer_state_update(&self) {
-    let new_state = Self::infer_state(&self.origin, &self.stages).await;
-    let mut state = self.state;
-    state.set(Some(new_state));
+  pub async fn infer_state_update(&self) -> Result<()> {
+    let new_state = self.infer_state().await?;
+    let mut state_signal = self.state_signal;
+    state_signal.set(Some(new_state));
+    Ok(())
   }
 
   pub async fn infer_state_loop(&self) {
     loop {
-      self.infer_state_update().await;
+      self.infer_state_update().await.unwrap();
       sleep(Duration::from_secs(10)).await;
     }
   }
 
   fn clone_repo(&self) -> Result<()> {
-    let url = format!("git@github.com:{}/{}.git", self.user, self.quest);
+    let url = format!("git@github.com:{}/{}.git", self.user, self.config.repo);
     self.origin_git.clone(&url)
   }
 
   pub async fn create_repo(&self) -> Result<()> {
     self.origin.copy_from(&self.upstream).await?;
     self.clone_repo()?;
-    env::set_current_dir(&self.quest)?;
+    env::set_current_dir(&self.config.repo)?;
     self.origin_git.initialize(&self.upstream)?;
     Ok(())
   }
@@ -193,8 +257,6 @@ impl Quest {
 
     let pr = self.upstream.pr(target_branch).await.unwrap();
     self.origin.copy_pr(&self.upstream, pr, &head).await?;
-
-    self.infer_state_update().await;
 
     Ok(())
   }
@@ -212,10 +274,10 @@ impl Quest {
       .file_pr(&stage.branch_name(StagePart::Feature), &base_branch)
       .await?;
 
-    let issue = self.upstream.issue(&stage.issue_label()).await.unwrap();
+    let issue = self.upstream.issue(&stage.config.label).await.unwrap();
     self.origin.copy_issue(issue).await?;
 
-    self.infer_state_update().await;
+    self.infer_state_update().await?;
 
     Ok(())
   }
@@ -229,7 +291,7 @@ impl Quest {
       )
       .await?;
 
-    self.infer_state_update().await;
+    self.infer_state_update().await?;
 
     Ok(())
   }
@@ -243,7 +305,7 @@ impl Quest {
       )
       .await?;
 
-    self.infer_state_update().await;
+    self.infer_state_update().await?;
 
     Ok(())
   }

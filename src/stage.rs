@@ -1,11 +1,19 @@
 #![allow(dead_code)]
 
-use regex::Regex;
+use std::fmt;
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Stage {
-  number: usize,
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StageConfig {
+  pub label: String,
   pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Stage {
+  pub idx: usize,
+  pub config: StageConfig,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -22,6 +30,29 @@ impl StagePart {
       StagePart::Test => Some(StagePart::Solution),
       StagePart::Solution => None,
     }
+  }
+
+  pub fn parse(s: &str) -> Option<StagePart> {
+    match s {
+      "a" => Some(StagePart::Feature),
+      "b" => Some(StagePart::Test),
+      "c" => Some(StagePart::Solution),
+      _ => None,
+    }
+  }
+}
+
+impl fmt::Display for StagePart {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(
+      f,
+      "{}",
+      match self {
+        StagePart::Feature => "a",
+        StagePart::Test => "b",
+        StagePart::Solution => "c",
+      }
+    )
   }
 }
 
@@ -42,40 +73,11 @@ impl StagePartStatus {
 }
 
 impl Stage {
-  pub fn new(number: usize, name: impl Into<String>) -> Self {
-    Stage {
-      number,
-      name: name.into(),
-    }
-  }
-
-  pub fn idx(&self) -> usize {
-    self.number - 1
-  }
-
-  pub fn issue_label(&self) -> String {
-    format!("{:02}-{}", self.number, self.name)
+  pub fn new(idx: usize, config: StageConfig) -> Self {
+    Stage { idx, config }
   }
 
   pub fn branch_name(&self, part: StagePart) -> String {
-    match part {
-      StagePart::Feature => format!("{:02}a-{}", self.number, self.name),
-      StagePart::Test => format!("{:02}b-{}", self.number, self.name),
-      StagePart::Solution => format!("{:02}c-{}", self.number, self.name),
-    }
-  }
-
-  pub fn parse(name: &str) -> Option<(Stage, StagePart)> {
-    let re = Regex::new(r"^(\d)+(\w)-([\w\d-]+)$").unwrap();
-    let cap = re.captures(name)?;
-    let (_, [number, part, name]) = cap.extract();
-    let number = number.parse::<usize>().ok()?;
-    let part = match part {
-      "a" => StagePart::Feature,
-      "b" => StagePart::Test,
-      "c" => StagePart::Solution,
-      _ => return None,
-    };
-    Some((Stage::new(number, name), part))
+    format!("{}-{}", self.config.label, part)
   }
 }
