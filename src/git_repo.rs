@@ -52,7 +52,7 @@ impl GitRepo {
     .context("Failed to clone")
   }
 
-  pub fn initialize(&self, upstream: &GithubRepo) -> Result<()> {
+  pub fn setup_upstream(&self, upstream: &GithubRepo) -> Result<()> {
     git(|cmd| {
       cmd.args(["remote", "add", UPSTREAM, &upstream.remote()]);
     })

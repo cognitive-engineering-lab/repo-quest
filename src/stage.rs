@@ -5,9 +5,17 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct StageConfig {
   pub label: String,
   pub name: String,
+  no_starter: Option<bool>,
+}
+
+impl StageConfig {
+  pub fn no_starter(&self) -> bool {
+    self.no_starter.unwrap_or(false)
+  }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -18,25 +26,22 @@ pub struct Stage {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum StagePart {
-  Feature,
-  Test,
+  Starter,
   Solution,
 }
 
 impl StagePart {
   pub fn next_part(self) -> Option<StagePart> {
     match self {
-      StagePart::Feature => Some(StagePart::Test),
-      StagePart::Test => Some(StagePart::Solution),
+      StagePart::Starter => Some(StagePart::Solution),
       StagePart::Solution => None,
     }
   }
 
   pub fn parse(s: &str) -> Option<StagePart> {
     match s {
-      "a" => Some(StagePart::Feature),
-      "b" => Some(StagePart::Test),
-      "c" => Some(StagePart::Solution),
+      "a" => Some(StagePart::Starter),
+      "b" => Some(StagePart::Solution),
       _ => None,
     }
   }
@@ -48,9 +53,8 @@ impl fmt::Display for StagePart {
       f,
       "{}",
       match self {
-        StagePart::Feature => "a",
-        StagePart::Test => "b",
-        StagePart::Solution => "c",
+        StagePart::Starter => "a",
+        StagePart::Solution => "b",
       }
     )
   }

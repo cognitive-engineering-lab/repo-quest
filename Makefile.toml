@@ -2,5 +2,8 @@
 skip_core_tasks = true
 default_to_workspace = false
 
+[tasks.bundle]
+script = "dx bundle"
+
 [tasks.watch]
 script = "cargo watch -s 'dx build'"

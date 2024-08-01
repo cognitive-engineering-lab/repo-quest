@@ -3146,6 +3146,7 @@ dependencies = [
  "futures-util",
  "http 1.1.0",
  "octocrab",
+ "parking_lot",
  "regex",
  "serde",
  "serde_json",

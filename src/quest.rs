@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env, fs, path::Path, process::Command, time::Duration};
+use std::{collections::HashMap, env, process::Command, time::Duration};
 
 use crate::{
   git_repo::GitRepo,
@@ -7,7 +7,6 @@ use crate::{
 };
 use anyhow::{ensure, Context, Result};
 use dioxus::signals::{SyncSignal, Writable};
-use futures_util::future::try_join;
 use http::StatusCode;
 use octocrab::{
   models::{pulls::PullRequest, IssueState},
@@ -16,7 +15,7 @@ use octocrab::{
 };
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use tokio::time::sleep;
+use tokio::{time::sleep, try_join};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct QuestConfig {
@@ -47,7 +46,7 @@ pub struct Quest {
 
 pub fn load_config_from_current_dir() -> Result<QuestConfig> {
   let output = Command::new("git")
-    .args(["rev-parse", "--show-toplevel"])
+    .args(["show", "upstream/meta:rqst.toml"])
     .output()
     .context("git failed")?;
   ensure!(
@@ -55,11 +54,7 @@ pub fn load_config_from_current_dir() -> Result<QuestConfig> {
     "git exited with non-zero status code"
   );
   let stdout = String::from_utf8(output.stdout)?.trim().to_string();
-
-  let config_path = Path::new(&stdout).join(".rqst.toml");
-  let config_contents = fs::read_to_string(&config_path)
-    .with_context(|| format!("Failed to read config: {}", config_path.display()))?;
-  let config = toml::de::from_str::<QuestConfig>(&config_contents)?;
+  let config = toml::de::from_str::<QuestConfig>(&stdout)?;
 
   Ok(config)
 }
@@ -68,8 +63,8 @@ pub async fn load_config_from_remote(owner: &str, repo: &str) -> Result<QuestCon
   let items = octocrab::instance()
     .repos(owner, repo)
     .get_content()
-    .path(".rqst.toml")
-    .r#ref("main")
+    .path("rqst.toml")
+    .r#ref("meta")
     .send()
     .await?;
   let config_contents = items.items[0].decoded_content().expect("Missing content");
@@ -116,7 +111,10 @@ impl Quest {
       stages,
       state_signal,
     };
-    q.infer_state_update().await?;
+
+    try_join!(q.infer_state_update(), q.origin.fetch(), q.upstream.fetch())
+      .context("Failed to load quest data")?;
+
     Ok(q)
   }
 
@@ -148,7 +146,7 @@ impl Quest {
       .per_page(10)
       .send();
 
-    let (mut pr_page, mut issue_page) = match try_join(pr_page_future, issue_page_future).await {
+    let (mut pr_page, mut issue_page) = match try_join!(pr_page_future, issue_page_future) {
       Ok(result) => result,
       Err(octocrab::Error::GitHub {
         source: GitHubError {
@@ -159,7 +157,7 @@ impl Quest {
       }) => {
         return Ok(QuestState {
           stage: self.stages[0].clone(),
-          part: StagePart::Feature,
+          part: StagePart::Starter,
           status: StagePartStatus::Start,
         })
       }
@@ -169,30 +167,49 @@ impl Quest {
     let prs = pr_page.take_items();
     let issues = issue_page.take_items();
 
-    let Some((stage, part, finished)) = prs
-      .iter()
-      .filter_map(|pr| {
-        let (stage, part) = self.parse_stage(pr)?;
-        let finished = pr.merged_at.is_some()
-          && match part {
-            StagePart::Solution => {
-              let issue = issues.iter().find(|issue| {
-                issue
-                  .labels
-                  .iter()
-                  .any(|label| label.name == stage.config.label)
-              })?;
-              matches!(issue.state, IssueState::Closed)
-            }
-            StagePart::Feature | StagePart::Test => true,
-          };
-        Some((stage, part, finished))
+    let issue_map = issues
+      .into_iter()
+      .filter_map(|issue| {
+        let label = issue.labels.first()?;
+        Some((label.name.clone(), issue))
       })
-      .max_by_key(|(stage, part, _)| (stage.idx, *part))
+      .collect::<HashMap<_, _>>();
+
+    let stage_map = self
+      .stages
+      .iter()
+      .map(|stage| (stage.config.label.clone(), stage))
+      .collect::<HashMap<_, _>>();
+
+    let pr_stages = prs.iter().filter_map(|pr| {
+      let (stage, part) = self.parse_stage(pr)?;
+      let finished = pr.merged_at.is_some()
+        && match part {
+          StagePart::Solution => {
+            let issue = issue_map.get(&stage.config.label)?;
+            matches!(issue.state, IssueState::Closed)
+          }
+          StagePart::Starter => true,
+        };
+      Some((stage, part, finished))
+    });
+
+    let issue_stages = issue_map.keys().filter_map(|label| {
+      let stage = stage_map.get(label)?;
+      Some((
+        (*stage).clone(),
+        StagePart::Starter,
+        stage.config.no_starter(),
+      ))
+    });
+
+    let Some((stage, part, finished)) = pr_stages
+      .chain(issue_stages)
+      .max_by_key(|(stage, part, finished)| (stage.idx, *part, *finished))
     else {
       return Ok(QuestState {
         stage: self.stages[0].clone(),
-        part: StagePart::Feature,
+        part: StagePart::Starter,
         status: StagePartStatus::Start,
       });
     };
@@ -206,7 +223,7 @@ impl Quest {
         },
         None => QuestState {
           stage: self.stages[stage.idx + 1].clone(),
-          part: StagePart::Feature,
+          part: StagePart::Starter,
           status: StagePartStatus::Start,
         },
       }
@@ -220,7 +237,7 @@ impl Quest {
   }
 
   pub async fn infer_state_update(&self) -> Result<()> {
-    let new_state = self.infer_state().await?;
+    let (new_state, _) = try_join!(self.infer_state(), self.origin.fetch())?;
     let mut state_signal = self.state_signal;
     state_signal.set(Some(new_state));
     Ok(())
@@ -239,10 +256,18 @@ impl Quest {
   }
 
   pub async fn create_repo(&self) -> Result<()> {
+    // First instantiate the user's repo from the template repo on the server side
     self.origin.copy_from(&self.upstream).await?;
+
+    // Then clone from server side to client side
     self.clone_repo()?;
+
+    // Move into the repo
     env::set_current_dir(&self.config.repo)?;
-    self.origin_git.initialize(&self.upstream)?;
+
+    // Initialize the upstreams and fetch content
+    self.origin_git.setup_upstream(&self.upstream)?;
+
     Ok(())
   }
 
@@ -255,8 +280,8 @@ impl Quest {
 
     let head = self.origin_git.head_commit()?;
 
-    let pr = self.upstream.pr(target_branch).await.unwrap();
-    self.origin.copy_pr(&self.upstream, pr, &head).await?;
+    let pr = self.upstream.pr(target_branch).unwrap().clone();
+    self.origin.copy_pr(&self.upstream, &pr, &head).await?;
 
     Ok(())
   }
@@ -270,26 +295,14 @@ impl Quest {
       "main".into()
     };
 
-    self
-      .file_pr(&stage.branch_name(StagePart::Feature), &base_branch)
-      .await?;
+    if !stage.config.no_starter() {
+      self
+        .file_pr(&stage.branch_name(StagePart::Starter), &base_branch)
+        .await?;
+    }
 
-    let issue = self.upstream.issue(&stage.config.label).await.unwrap();
-    self.origin.copy_issue(issue).await?;
-
-    self.infer_state_update().await?;
-
-    Ok(())
-  }
-
-  pub async fn file_tests(&self, stage_index: usize) -> Result<()> {
-    let stage = &self.stages[stage_index];
-    self
-      .file_pr(
-        &stage.branch_name(StagePart::Test),
-        &stage.branch_name(StagePart::Feature),
-      )
-      .await?;
+    let issue = self.upstream.issue(&stage.config.label).unwrap().clone();
+    self.origin.copy_issue(&issue).await?;
 
     self.infer_state_update().await?;
 
@@ -301,12 +314,24 @@ impl Quest {
     self
       .file_pr(
         &stage.branch_name(StagePart::Solution),
-        &stage.branch_name(StagePart::Test),
+        &stage.branch_name(StagePart::Starter),
       )
       .await?;
 
     self.infer_state_update().await?;
 
     Ok(())
+  }
+
+  pub fn issue_url(&self, stage_index: usize) -> Option<String> {
+    let stage = &self.stages[stage_index];
+    let issue = self.origin.issue(&stage.config.label)?;
+    Some(issue.html_url.to_string())
+  }
+
+  pub fn feature_pr_url(&self, stage_index: usize) -> Option<String> {
+    let stage = &self.stages[stage_index];
+    let pr = self.origin.pr(&stage.branch_name(StagePart::Starter))?;
+    Some(pr.html_url.as_ref().unwrap().to_string())
   }
 }

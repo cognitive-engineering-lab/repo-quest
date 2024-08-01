@@ -9,22 +9,22 @@ use octocrab::{
     issues::Issue,
     pulls::{self, PullRequest},
     repos::Branch,
-    IssueState,
   },
   pulls::PullRequestHandler,
   repos::RepoHandler,
   GitHubError, Octocrab,
 };
+use parking_lot::{MappedMutexGuard, Mutex, MutexGuard};
 use serde_json::json;
 use std::{sync::Arc, time::Duration};
-use tokio::{sync::OnceCell, time::timeout};
+use tokio::{time::timeout, try_join};
 
 pub struct GithubRepo {
   user: String,
   name: String,
   gh: Arc<Octocrab>,
-  prs: OnceCell<Vec<PullRequest>>,
-  issues: OnceCell<Vec<Issue>>,
+  prs: Mutex<Option<Vec<PullRequest>>>,
+  issues: Mutex<Option<Vec<Issue>>>,
 }
 
 impl GithubRepo {
@@ -33,9 +33,35 @@ impl GithubRepo {
       user: user.to_string(),
       name: name.to_string(),
       gh: octocrab::instance(),
-      prs: OnceCell::new(),
-      issues: OnceCell::new(),
+      prs: Mutex::new(None),
+      issues: Mutex::new(None),
     }
+  }
+
+  pub async fn fetch(&self) -> Result<()> {
+    let (pr_handler, issue_handler) = (self.pr_handler(), self.issue_handler());
+    let res = try_join!(
+      pr_handler.list().state(octocrab::params::State::All).send(),
+      issue_handler
+        .list()
+        .state(octocrab::params::State::All)
+        .send()
+    );
+    let (mut pr_page, mut issue_page) = match res {
+      Ok(pages) => pages,
+      Err(octocrab::Error::GitHub {
+        source: GitHubError {
+          status_code: StatusCode::NOT_FOUND,
+          ..
+        },
+        ..
+      }) => return Ok(()),
+      Err(e) => return Err(e.into()),
+    };
+    let (prs, issues) = (pr_page.take_items(), issue_page.take_items());
+    *self.prs.lock() = Some(prs);
+    *self.issues.lock() = Some(issues);
+    Ok(())
   }
 
   pub fn remote(&self) -> String {
@@ -66,10 +92,9 @@ impl GithubRepo {
       .send()
       .await?;
 
+    // There is some unknown delay between creating a repo from a template and its contents being added.
+    // We have to wait until that happens.
     {
-      // There is some unknown delay between creating a repo from a template and its contents being added.
-      // We have to wait until that happens.
-
       const RETRY_INTERVAL: u64 = 500;
       const RETRY_TIMEOUT: u64 = 5000;
 
@@ -85,6 +110,7 @@ impl GithubRepo {
         .context("Repo is still empty after timeout")?;
     }
 
+    // Unsubscribe from repo notifications to avoid annoying emails.
     {
       let route = format!("/repos/{}/{}/subscription", self.user, self.name);
       let _response = self
@@ -100,6 +126,7 @@ impl GithubRepo {
         .context("Failed to unsubscribe from repo")?;
     }
 
+    // Copy all issue labels.
     {
       let mut page = base.issue_handler().list_labels_for_repo().send().await?;
       let labels = page.take_items();
@@ -137,43 +164,30 @@ impl GithubRepo {
     self.gh.pulls(&self.user, &self.name)
   }
 
-  pub async fn prs(&self) -> &[PullRequest] {
-    self
-      .prs
-      .get_or_init(|| async {
-        let pages = self.pr_handler().list().send().await.unwrap();
-        pages.into_iter().collect::<Vec<_>>()
-      })
-      .await
+  pub fn prs(&self) -> MappedMutexGuard<'_, Vec<PullRequest>> {
+    MutexGuard::map(self.prs.lock(), |opt| opt.as_mut().unwrap())
   }
 
-  pub async fn pr(&self, ref_field: &str) -> Option<&PullRequest> {
-    let prs = self.prs().await;
-    prs
-      .iter()
-      .find(|pr| !matches!(pr.state, Some(IssueState::Closed)) && pr.head.ref_field == ref_field)
+  pub fn pr(&self, ref_field: &str) -> Option<MappedMutexGuard<'_, PullRequest>> {
+    let prs = self.prs();
+    let idx = prs.iter().position(|pr| pr.head.ref_field == ref_field)?;
+    Some(MappedMutexGuard::map(prs, |prs| &mut prs[idx]))
   }
 
   pub fn issue_handler(&self) -> IssueHandler {
     self.gh.issues(&self.user, &self.name)
   }
 
-  pub async fn issues(&self) -> &[Issue] {
-    self
-      .issues
-      .get_or_init(|| async {
-        let pages = self.issue_handler().list().send().await.unwrap();
-        pages.into_iter().collect::<Vec<_>>()
-      })
-      .await
+  pub fn issues(&self) -> MappedMutexGuard<'_, Vec<Issue>> {
+    MutexGuard::map(self.issues.lock(), |opt| opt.as_mut().unwrap())
   }
 
-  pub async fn issue(&self, label_name: &str) -> Option<&Issue> {
-    let issues = self.issues().await;
-    issues.iter().find(|issue| {
-      !matches!(issue.state, IssueState::Closed)
-        && issue.labels.iter().any(|label| label.name == label_name)
-    })
+  pub fn issue(&self, label_name: &str) -> Option<MappedMutexGuard<'_, Issue>> {
+    let issues = self.issues();
+    let idx = issues
+      .iter()
+      .position(|issue| issue.labels.iter().any(|label| label.name == label_name))?;
+    Some(MappedMutexGuard::map(issues, |issues| &mut issues[idx]))
   }
 
   pub async fn copy_pr(&self, base: &GithubRepo, base_pr: &PullRequest, head: &str) -> Result<()> {

@@ -1,11 +1,14 @@
 #![allow(non_snake_case)]
 
 use anyhow::{Context, Result};
-use dioxus::prelude::*;
+use dioxus::{
+  desktop::{Config, LogicalSize, WindowBuilder},
+  prelude::*,
+};
 use futures_util::FutureExt;
 use octocrab::Octocrab;
 use quest::{Quest, QuestState};
-use stage::StagePart;
+use stage::{StagePart, StagePartStatus};
 use std::{ops::Deref, process::Command, rc::Rc, sync::Arc};
 use tracing::Level;
 
@@ -68,10 +71,12 @@ fn QuestView(quest: QuestRef) -> Element {
     }
 
     h1 {
+      "RepoQuest: "
       {quest.config.title.clone()}
     }
 
     button {
+      id: "refresh",
       onclick: move |_| {
         let quest_ref = quest.clone();
         tokio::spawn(async move {
@@ -82,49 +87,81 @@ fn QuestView(quest: QuestRef) -> Element {
     }
 
     ol {
+      class: "stages",
       for stage in 0 ..= cur_stage {
         li {
-          div { {quest.stages[stage].config.name.clone()} }
-          if stage == cur_stage {
-            div {
-              button {
-                disabled: loading || state.status.is_ongoing(),
-                onclick: {
-                  let quest_ref = quest.clone();
-                  move |_| {
-                    let quest_ref = quest_ref.clone();
-                    loading_signal.set(true);
-                    tokio::spawn(async move {
-                      let res = match state.part {
-                        StagePart::Feature => quest_ref.file_feature_and_issue(cur_stage).boxed(),
-                        StagePart::Test => quest_ref.file_tests(cur_stage).boxed(),
-                        StagePart::Solution => quest_ref.file_solution(cur_stage).boxed(),
-                      }.await;
-                      if let Err(e) = res {
-                        error_signal.set(Some(e));
-                      }
-                      loading_signal.set(false);
-                    });
-                  }
-                },
-                {match state.part {
-                  StagePart::Feature => "File issue & features",
-                  StagePart::Test => "File tests",
-                  StagePart::Solution => "Give solution"
-                }}
+          div {
+            span {
+              class: "stage-title",
+              {quest.stages[stage].config.name.clone()}
+            }
+            span {
+              class: "separator",
+              "·"
+            }
+
+            if stage == cur_stage {
+              if state.status.is_start() {
+                button {
+                  disabled: loading,
+                  onclick: {
+                    let quest_ref = quest.clone();
+                    move |_| {
+                      let quest_ref = quest_ref.clone();
+                      loading_signal.set(true);
+                      tokio::spawn(async move {
+                        let res = match state.part {
+                          StagePart::Starter => quest_ref.file_feature_and_issue(cur_stage).boxed(),
+                          StagePart::Solution => quest_ref.file_solution(cur_stage).boxed(),
+                        }.await;
+                        if let Err(e) = res {
+                          error_signal.set(Some(e));
+                        }
+                        loading_signal.set(false);
+                      });
+                    }
+                  },
+                  {match state.part {
+                    StagePart::Starter => if quest.stages[stage].config.no_starter() {
+                      "File issue"
+                    } else {
+                      "File issue & starter PR"
+                    },
+                    StagePart::Solution => "Give solution"
+                  }}
+                }
+              } else {
+                span {
+                  class: "status",
+                  {match state.part {
+                    StagePart::Starter if !quest.stages[stage].config.no_starter()  => "Waiting for you to merge starter PR",
+                    _ => "Waiting for you to solve & close issue"
+                  }}
+                }
               }
 
               if loading {
                 div { "Operation running..." }
               }
+            } else {
+              span {
+                class: "status",
+                "Completed"
+              }
+            }
+          }
 
-              if state.status.is_ongoing() {
-                div {
-                  {match state.part {
-                    StagePart::Feature => "Merge PR before continuing",
-                    StagePart::Test => "Merge PR before continuing",
-                    StagePart::Solution => "File and merge your own PR and close the issue before continuing"
-                  }}
+          div {
+            if (state.stage.idx, state.part, state.status) > (stage, StagePart::Starter, StagePartStatus::Start) {
+              a {
+                href: quest.issue_url(stage),
+                "Issue"
+              }
+              if !quest.stages[stage].config.no_starter() {
+                ", "
+                a {
+                  href: quest.feature_pr_url(stage),
+                  "Starter PR"
                 }
               }
             }
@@ -228,41 +265,34 @@ fn App() -> Element {
 
   rsx! {
       link { rel: "stylesheet", href: "main.css" }
-      {match &*init_res {
-        Ok(()) => rsx!{ QuestLoader { } },
-        Err(e) => rsx!{
-          div { "Failed to load Github API. Full error:" }
-          pre { "{e:?}" }
-        },
-      }}
+      div {
+        id: "app",
+        {match &*init_res {
+          Ok(()) => rsx!{ QuestLoader { } },
+          Err(e) => rsx!{
+            div { "Failed to load Github API. Full error:" }
+            pre { "{e:?}" }
+          },
+        }}
+      }
   }
 }
 
 fn main() {
-  dioxus_logger::init(Level::DEBUG).expect("failed to init logger");
-  dioxus::launch(App);
+  let level = if cfg!(debug_assertions) {
+    Level::DEBUG
+  } else {
+    Level::INFO
+  };
+  dioxus_logger::init(level).expect("failed to init logger");
+  LaunchBuilder::desktop()
+    .with_cfg(
+      Config::new().with_window(
+        WindowBuilder::new()
+          .with_title("RepoQuest")
+          .with_always_on_top(false)
+          .with_inner_size(LogicalSize::new(800, 500)),
+      ),
+    )
+    .launch(App);
 }
-
-// #[tokio::main]
-// async fn main() -> Result<()> {
-//   let step = std::env::args().nth(1).unwrap().parse::<usize>().unwrap();
-
-// let
-//   let stages = [Stage::new(1, "async-await"), Stage::new(2, "spawn")];
-
-//   match step {
-//     1 => quest.create_repo().await?,
-//     2 => quest.init_repo()?,
-//     3 => quest.file_feature_and_issue(&stages[0], None).await?,
-//     4 => quest.file_tests(&stages[0]).await?,
-//     5 => {
-//       quest
-//         .file_feature_and_issue(&stages[1], Some(&stages[0]))
-//         .await?
-//     }
-//     6 => quest.file_tests(&stages[1]).await?,
-//     _ => todo!(),
-//   }
-
-//   Ok(())
-// }
