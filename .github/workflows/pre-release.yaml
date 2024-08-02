@@ -15,16 +15,19 @@ jobs:
         include:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
-          - target: aarch64-unknown-linux-gnu
-            os: ubuntu-latest
+          # TODO: fix this issue
+          # https://github.com/cognitive-engineering-lab/repo-quest/actions/runs/10222842981/job/28288152603#step:6:73
+          # - target: aarch64-unknown-linux-gnu
+          #   os: ubuntu-latest
           - target: x86_64-apple-darwin
             os: macos-latest
           - target: aarch64-apple-darwin
             os: macos-latest
-          - target: x86_64-pc-windows-msvc
-            os: windows-latest
-          - target: aarch64-pc-windows-msvc
-            os: windows-latest
+          # TODO: figure out Dioxus bundle format for Windows
+          # - target: x86_64-pc-windows-msvc
+          #   os: windows-latest
+          # - target: aarch64-pc-windows-msvc
+          #   os: windows-latest
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -46,4 +49,4 @@ jobs:
           version: ^0.5.6
 
       - name: Build bundle
-        run: dx bundle --release --target ${{ matrix.target }}
+        run: dx bundle --target ${{ matrix.target }}      
