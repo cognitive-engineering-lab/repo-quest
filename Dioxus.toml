@@ -17,3 +17,6 @@ script = []
 
 [web.resource.dev]
 script = []
+
+[bundle]
+icon = ["icons/icon.png"]
