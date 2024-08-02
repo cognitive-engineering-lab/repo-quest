@@ -16,7 +16,7 @@ use octocrab::{
 };
 use parking_lot::{MappedMutexGuard, Mutex, MutexGuard};
 use serde_json::json;
-use std::{sync::Arc, time::Duration};
+use std::{process::Command, sync::Arc, time::Duration};
 use tokio::{time::timeout, try_join};
 
 pub struct GithubRepo {
@@ -260,4 +260,21 @@ impl GithubRepo {
       .await?;
     Ok(())
   }
+}
+
+pub fn get_github_token() -> Result<String> {
+  let token_output = Command::new("gh")
+    .args(["auth", "token"])
+    .output()
+    .context("Failed to run `gh auth token`")?;
+  let token = String::from_utf8(token_output.stdout)?;
+  let token_clean = token.trim_end().to_string();
+  Ok(token_clean)
+}
+
+pub fn init_octocrab() -> Result<()> {
+  let token = get_github_token()?;
+  let crab_inst = Octocrab::builder().personal_token(token).build()?;
+  octocrab::initialise(crab_inst);
+  Ok(())
 }

@@ -1,8 +1,8 @@
 use std::{collections::HashMap, env, process::Command, time::Duration};
 
 use crate::{
-  git_repo::GitRepo,
-  github_repo::GithubRepo,
+  git::GitRepo,
+  github::GithubRepo,
   stage::{Stage, StageConfig, StagePart, StagePartStatus},
 };
 use anyhow::{ensure, Context, Result};
@@ -332,6 +332,12 @@ impl Quest {
   pub fn feature_pr_url(&self, stage_index: usize) -> Option<String> {
     let stage = &self.stages[stage_index];
     let pr = self.origin.pr(&stage.branch_name(StagePart::Starter))?;
+    Some(pr.html_url.as_ref().unwrap().to_string())
+  }
+
+  pub fn solution_pr_url(&self, stage_index: usize) -> Option<String> {
+    let stage = &self.stages[stage_index];
+    let pr = self.origin.pr(&stage.branch_name(StagePart::Solution))?;
     Some(pr.html_url.as_ref().unwrap().to_string())
   }
 }

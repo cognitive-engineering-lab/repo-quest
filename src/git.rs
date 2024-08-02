@@ -2,7 +2,7 @@ use std::process::{Command, Stdio};
 
 use anyhow::{ensure, Context, Result};
 
-use crate::github_repo::GithubRepo;
+use crate::github::GithubRepo;
 
 fn git_core(f: impl FnOnce(&mut Command), capture: bool) -> Result<Option<String>> {
   let mut cmd = Command::new("git");
