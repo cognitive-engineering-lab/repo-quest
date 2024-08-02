@@ -1,0 +1,75 @@
+name: Release
+
+on:
+  pull_request:
+    branches: [main]
+    types: [labeled,closed]
+
+jobs:
+  build-artifacts:
+    if: github.event.pull_request.merged == true && contains(github.event.pull_request.labels.*.name, 'release')
+
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest     
+            output: repoquest.deb
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            output: RepoQuest.app.tar.gz
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            output: RepoQuest.app.tar.gz
+    
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Install dependencies (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt update -y && sudo apt install -y libgtk-3-dev libjavascriptcoregtk-4.1-dev libsoup-3.0-dev libwebkit2gtk-4.1-dev libxdo-dev
+      
+      - name: Install Rust toolchain for target
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: ${{ matrix.target }}
+
+      - name: Install dioxus-cli
+        uses: baptiste0928/cargo-install@v3
+        with:
+          crate: dioxus-cli
+          version: ^0.5.6
+
+      - name: Build bundle
+        run: dx bundle --release --target ${{ matrix.target }}
+      
+      - name: Prepare artifacts (MacOS)
+        if: matrix.os == 'macos-latest'
+        run: tar -czf RepoQuest.app.tar.gz dist/bundle/macos/RepoQuest.app
+
+      - name: Prepare artifacts (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: mv dist/bundle/deb/RepoQuest_*.deb RepoQuest.deb
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: ${{ matrix.output }}
+
+  publish-artifacts:
+    needs: build-artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+      - name: Publish artifacts
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.event.pull_request.title }}
+          files: |
+            x86_64-unknown-linux-gnu/RepoQuest.deb
+            x86_64-apple-darwin/RepoQuest.app.tar.gz
+            aarch64-apple-darwin/RepoQuest.app.tar.gz
