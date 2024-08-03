@@ -1,6 +1,10 @@
 [package]
 name = "repo-quest"
+<<<<<<< Updated upstream
 version = "0.0.1"
+=======
+version = "0.0.2"
+>>>>>>> Stashed changes
 edition = "2021"
 
 [dependencies]
