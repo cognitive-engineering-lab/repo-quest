@@ -15,7 +15,7 @@ jobs:
         include:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
-          # TODO: fix this issue
+          # TODO: get ARM to properly cross-compile on x86_64
           # https://github.com/cognitive-engineering-lab/repo-quest/actions/runs/10222842981/job/28288152603#step:6:73
           # - target: aarch64-unknown-linux-gnu
           #   os: ubuntu-latest
@@ -23,7 +23,8 @@ jobs:
             os: macos-latest
           - target: aarch64-apple-darwin
             os: macos-latest
-          # TODO: figure out Dioxus bundle format for Windows
+          # TODO: uncomment once Dioxus is updated to fix this issue
+          # https://github.com/cognitive-engineering-lab/repo-quest/actions/runs/10273817519/job/28429168040#step:6:355
           # - target: x86_64-pc-windows-msvc
           #   os: windows-latest
           # - target: aarch64-pc-windows-msvc
@@ -47,7 +48,7 @@ jobs:
         uses: baptiste0928/cargo-install@v3
         with:
           crate: dioxus-cli
-          version: ^0.5.6
+          version: 0.5.6
 
       - name: Build bundle
         run: dx bundle --target ${{ matrix.target }}
