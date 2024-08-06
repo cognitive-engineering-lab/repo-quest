@@ -158,9 +158,6 @@ fn QuestLoader() -> Element {
   let mut quest_slot = use_signal_sync(|| None::<QuestRef>);
   let state_signal = use_signal_sync(|| None::<QuestState>);
   let mut loading_signal = use_context::<SyncSignal<ShowLoading>>();
-  use_effect(move || {
-    loading_signal.set(ShowLoading(quest_slot.read_unchecked().is_none()));
-  });
   match &*quest_slot.read_unchecked() {
     Some(quest) => rsx! { QuestView { quest: quest.clone() }},
     None => rsx! {
@@ -172,8 +169,10 @@ fn QuestLoader() -> Element {
             let res = use_resource(move || {
               let config = config.clone();
               async move {
+                loading_signal.set(ShowLoading(true));
                 let quest = Quest::load(config, state_signal).await?;
                 quest_slot.set(Some(QuestRef(Arc::new(quest))));
+                loading_signal.set(ShowLoading(false));
                 Ok::<_, anyhow::Error>(())
               }
             });
