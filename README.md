@@ -1,6 +1,6 @@
 # RepoQuest
 
-RepoQuest is an experimental tool for interactive programming tutorials.
+RepoQuest is an experimental tool for interactive programming tutorials. Each lesson takes place in a Github repository, and RepoQuest uses the Github interface for issues and pull requests to provide starter code and explain programming concepts.
 
 ## Installation
 
@@ -52,3 +52,31 @@ dx bundle --release
 ```
 
 Then install the application in `dist/bundle`. (TODO: flesh out this part)
+
+## Setup
+
+To setup RepoQuest, you need a Github account. 
+
+### Github Token
+
+You need to generate a Github access token that allows RepoQuest to perform automatically Github actions (e.g., filing an issue). You can do this in one of two ways:
+
+#### Generate a one-off token
+
+Go to <https://github.com/settings/tokens/new>. Select the **repo** scope. Click "Generate Token" at the bottom. Copy the token into the file `~/.rqst-token`. On MacOS, you can run:
+
+```console
+pbpaste > ~/.rqst-token
+```
+
+#### Use the github CLI
+
+Install the `gh` tool following these instructions: <https://github.com/cli/cli#installation>
+
+Then login by running:
+
+```console
+gh auth login
+```
+
+Try running `gh auth token`. If that succeeds, then you're good.
