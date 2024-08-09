@@ -83,3 +83,35 @@ h1 {
 .gh-links a:not(:first-child) {
   margin-left: 0.5rem;
 }
+
+input[type=file] {
+  display: none;
+}
+
+button, label {
+  display: inline-block;
+  appearance: none;
+  background: #eee;
+  border: 1px solid #aaa;
+  border-radius: 4px;  
+  padding: 3px 5px;
+  cursor: pointer;
+
+  &:hover {
+    background-color: #fafafa;
+  }
+}
+
+.controls {
+  display: flex;
+  gap: 1rem;  
+}
+
+.new-quest {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;  
+}
+
+/* .working-dir {
+} */

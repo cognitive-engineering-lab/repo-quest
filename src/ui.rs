@@ -1,8 +1,8 @@
 #![allow(non_snake_case)]
 
 use crate::{
-  github,
-  quest::{self, Quest, QuestState},
+  github::{self, GithubToken},
+  quest::{self, Quest, QuestConfig, QuestState},
   stage::StagePart,
 };
 use dioxus::{
@@ -10,8 +10,20 @@ use dioxus::{
   prelude::*,
 };
 use futures_util::FutureExt;
-use std::{ops::Deref, rc::Rc, sync::Arc};
+use std::{env, ops::Deref, path::PathBuf, rc::Rc, sync::Arc};
 use tracing::Level;
+
+macro_rules! error_view {
+  ($label:expr, $error:expr) => {{
+    rsx! {
+      div {
+        class: "error",
+        div { {format!("{} failed with error:", $label)} }
+        pre { {format!("{:?}", $error)} }
+      }
+    }
+  }};
+}
 
 #[derive(Clone)]
 struct QuestRef(Arc<Quest>);
@@ -34,23 +46,22 @@ impl Deref for QuestRef {
 fn QuestView(quest: QuestRef) -> Element {
   let mut error_signal = use_signal_sync(|| None::<anyhow::Error>);
   let mut loading_signal = use_context::<SyncSignal<ShowLoading>>();
+  let mut title_signal = use_context::<SyncSignal<Title>>();
 
   let quest_ref = quest.clone();
+  let title = quest.config.title.clone();
   use_hook(move || {
+    title_signal.set(Title(Some(title)));
     tokio::spawn(async move { quest_ref.infer_state_loop().await });
   });
 
   let state = quest.state_signal.read().as_ref().unwrap().clone();
   let cur_stage = state.stage.idx;
+  let quest_dir = quest.dir.clone();
 
   rsx! {
     if let Some(err) = &*error_signal.read() {
       pre { "{err:?}" }
-    }
-
-    h1 {
-      "RepoQuest: "
-      {quest.config.title.clone()}
     }
 
     button {
@@ -62,6 +73,12 @@ fn QuestView(quest: QuestRef) -> Element {
         });
       },
       "⟳"
+    }
+
+    div {
+      class: "working-dir",
+      "Directory: "
+      code { {quest_dir.display().to_string()} }
     }
 
     ol {
@@ -111,7 +128,7 @@ fn QuestView(quest: QuestRef) -> Element {
                 span {
                   class: "status",
                   {match state.part {
-                    StagePart::Starter if !quest.stages[stage].config.no_starter()  => "Waiting for you to merge starter PR",
+                    StagePart::Starter if !quest.stages[stage].config.no_starter() => "Waiting for you to merge starter PR",
                     _ => "Waiting for you to solve & close issue"
                   }}
                 }
@@ -154,83 +171,184 @@ fn QuestView(quest: QuestRef) -> Element {
   }
 }
 
-fn QuestLoader() -> Element {
-  let mut quest_slot = use_signal_sync(|| None::<QuestRef>);
-  let state_signal = use_signal_sync(|| None::<QuestState>);
+#[component]
+fn ExistingQuestLoader(dir: PathBuf, config: QuestConfig) -> Element {
   let mut loading_signal = use_context::<SyncSignal<ShowLoading>>();
-  match &*quest_slot.read_unchecked() {
-    Some(quest) => rsx! { QuestView { quest: quest.clone() }},
-    None => rsx! {
-      h1 { "RepoQuest" }
-      {
-        let config = quest::load_config_from_current_dir();
-        match config {
-          Ok(config) => {
-            let res = use_resource(move || {
-              let config = config.clone();
-              async move {
-                loading_signal.set(ShowLoading(true));
-                let quest = Quest::load(config, state_signal).await?;
-                quest_slot.set(Some(QuestRef(Arc::new(quest))));
-                loading_signal.set(ShowLoading(false));
-                Ok::<_, anyhow::Error>(())
-              }
-            });
-            match &*res.read_unchecked() {
-              None => rsx! { "Loading current quest..." },
-              Some(Ok(())) => unreachable!(),
-              Some(Err(e)) => rsx! {
-                div { "Failed to load quest with error:" },
-                pre { "{e:?}" }
-              }
-            }
-          }
-          Err(_) => rsx! { InitForm { quest_slot, state_signal } }
-        }
-      }
+  let mut quest_slot = use_context::<SyncSignal<Option<QuestRef>>>();
+  let state_signal = use_context::<SyncSignal<Option<QuestState>>>();
+  let res = use_resource(move || {
+    let config = config.clone();
+    let dir = dir.clone();
+    async move {
+      loading_signal.set(ShowLoading(true));
+      let quest = Quest::load(dir, config, state_signal).await?;
+      quest_slot.set(Some(QuestRef(Arc::new(quest))));
+      loading_signal.set(ShowLoading(false));
+      Ok::<_, anyhow::Error>(())
+    }
+  });
+  match &*res.read_unchecked() {
+    None => rsx! { "Loading quest..." },
+    Some(Ok(())) => unreachable!(),
+    Some(Err(e)) => rsx! {
+      div { "Failed to load quest with error:" },
+      pre { "{e:?}" }
     },
   }
 }
 
-#[component]
-fn InitForm(
-  quest_slot: SyncSignal<Option<QuestRef>>,
-  state_signal: SyncSignal<Option<QuestState>>,
-) -> Element {
-  let mut repo = use_signal(String::new);
-  let mut start_init = use_signal(|| false);
+fn QuestLoader() -> Element {
+  let quest_slot = use_context_provider(|| SyncSignal::<Option<QuestRef>>::new_maybe_sync(None));
+  use_context_provider(|| SyncSignal::<Option<QuestState>>::new_maybe_sync(None));
+  match &*quest_slot.read_unchecked() {
+    Some(quest) => rsx! { QuestView { quest: quest.clone() }},
+    None => {
+      let dir = env::current_dir().unwrap();
+      let config = QuestConfig::load(&dir);
+      match config {
+        Ok(config) => rsx! { ExistingQuestLoader { dir, config } },
+        Err(_) => rsx! { InitForm {} },
+      }
+    }
+  }
+}
 
-  rsx! {
-    if *start_init.read() {
-      InitView { repo: repo.read_unchecked().clone(), quest_slot, state_signal }
-    } else {
-      input { oninput: move |event| repo.set(event.value()) }
-      button {
-        onclick: move |_| start_init.set(true),
-        "Create"
+fn InitForm() -> Element {
+  enum InitState {
+    AwaitingInput,
+    Remote { dir: PathBuf, repo: String },
+    Local(PathBuf),
+  }
+
+  let mut new_quest = use_signal(|| false);
+  let mut new_dir = use_signal(|| None::<String>);
+  let mut repo = use_signal(|| None::<String>);
+  let mut state = use_signal(|| InitState::AwaitingInput);
+
+  let cur_state = state.read();
+  match &*cur_state {
+    InitState::AwaitingInput => rsx! {
+      if *new_quest.read() {
+        div {
+          class: "new-quest",
+
+          div {
+            strong { "Start a new quest" }
+          }
+
+          div {
+            select {
+              onchange: move |event| repo.set(Some(event.value())),
+              option {
+                disabled: true,
+                selected: repo.read().is_none(),
+                value: "",
+                "Choose a quest..."
+              }
+              option {
+                value: "rqst-async",
+                "rqst-async"
+              }
+            }
+          }
+
+          div {
+            label {
+              r#for: "new-quest-dir",
+              "Choose a dir"
+            }
+
+            if let Some(new_dir) = &*new_dir.read() {
+              span {
+                class: "selected-file",
+                "{new_dir}"
+              }
+            }
+
+            input {
+              id: "new-quest-dir",
+              r#type: "file",
+              "webkitdirectory": true,
+              onchange: move |event| {
+                let mut files = event.files().unwrap().files();
+                if !files.is_empty() {
+                  new_dir.set(Some(files.remove(0)));
+                }
+              },
+            }
+          }
+
+          div {
+            button {
+              disabled: repo.read().is_none() || new_dir.read().is_none(),
+              onclick: move |_| state.set(InitState::Remote {
+                dir: PathBuf::from(new_dir.read_unchecked().as_ref().unwrap()),
+                repo: repo.read_unchecked().as_ref().unwrap().clone()
+              }),
+              "Create"
+            }
+          }
+        }
+      } else {
+        div {
+          class: "controls",
+
+          button {
+            onclick: move |_| new_quest.set(true),
+            "Start a new quest"
+          }
+
+          label {
+            r#for: "load-quest",
+            "Load an existing quest"
+          }
+
+          input {
+            id: "load-quest",
+            r#type: "file",
+            "webkitdirectory": true,
+            onchange: move |event| {
+              let mut files = event.files().unwrap().files();
+              if !files.is_empty() {
+                state.set(InitState::Local(PathBuf::from(files.remove(0))));
+              }
+            },
+          }
+        }
+      }
+    },
+    InitState::Remote { dir, repo } => rsx! { InitView { repo: repo.clone(), dir: dir.clone() } },
+    InitState::Local(dir) => {
+      let config = QuestConfig::load(dir);
+      match config {
+        Ok(config) => rsx! { ExistingQuestLoader { dir: dir.clone(), config } },
+        Err(e) => error_view!(format!("Loading quest from {}", dir.display()), e),
       }
     }
   }
 }
 
 #[component]
-fn InitView(
-  repo: String,
-  quest_slot: SyncSignal<Option<QuestRef>>,
-  state_signal: SyncSignal<Option<QuestState>>,
-) -> Element {
+fn InitView(repo: String, dir: PathBuf) -> Element {
+  let state_signal = use_context::<SyncSignal<Option<QuestState>>>();
+  let mut quest_slot = use_context::<SyncSignal<Option<QuestRef>>>();
+  let mut loading_signal = use_context::<SyncSignal<ShowLoading>>();
   let quest = use_resource(move || {
     let repo = repo.clone();
+    let dir = dir.clone();
     async move {
-      tokio::spawn(async move {
+      loading_signal.set(ShowLoading(true));
+      let result = tokio::spawn(async move {
         let config = quest::load_config_from_remote("cognitive-engineering-lab", &repo).await?;
-        let quest = Quest::load(config, state_signal).await?;
+        let quest = Quest::load(dir.join(repo), config, state_signal).await?;
         quest.create_repo().await?;
         quest_slot.set(Some(QuestRef(Arc::new(quest))));
+        loading_signal.set(ShowLoading(false));
         Ok::<_, anyhow::Error>(())
       })
-      .await
-      .unwrap()
+      .await;
+      loading_signal.set(ShowLoading(false));
+      result.unwrap()
     }
   });
 
@@ -244,36 +362,71 @@ fn InitView(
   }
 }
 
+fn GithubLoader() -> Element {
+  let token = use_hook(|| Rc::new(github::get_github_token()));
+  match token.as_ref() {
+    GithubToken::Found(token) => {
+      let init_res = use_hook(|| Rc::new(github::init_octocrab(token)));
+      match &*init_res {
+        Ok(()) => rsx! { QuestLoader { } },
+        Err(e) => rsx! {
+          div { "Failed to load Github API. Full error:" }
+          pre { "{e:?}" }
+        },
+      }
+    }
+    GithubToken::Error(err) => error_view!("Github token", err),
+    GithubToken::Missing => rsx! {
+      div {
+        "Before running RepoQuest, you need to provide it access to Github. "
+        "Follow the instructions at the link below and restart RepoQuest."
+      }
+      div {
+        a {
+          href: "https://github.com/cognitive-engineering-lab/repo-quest/blob/main/README.md#github-token",
+          "https://github.com/cognitive-engineering-lab/repo-quest/blob/main/README.md#github-token"
+        }
+      }
+    },
+  }
+}
+
+// TODO: deal with CWD when launched from app.
+
 #[derive(Clone, Copy)]
 struct ShowLoading(bool);
 
+#[derive(Clone)]
+struct Title(Option<String>);
+
 #[component]
 fn App() -> Element {
-  let init_res = use_hook(|| Rc::new(github::init_octocrab()));
-  use_context_provider(|| SyncSignal::new_maybe_sync(ShowLoading(false)));
-  let show_loading = use_context::<SyncSignal<ShowLoading>>();
+  let show_loading = use_context_provider(|| SyncSignal::new_maybe_sync(ShowLoading(false)));
+  let title = use_context_provider(|| SyncSignal::new_maybe_sync(Title(None)));
 
   rsx! {
-      link { rel: "stylesheet", href: "main.css" }
-      if show_loading.read().0 {
-        div {
-          id: "loading-cover",
+    link { rel: "stylesheet", href: "main.css" }
 
-          div {
-            id: "spinner"
-          }
+    if show_loading.read().0 {
+      div {
+        id: "loading-cover",
+
+        div {
+          id: "spinner"
         }
       }
-      div {
-        id: "app",
-        {match &*init_res {
-          Ok(()) => rsx!{ QuestLoader { } },
-          Err(e) => rsx!{
-            div { "Failed to load Github API. Full error:" }
-            pre { "{e:?}" }
-          },
-        }}
+    }
+
+    div {
+      id: "app",
+      h1 {
+        "RepoQuest"
+        if let Some(title) = title.read().0.as_ref() {
+          ": {title}"
+        }
       }
+      GithubLoader {}
+    }
   }
 }
 

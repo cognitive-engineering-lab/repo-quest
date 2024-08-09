@@ -3236,6 +3236,7 @@ dependencies = [
  "dioxus",
  "dioxus-logger",
  "futures-util",
+ "home",
  "http 1.1.0",
  "octocrab",
  "parking_lot",

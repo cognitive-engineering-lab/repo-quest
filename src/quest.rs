@@ -1,4 +1,10 @@
-use std::{collections::HashMap, env, process::Command, time::Duration};
+use std::{
+  collections::HashMap,
+  env::{self, set_current_dir},
+  path::{Path, PathBuf},
+  process::Command,
+  time::Duration,
+};
 
 use crate::{
   git::GitRepo,
@@ -17,12 +23,30 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use tokio::{time::sleep, try_join};
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct QuestConfig {
   pub title: String,
   pub author: String,
   pub repo: String,
   pub stages: Vec<StageConfig>,
+}
+
+impl QuestConfig {
+  pub fn load(dir: impl AsRef<Path>) -> Result<Self> {
+    let output = Command::new("git")
+      .args(["show", "upstream/meta:rqst.toml"])
+      .current_dir(dir)
+      .output()
+      .context("git failed")?;
+    ensure!(
+      output.status.success(),
+      "git exited with non-zero status code"
+    );
+    let stdout = String::from_utf8(output.stdout)?.trim().to_string();
+    let config = toml::de::from_str::<QuestConfig>(&stdout)?;
+
+    Ok(config)
+  }
 }
 
 #[derive(Clone, Debug)]
@@ -39,24 +63,10 @@ pub struct Quest {
   origin_git: GitRepo,
   stage_index: HashMap<String, usize>,
 
+  pub dir: PathBuf,
   pub config: QuestConfig,
   pub state_signal: SyncSignal<Option<QuestState>>,
   pub stages: Vec<Stage>,
-}
-
-pub fn load_config_from_current_dir() -> Result<QuestConfig> {
-  let output = Command::new("git")
-    .args(["show", "upstream/meta:rqst.toml"])
-    .output()
-    .context("git failed")?;
-  ensure!(
-    output.status.success(),
-    "git exited with non-zero status code"
-  );
-  let stdout = String::from_utf8(output.stdout)?.trim().to_string();
-  let config = toml::de::from_str::<QuestConfig>(&stdout)?;
-
-  Ok(config)
 }
 
 pub async fn load_config_from_remote(owner: &str, repo: &str) -> Result<QuestConfig> {
@@ -83,6 +93,7 @@ async fn load_user() -> Result<String> {
 
 impl Quest {
   pub async fn load(
+    dir: PathBuf,
     config: QuestConfig,
     state_signal: SyncSignal<Option<QuestState>>,
   ) -> Result<Self> {
@@ -102,6 +113,7 @@ impl Quest {
       .collect::<HashMap<_, _>>();
 
     let q = Quest {
+      dir,
       user,
       config,
       upstream,
@@ -114,6 +126,12 @@ impl Quest {
 
     try_join!(q.infer_state_update(), q.origin.fetch(), q.upstream.fetch())
       .context("Failed to load quest data")?;
+
+    if q.dir.exists() {
+      set_current_dir(&q.dir)?;
+    } else {
+      set_current_dir(q.dir.parent().unwrap())?;
+    }
 
     Ok(q)
   }

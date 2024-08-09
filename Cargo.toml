@@ -8,6 +8,7 @@ anyhow = "1.0.86"
 dioxus = { version = "0.5.1", features = ["desktop"] }
 dioxus-logger = "0.5.1"
 futures-util = "0.3.30"
+home = "0.5.9"
 http = "1.1.0"
 octocrab = "0.38.0"
 parking_lot = "0.12.3"
