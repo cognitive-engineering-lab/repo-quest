@@ -15,9 +15,13 @@ use octocrab::{
   GitHubError, Octocrab,
 };
 use parking_lot::{MappedMutexGuard, Mutex, MutexGuard};
+use regex::Regex;
 use serde_json::json;
 use std::{env, fs, process::Command, sync::Arc, time::Duration};
 use tokio::{time::timeout, try_join};
+use tracing::warn;
+
+use crate::utils;
 
 pub struct GithubRepo {
   user: String,
@@ -25,6 +29,11 @@ pub struct GithubRepo {
   gh: Arc<Octocrab>,
   prs: Mutex<Option<Vec<PullRequest>>>,
   issues: Mutex<Option<Vec<Issue>>>,
+}
+
+pub enum PullSelector {
+  Branch(String),
+  Label(String),
 }
 
 impl GithubRepo {
@@ -58,7 +67,15 @@ impl GithubRepo {
       }) => return Ok(()),
       Err(e) => return Err(e.into()),
     };
-    let (prs, issues) = (pr_page.take_items(), issue_page.take_items());
+    let (prs, mut issues) = (pr_page.take_items(), issue_page.take_items());
+
+    for pr in &prs {
+      println!("test: {:#?}", pr.labels);
+    }
+
+    // Pull requests are considered issues, so filter them out
+    issues.retain(|issue| issue.pull_request.is_none());
+
     *self.prs.lock() = Some(prs);
     *self.issues.lock() = Some(issues);
     Ok(())
@@ -168,9 +185,16 @@ impl GithubRepo {
     MutexGuard::map(self.prs.lock(), |opt| opt.as_mut().unwrap())
   }
 
-  pub fn pr(&self, ref_field: &str) -> Option<MappedMutexGuard<'_, PullRequest>> {
+  pub fn pr(&self, selector: &PullSelector) -> Option<MappedMutexGuard<'_, PullRequest>> {
     let prs = self.prs();
-    let idx = prs.iter().position(|pr| pr.head.ref_field == ref_field)?;
+    let idx = prs.iter().position(|pr| match selector {
+      PullSelector::Branch(branch) => &pr.head.ref_field == branch,
+      PullSelector::Label(label) => pr
+        .labels
+        .as_ref()
+        .map(|labels| labels.iter().any(|l| &l.name == label))
+        .unwrap_or(false),
+    })?;
     Some(MappedMutexGuard::map(prs, |prs| &mut prs[idx]))
   }
 
@@ -209,6 +233,20 @@ impl GithubRepo {
       );
     let self_pr = request.send().await?;
 
+    // TODO: lots of parallelism below we should exploit
+
+    let labels = match &base_pr.labels {
+      Some(labels) => labels
+        .iter()
+        .map(|label| label.name.clone())
+        .collect::<Vec<_>>(),
+      None => Vec::new(),
+    };
+    self
+      .issue_handler()
+      .add_labels(self_pr.number, &labels)
+      .await?;
+
     let comment_pages = base
       .pr_handler()
       .list_comments(Some(base_pr.number))
@@ -244,11 +282,47 @@ impl GithubRepo {
     Ok(())
   }
 
+  fn process_issue_body(&self, body: &str) -> String {
+    let re = Regex::new(r"\{\{ (\S+) (\S+) \}\}").unwrap();
+    let mut new_body = body.to_string();
+    let substitutions = re.captures_iter(body).filter_map(|cap| {
+      let full_match = cap.get(0).unwrap();
+      let label = &cap[1];
+      let kind = &cap[2];
+      let number = match kind {
+        "pr" => {
+          let Some(pr) = self.pr(&PullSelector::Label(label.to_string())) else {
+            warn!("No PR with label {label}");
+            return None;
+          };
+          pr.number
+        }
+        "issue" => {
+          let Some(issue) = self.issue(label) else {
+            warn!("No issue with label {label}");
+            return None;
+          };
+          issue.number
+        }
+        _ => unimplemented!(),
+      };
+
+      Some((full_match.range(), format!("#{number}")))
+    });
+    utils::replace_many_ranges(&mut new_body, substitutions);
+
+    // todo!()
+    new_body
+  }
+
   pub async fn copy_issue(&self, issue: &Issue) -> Result<()> {
+    let body = issue.body.as_ref().unwrap();
+    let body_processed = self.process_issue_body(body);
+
     self
       .issue_handler()
       .create(&issue.title)
-      .body(issue.body.as_ref().unwrap())
+      .body(body_processed)
       .labels(
         issue
           .labels

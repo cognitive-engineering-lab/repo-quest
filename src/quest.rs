@@ -8,7 +8,7 @@ use std::{
 
 use crate::{
   git::GitRepo,
-  github::GithubRepo,
+  github::{GithubRepo, PullSelector},
   stage::{Stage, StageConfig, StagePart, StagePartStatus},
 };
 use anyhow::{ensure, Context, Result};
@@ -298,7 +298,11 @@ impl Quest {
 
     let head = self.origin_git.head_commit()?;
 
-    let pr = self.upstream.pr(target_branch).unwrap().clone();
+    let pr = self
+      .upstream
+      .pr(&PullSelector::Branch(target_branch.into()))
+      .unwrap()
+      .clone();
     self.origin.copy_pr(&self.upstream, &pr, &head).await?;
 
     Ok(())
@@ -318,6 +322,9 @@ impl Quest {
         .file_pr(&stage.branch_name(StagePart::Starter), &base_branch)
         .await?;
     }
+
+    // Need to refresh our state for issues that refer to the filed PR
+    self.infer_state_update().await?;
 
     let issue = self.upstream.issue(&stage.config.label).unwrap().clone();
     self.origin.copy_issue(&issue).await?;
@@ -349,13 +356,17 @@ impl Quest {
 
   pub fn feature_pr_url(&self, stage_index: usize) -> Option<String> {
     let stage = &self.stages[stage_index];
-    let pr = self.origin.pr(&stage.branch_name(StagePart::Starter))?;
+    let pr = self
+      .origin
+      .pr(&PullSelector::Branch(stage.branch_name(StagePart::Starter)))?;
     Some(pr.html_url.as_ref().unwrap().to_string())
   }
 
   pub fn solution_pr_url(&self, stage_index: usize) -> Option<String> {
     let stage = &self.stages[stage_index];
-    let pr = self.origin.pr(&stage.branch_name(StagePart::Solution))?;
+    let pr = self.origin.pr(&PullSelector::Branch(
+      stage.branch_name(StagePart::Solution),
+    ))?;
     Some(pr.html_url.as_ref().unwrap().to_string())
   }
 }
