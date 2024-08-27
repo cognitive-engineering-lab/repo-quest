@@ -69,10 +69,6 @@ impl GithubRepo {
     };
     let (prs, mut issues) = (pr_page.take_items(), issue_page.take_items());
 
-    for pr in &prs {
-      println!("test: {:#?}", pr.labels);
-    }
-
     // Pull requests are considered issues, so filter them out
     issues.retain(|issue| issue.pull_request.is_none());
 
@@ -315,11 +311,10 @@ impl GithubRepo {
     new_body
   }
 
-  pub async fn copy_issue(&self, issue: &Issue) -> Result<()> {
+  pub async fn copy_issue(&self, issue: &Issue) -> Result<Issue> {
     let body = issue.body.as_ref().unwrap();
     let body_processed = self.process_issue_body(body);
-
-    self
+    let issue = self
       .issue_handler()
       .create(&issue.title)
       .body(body_processed)
@@ -332,14 +327,14 @@ impl GithubRepo {
       )
       .send()
       .await?;
-    Ok(())
+    Ok(issue)
   }
 }
 
 pub enum GithubToken {
   Found(String),
+  NotFound,
   Error(anyhow::Error),
-  Missing,
 }
 
 macro_rules! token_try {
@@ -354,14 +349,14 @@ macro_rules! token_try {
 fn read_github_token_from_fs() -> GithubToken {
   let home = match home::home_dir() {
     Some(dir) => dir,
-    None => return GithubToken::Missing,
+    None => return GithubToken::NotFound,
   };
   let path = home.join(".rqst-token");
   if path.exists() {
     let token = token_try!(fs::read_to_string(path));
     GithubToken::Found(token.trim_end().to_string())
   } else {
-    GithubToken::Missing
+    GithubToken::NotFound
   }
 }
 
@@ -379,7 +374,7 @@ fn generate_github_token_from_cli() -> GithubToken {
         let token_clean = token.trim_end().to_string();
         GithubToken::Found(token_clean)
       } else {
-        GithubToken::Missing
+        GithubToken::NotFound
       }
     }
     Err(err) => GithubToken::Error(err.into()),
@@ -388,13 +383,12 @@ fn generate_github_token_from_cli() -> GithubToken {
 
 pub fn get_github_token() -> GithubToken {
   match read_github_token_from_fs() {
-    GithubToken::Missing => generate_github_token_from_cli(),
+    GithubToken::NotFound => generate_github_token_from_cli(),
     result => result,
   }
 }
 
 pub fn init_octocrab(token: &str) -> Result<()> {
-  println!("ok {token:?}");
   let crab_inst = Octocrab::builder()
     .personal_token(token.to_string())
     .build()?;

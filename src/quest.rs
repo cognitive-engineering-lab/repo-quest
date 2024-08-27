@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::{
-  git::GitRepo,
+  git::{GitRepo, UPSTREAM},
   github::{GithubRepo, PullSelector},
   stage::{Stage, StageConfig, StagePart, StagePartStatus},
 };
@@ -15,7 +15,7 @@ use anyhow::{ensure, Context, Result};
 use dioxus::signals::{SyncSignal, Writable};
 use http::StatusCode;
 use octocrab::{
-  models::{pulls::PullRequest, IssueState},
+  models::{issues::Issue, pulls::PullRequest, IssueState},
   params::{issues, pulls, Direction},
   GitHubError,
 };
@@ -34,7 +34,8 @@ pub struct QuestConfig {
 impl QuestConfig {
   pub fn load(dir: impl AsRef<Path>) -> Result<Self> {
     let output = Command::new("git")
-      .args(["show", "upstream/meta:rqst.toml"])
+      .arg("show")
+      .arg(format!("{UPSTREAM}/meta:rqst.toml"))
       .current_dir(dir)
       .output()
       .context("git failed")?;
@@ -189,7 +190,11 @@ impl Quest {
       .into_iter()
       .filter_map(|issue| {
         let label = issue.labels.first()?;
-        Some((label.name.clone(), issue))
+        if issue.pull_request.is_none() {
+          Some((label.name.clone(), issue))
+        } else {
+          None
+        }
       })
       .collect::<HashMap<_, _>>();
 
@@ -212,14 +217,18 @@ impl Quest {
       Some((stage, part, finished))
     });
 
-    let issue_stages = issue_map.keys().filter_map(|label| {
-      let stage = stage_map.get(label)?;
-      Some((
-        (*stage).clone(),
-        StagePart::Starter,
-        stage.config.no_starter(),
-      ))
+    let issue_stages = issue_map.iter().filter_map(|(label, issue)| {
+      let stage = (*stage_map.get(label)?).clone();
+      Some(if matches!(issue.state, IssueState::Closed) {
+        (stage, StagePart::Solution, true)
+      } else {
+        let no_starter = stage.config.no_starter();
+        (stage, StagePart::Starter, no_starter)
+      })
     });
+
+    // tracing::debug!("PRs: {:#?}", pr_stages.clone().collect::<Vec<_>>());
+    // tracing::debug!("Issues: {:#?}", issue_stages.clone().collect::<Vec<_>>());
 
     let Some((stage, part, finished)) = pr_stages
       .chain(issue_stages)
@@ -292,20 +301,31 @@ impl Quest {
   async fn file_pr(&self, target_branch: &str, base_branch: &str) -> Result<()> {
     self.origin_git.checkout_main_and_pull()?;
 
-    self
+    let branch_head = self
       .origin_git
       .create_branch_from(target_branch, base_branch)?;
-
-    let head = self.origin_git.head_commit()?;
 
     let pr = self
       .upstream
       .pr(&PullSelector::Branch(target_branch.into()))
       .unwrap()
       .clone();
-    self.origin.copy_pr(&self.upstream, &pr, &head).await?;
+    self
+      .origin
+      .copy_pr(&self.upstream, &pr, &branch_head)
+      .await?;
+
+    tracing::debug!("Filed PR: {base_branch} -> {target_branch}");
 
     Ok(())
+  }
+
+  async fn file_issue(&self, stage_index: usize) -> Result<Issue> {
+    let stage = &self.stages[stage_index];
+    let issue = self.upstream.issue(&stage.config.label).unwrap().clone();
+    let new_issue = self.origin.copy_issue(&issue).await?;
+    self.infer_state_update().await?;
+    Ok(new_issue)
   }
 
   pub async fn file_feature_and_issue(&self, stage_index: usize) -> Result<()> {
@@ -326,10 +346,7 @@ impl Quest {
     // Need to refresh our state for issues that refer to the filed PR
     self.infer_state_update().await?;
 
-    let issue = self.upstream.issue(&stage.config.label).unwrap().clone();
-    self.origin.copy_issue(&issue).await?;
-
-    self.infer_state_update().await?;
+    self.file_issue(stage_index).await?;
 
     Ok(())
   }
@@ -368,5 +385,30 @@ impl Quest {
       stage.branch_name(StagePart::Solution),
     ))?;
     Some(pr.html_url.as_ref().unwrap().to_string())
+  }
+
+  pub fn reference_solution_pr_url(&self, stage_index: usize) -> Option<String> {
+    let stage = &self.stages[stage_index];
+    let pr = self.upstream.pr(&PullSelector::Branch(
+      stage.branch_name(StagePart::Solution),
+    ))?;
+    Some(pr.html_url.as_ref().unwrap().to_string())
+  }
+
+  pub async fn hard_reset(&self, stage_index: usize) -> Result<()> {
+    let prev_stage = &self.stages[stage_index - 1];
+    let branch = format!("{UPSTREAM}/{}", prev_stage.branch_name(StagePart::Solution));
+    self.origin_git.reset(&branch)?;
+    let issue = self.file_issue(stage_index - 1).await?;
+    self
+      .origin
+      .issue_handler()
+      .update(issue.number)
+      .state(IssueState::Closed)
+      .send()
+      .await?;
+
+    self.infer_state_update().await?;
+    Ok(())
   }
 }

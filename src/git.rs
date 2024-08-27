@@ -38,7 +38,7 @@ fn git_output(f: impl FnOnce(&mut Command)) -> Result<String> {
 
 pub struct GitRepo {}
 
-const UPSTREAM: &str = "upstream";
+pub const UPSTREAM: &str = "upstream";
 
 impl GitRepo {
   pub fn new() -> Self {
@@ -66,26 +66,57 @@ impl GitRepo {
     Ok(())
   }
 
-  pub fn create_branch_from(&self, target_branch: &str, base_branch: &str) -> Result<()> {
+  pub fn create_branch_from(&self, target_branch: &str, base_branch: &str) -> Result<String> {
     git(|cmd| {
       cmd.args(["checkout", "-b", target_branch]);
     })
     .with_context(|| format!("Failed to checkout branch {target_branch}"))?;
 
-    git(|cmd| {
+    let res = git(|cmd| {
       cmd.args([
         "cherry-pick",
         &format!("{UPSTREAM}/{base_branch}..{UPSTREAM}/{target_branch}"),
       ]);
-    })
-    .with_context(|| format!("Failed to cherry-pick commits onto {target_branch}"))?;
+    });
+
+    if res.is_err() {
+      tracing::warn!("Merge conflicts when cherry-picking, resorting to hard reset");
+
+      git(|cmd| {
+        cmd.args(["cherry-pick", "--abort"]);
+      })
+      .context("Failed to abort cherry-pick")?;
+
+      let upstream_target = format!("{UPSTREAM}/{target_branch}");
+      git(|cmd| {
+        cmd.args(["reset", "--hard", &upstream_target]);
+      })
+      .with_context(|| format!("Failed to hard reset to {upstream_target}"))?;
+
+      git(|cmd| {
+        cmd.args(["reset", "--soft", "main"]);
+      })
+      .context("Failed to soft reset to main")?;
+
+      git(|cmd| {
+        cmd.args(["commit", "-m", "Override with reference solution"]);
+      })
+      .context("Failed to commit reference solution")?;
+    }
 
     git(|cmd| {
       cmd.args(["push", "-u", "origin", target_branch]);
     })
     .with_context(|| format!("Failed to push branch {target_branch}"))?;
 
-    Ok(())
+    let head = self.head_commit()?;
+
+    git(|cmd| {
+      cmd.args(["checkout", "main"]);
+    })
+    .context("Failed to checkout main")?;
+
+    Ok(head)
   }
 
   pub fn checkout_main_and_pull(&self) -> Result<()> {
@@ -108,5 +139,19 @@ impl GitRepo {
     })
     .context("Failed to get head commit")?;
     Ok(output.trim_end().to_string())
+  }
+
+  pub fn reset(&self, branch: &str) -> Result<()> {
+    git(|cmd| {
+      cmd.args(["reset", "--hard", branch]);
+    })
+    .context("Failed to reset")?;
+
+    git(|cmd| {
+      cmd.args(["push", "--force"]);
+    })
+    .context("Failed to push reset branch")?;
+
+    Ok(())
   }
 }
