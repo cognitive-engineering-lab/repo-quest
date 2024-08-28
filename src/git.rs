@@ -49,7 +49,7 @@ impl GitRepo {
     git(|cmd| {
       cmd.args(["clone", url]);
     })
-    .context("Failed to clone")
+    .with_context(|| format!("Failed to clone: {url}"))
   }
 
   pub fn setup_upstream(&self, upstream: &GithubRepo) -> Result<()> {

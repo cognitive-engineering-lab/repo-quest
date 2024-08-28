@@ -66,7 +66,7 @@ pub struct Quest {
 
   pub dir: PathBuf,
   pub config: QuestConfig,
-  pub state_signal: SyncSignal<Option<QuestState>>,
+  pub state_signal: Option<SyncSignal<Option<QuestState>>>,
   pub stages: Vec<Stage>,
 }
 
@@ -96,7 +96,7 @@ impl Quest {
   pub async fn load(
     dir: PathBuf,
     config: QuestConfig,
-    state_signal: SyncSignal<Option<QuestState>>,
+    state_signal: Option<SyncSignal<Option<QuestState>>>,
   ) -> Result<Self> {
     let user = load_user().await?;
     let upstream = GithubRepo::new(&config.author, &config.repo);
@@ -227,8 +227,8 @@ impl Quest {
       })
     });
 
-    // tracing::debug!("PRs: {:#?}", pr_stages.clone().collect::<Vec<_>>());
-    // tracing::debug!("Issues: {:#?}", issue_stages.clone().collect::<Vec<_>>());
+    tracing::debug!("PRs: {:#?}", pr_stages.clone().collect::<Vec<_>>());
+    tracing::debug!("Issues: {:#?}", issue_stages.clone().collect::<Vec<_>>());
 
     let Some((stage, part, finished)) = pr_stages
       .chain(issue_stages)
@@ -265,8 +265,10 @@ impl Quest {
 
   pub async fn infer_state_update(&self) -> Result<()> {
     let (new_state, _) = try_join!(self.infer_state(), self.origin.fetch())?;
-    let mut state_signal = self.state_signal;
-    state_signal.set(Some(new_state));
+    if let Some(mut state_signal) = self.state_signal {
+      state_signal.set(Some(new_state));
+    }
+
     Ok(())
   }
 
@@ -298,7 +300,7 @@ impl Quest {
     Ok(())
   }
 
-  async fn file_pr(&self, target_branch: &str, base_branch: &str) -> Result<()> {
+  async fn file_pr(&self, target_branch: &str, base_branch: &str) -> Result<PullRequest> {
     self.origin_git.checkout_main_and_pull()?;
 
     let branch_head = self
@@ -310,25 +312,32 @@ impl Quest {
       .pr(&PullSelector::Branch(target_branch.into()))
       .unwrap()
       .clone();
-    self
+    let new_pr = self
       .origin
       .copy_pr(&self.upstream, &pr, &branch_head)
       .await?;
 
     tracing::debug!("Filed PR: {base_branch} -> {target_branch}");
 
-    Ok(())
+    Ok(new_pr)
   }
 
   async fn file_issue(&self, stage_index: usize) -> Result<Issue> {
     let stage = &self.stages[stage_index];
-    let issue = self.upstream.issue(&stage.config.label).unwrap().clone();
+    let issue = self
+      .upstream
+      .issue(&stage.config.label)
+      .unwrap_or_else(|| panic!("Missing issue for stage {}", stage.config.label))
+      .clone();
     let new_issue = self.origin.copy_issue(&issue).await?;
     self.infer_state_update().await?;
     Ok(new_issue)
   }
 
-  pub async fn file_feature_and_issue(&self, stage_index: usize) -> Result<()> {
+  pub async fn file_feature_and_issue(
+    &self,
+    stage_index: usize,
+  ) -> Result<(Option<PullRequest>, Issue)> {
     let stage = &self.stages[stage_index];
     let base_branch = if stage_index > 0 {
       let prev_stage = &self.stages[stage_index - 1];
@@ -337,23 +346,25 @@ impl Quest {
       "main".into()
     };
 
-    if !stage.config.no_starter() {
-      self
+    let pr = if !stage.config.no_starter() {
+      let pr = self
         .file_pr(&stage.branch_name(StagePart::Starter), &base_branch)
         .await?;
-    }
+      Some(pr)
+    } else {
+      None
+    };
 
     // Need to refresh our state for issues that refer to the filed PR
     self.infer_state_update().await?;
 
-    self.file_issue(stage_index).await?;
-
-    Ok(())
+    let issue = self.file_issue(stage_index).await?;
+    Ok((pr, issue))
   }
 
-  pub async fn file_solution(&self, stage_index: usize) -> Result<()> {
+  pub async fn file_solution(&self, stage_index: usize) -> Result<PullRequest> {
     let stage = &self.stages[stage_index];
-    self
+    let pr = self
       .file_pr(
         &stage.branch_name(StagePart::Solution),
         &stage.branch_name(StagePart::Starter),
@@ -362,7 +373,7 @@ impl Quest {
 
     self.infer_state_update().await?;
 
-    Ok(())
+    Ok(pr)
   }
 
   pub fn issue_url(&self, stage_index: usize) -> Option<String> {
@@ -409,6 +420,162 @@ impl Quest {
       .await?;
 
     self.infer_state_update().await?;
+    Ok(())
+  }
+}
+
+#[cfg(test)]
+mod test {
+  use super::*;
+  use crate::github::{self, GithubToken};
+  use env::current_dir;
+  use std::{
+    fs,
+    sync::{Arc, Once},
+  };
+  use tracing::Level;
+
+  const TEST_ORG: &str = "cognitive-engineering-lab";
+  const TEST_REPO: &str = "rqst-test";
+
+  struct DeleteRemoteRepo(Arc<Quest>);
+  impl Drop for DeleteRemoteRepo {
+    fn drop(&mut self) {
+      tokio::task::block_in_place(move || {
+        tokio::runtime::Handle::current().block_on(async move {
+          self.0.origin.delete().await.unwrap();
+        })
+      })
+    }
+  }
+
+  struct DeleteLocalRepo(PathBuf);
+  impl Drop for DeleteLocalRepo {
+    fn drop(&mut self) {
+      fs::remove_dir_all(&self.0).unwrap();
+    }
+  }
+
+  fn setup() {
+    static SETUP: Once = Once::new();
+    SETUP.call_once(|| {
+      dioxus_logger::init(Level::DEBUG).expect("failed to init logger");
+
+      let token = github::get_github_token();
+      match token {
+        GithubToken::Found(token) => github::init_octocrab(&token).unwrap(),
+        other => panic!("Failed to get github token: {other:?}"),
+      }
+    });
+  }
+
+  async fn load_test_quest() -> Result<Arc<Quest>> {
+    let config = load_config_from_remote(TEST_ORG, TEST_REPO).await?;
+    assert_eq!(
+      config,
+      QuestConfig {
+        title: "Test".into(),
+        author: TEST_ORG.into(),
+        repo: TEST_REPO.into(),
+        stages: vec![
+          StageConfig {
+            label: "00-stage".into(),
+            name: "A".into(),
+            no_starter: Some(true)
+          },
+          StageConfig {
+            label: "01-stage".into(),
+            name: "B".into(),
+            no_starter: None
+          },
+          StageConfig {
+            label: "02-stage".into(),
+            name: "C".into(),
+            no_starter: None
+          }
+        ]
+      }
+    );
+
+    let dir = current_dir()?.join(TEST_REPO);
+    Ok(Arc::new(Quest::load(dir, config, None).await?))
+  }
+
+  macro_rules! test_quest {
+    ($id:ident) => {
+      setup();
+
+      let $id = load_test_quest().await?;
+
+      $id.create_repo().await?;
+      let _remote = DeleteRemoteRepo(Arc::clone(&$id));
+
+      $id.clone_repo()?;
+      let _local = DeleteLocalRepo($id.dir.clone());
+    };
+  }
+
+  // TODO: some of this machinery should be its own tester binary
+  #[tokio::test(flavor = "multi_thread")]
+  #[ignore]
+  async fn standard_playthrough() -> Result<()> {
+    test_quest!(quest);
+
+    macro_rules! state_is {
+      ($a:expr, $b:expr, $c:expr) => {
+        let state = quest.infer_state().await?;
+        assert_eq!((state.stage.idx, state.part, state.status), ($a, $b, $c));
+      };
+    }
+
+    state_is!(0, StagePart::Starter, StagePartStatus::Start);
+
+    let issue = quest.file_issue(0).await?;
+    state_is!(0, StagePart::Solution, StagePartStatus::Start);
+
+    quest.origin.close_issue(&issue).await?;
+    state_is!(1, StagePart::Starter, StagePartStatus::Start);
+
+    let (pr, issue) = quest.file_feature_and_issue(1).await?;
+    let pr = pr.unwrap();
+    state_is!(1, StagePart::Starter, StagePartStatus::Ongoing);
+
+    quest.origin.merge_pr(&pr).await?;
+    state_is!(1, StagePart::Solution, StagePartStatus::Start);
+
+    let pr = quest.file_solution(1).await?;
+    state_is!(1, StagePart::Solution, StagePartStatus::Ongoing);
+
+    quest.origin.merge_pr(&pr).await?;
+    state_is!(1, StagePart::Solution, StagePartStatus::Ongoing);
+
+    quest.origin.close_issue(&issue).await?;
+    state_is!(2, StagePart::Starter, StagePartStatus::Start);
+
+    Ok(())
+  }
+
+  // TODO: can't seem to run these even sequentially?
+  #[tokio::test(flavor = "multi_thread")]
+  #[ignore]
+  async fn skip() -> Result<()> {
+    test_quest!(quest);
+
+    macro_rules! state_is {
+      ($a:expr, $b:expr, $c:expr) => {
+        let state = quest.infer_state().await?;
+        assert_eq!((state.stage.idx, state.part, state.status), ($a, $b, $c));
+      };
+    }
+
+    state_is!(0, StagePart::Starter, StagePartStatus::Start);
+
+    quest.hard_reset(1).await?;
+    state_is!(1, StagePart::Starter, StagePartStatus::Start);
+
+    quest.hard_reset(2).await?;
+    state_is!(2, StagePart::Starter, StagePartStatus::Start);
+
     Ok(())
   }
 }

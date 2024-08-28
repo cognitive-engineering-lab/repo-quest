@@ -9,6 +9,7 @@ use octocrab::{
     issues::Issue,
     pulls::{self, PullRequest},
     repos::Branch,
+    IssueState,
   },
   pulls::PullRequestHandler,
   repos::RepoHandler,
@@ -210,7 +211,12 @@ impl GithubRepo {
     Some(MappedMutexGuard::map(issues, |issues| &mut issues[idx]))
   }
 
-  pub async fn copy_pr(&self, base: &GithubRepo, base_pr: &PullRequest, head: &str) -> Result<()> {
+  pub async fn copy_pr(
+    &self,
+    base: &GithubRepo,
+    base_pr: &PullRequest,
+    head: &str,
+  ) -> Result<PullRequest> {
     let pulls = self.pr_handler();
     let request = pulls
       .create(
@@ -254,7 +260,7 @@ impl GithubRepo {
       self.copy_pr_comment(self_pr.number, &comment, head).await?;
     }
 
-    Ok(())
+    Ok(self_pr)
   }
 
   pub async fn copy_pr_comment(
@@ -329,8 +335,29 @@ impl GithubRepo {
       .await?;
     Ok(issue)
   }
+
+  pub async fn close_issue(&self, issue: &Issue) -> Result<()> {
+    self
+      .issue_handler()
+      .update(issue.number)
+      .state(IssueState::Closed)
+      .send()
+      .await?;
+    Ok(())
+  }
+
+  pub async fn merge_pr(&self, pr: &PullRequest) -> Result<()> {
+    self.pr_handler().merge(pr.number).send().await?;
+    Ok(())
+  }
+
+  pub async fn delete(&self) -> Result<()> {
+    self.repo_handler().delete().await?;
+    Ok(())
+  }
 }
 
+#[derive(Debug)]
 pub enum GithubToken {
   Found(String),
   NotFound,

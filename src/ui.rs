@@ -36,7 +36,7 @@ fn StageView(stage: usize) -> Element {
   let mut loading_signal = use_context::<SyncSignal<ShowLoading>>();
   let mut app_error = use_context::<SyncSignal<AppError>>();
 
-  let state = quest.state_signal.read().as_ref().unwrap().clone();
+  let state = quest.state_signal.unwrap().read().as_ref().unwrap().clone();
   let cur_stage = state.stage.idx;
 
   let quest_ref = quest.clone();
@@ -45,8 +45,14 @@ fn StageView(stage: usize) -> Element {
     tokio::spawn(async move {
       loading_signal.set(ShowLoading(true));
       let res = match state.part {
-        StagePart::Starter => quest_ref.file_feature_and_issue(cur_stage).boxed(),
-        StagePart::Solution => quest_ref.file_solution(cur_stage).boxed(),
+        StagePart::Starter => quest_ref
+          .file_feature_and_issue(cur_stage)
+          .map(|res| res.map(|_| ()))
+          .boxed(),
+        StagePart::Solution => quest_ref
+          .file_solution(cur_stage)
+          .map(|res| res.map(|_| ()))
+          .boxed(),
       }
       .await;
       if let Err(err) = res {
@@ -204,7 +210,7 @@ fn QuestView() -> Element {
     tokio::spawn(async move { quest_ref.infer_state_loop().await });
   });
 
-  let state = quest.state_signal.read().as_ref().unwrap().clone();
+  let state = quest.state_signal.unwrap().read().as_ref().unwrap().clone();
   let cur_stage = state.stage.idx;
   let quest_dir = quest.dir.display().to_string();
 
@@ -270,7 +276,7 @@ fn ExistingQuestLoader(dir: PathBuf, config: QuestConfig) -> Element {
     let dir = dir.clone();
     async move {
       loading_signal.set(ShowLoading(true));
-      let quest = Quest::load(dir, config, state_signal).await?;
+      let quest = Quest::load(dir, config, Some(state_signal)).await?;
       quest_slot.set(Some(QuestRef(Arc::new(quest))));
       loading_signal.set(ShowLoading(false));
       Ok::<_, anyhow::Error>(())
@@ -449,7 +455,7 @@ fn InitView(repo: String, dir: PathBuf) -> Element {
       loading_signal.set(ShowLoading(true));
       let result = tokio::spawn(async move {
         let config = quest::load_config_from_remote("cognitive-engineering-lab", &repo).await?;
-        let quest = Quest::load(dir.join(repo), config, state_signal).await?;
+        let quest = Quest::load(dir.join(repo), config, Some(state_signal)).await?;
         quest.create_repo().await?;
         quest_slot.set(Some(QuestRef(Arc::new(quest))));
         loading_signal.set(ShowLoading(false));
