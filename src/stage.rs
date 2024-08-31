@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 pub struct StageConfig {
   pub label: String,
   pub name: String,
-  no_starter: Option<bool>,
+  pub no_starter: Option<bool>,
 }
 
 impl StageConfig {

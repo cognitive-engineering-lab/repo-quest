@@ -13,18 +13,6 @@ use futures_util::FutureExt;
 use std::{env, ops::Deref, path::PathBuf, rc::Rc, sync::Arc};
 use tracing::Level;
 
-macro_rules! error_view {
-  ($label:expr, $error:expr) => {{
-    rsx! {
-      div {
-        class: "error",
-        div { {format!("{} failed with error:", $label)} }
-        pre { {format!("{:?}", $error)} }
-      }
-    }
-  }};
-}
-
 #[derive(Clone)]
 struct QuestRef(Arc<Quest>);
 
@@ -43,9 +31,176 @@ impl Deref for QuestRef {
 }
 
 #[component]
-fn QuestView(quest: QuestRef) -> Element {
-  let mut error_signal = use_signal_sync(|| None::<anyhow::Error>);
+fn StageView(stage: usize) -> Element {
+  let quest = use_context::<QuestRef>();
   let mut loading_signal = use_context::<SyncSignal<ShowLoading>>();
+  let mut app_error = use_context::<SyncSignal<AppError>>();
+
+  let state = quest.state_signal.unwrap().read().as_ref().unwrap().clone();
+  let cur_stage = state.stage.idx;
+
+  let quest_ref = quest.clone();
+  let advance_stage = move |_| {
+    let quest_ref = quest_ref.clone();
+    tokio::spawn(async move {
+      loading_signal.set(ShowLoading(true));
+      let res = match state.part {
+        StagePart::Starter => quest_ref
+          .file_feature_and_issue(cur_stage)
+          .map(|res| res.map(|_| ()))
+          .boxed(),
+        StagePart::Solution => quest_ref
+          .file_solution(cur_stage)
+          .map(|res| res.map(|_| ()))
+          .boxed(),
+      }
+      .await;
+      if let Err(err) = res {
+        app_error.set(AppError::from_error("Running Github action", &err));
+      }
+      loading_signal.set(ShowLoading(false));
+    });
+  };
+
+  rsx! {
+    li {
+      div {
+        span {
+          class: "stage-title",
+          {quest.stages[stage].config.name.clone()}
+        }
+        span {
+          class: "separator",
+          "·"
+        }
+
+        if stage == cur_stage {
+          if state.status.is_start() {
+            {match state.part {
+              StagePart::Starter => rsx!{
+                button {
+                  onclick: advance_stage,
+                  if quest.stages[stage].config.no_starter() {
+                    "File issue"
+                  } else {
+                    "File issue & starter PR"
+                  }
+                }
+              },
+              StagePart::Solution => rsx! {
+                details {
+                  class: "help",
+
+                  summary { "Help" }
+
+                  div {
+                    "Try first learning from our reference solution and incorporating it into your codebase. If that doesn't work, we can replace your code with ours."
+                  }
+
+                  div {
+                    div {
+                      a {
+                        href: quest.reference_solution_pr_url(stage).unwrap(),
+                        "View reference solution"
+                      }
+                    }
+
+                    div {
+                      button {
+                        onclick: advance_stage,
+                        "File reference solution"
+                      }
+                    }
+                  }
+                }
+              }
+            }}
+          } else {
+            span {
+              class: "status",
+              {match state.part {
+                StagePart::Starter if !quest.stages[stage].config.no_starter() => "Waiting for you to merge starter PR",
+                _ => "Waiting for you to merge solution PR and close issue"
+              }}
+            }
+          }
+        } else {
+          span {
+            class: "status",
+            "Completed"
+          }
+        }
+      }
+
+      div {
+        class: "gh-links",
+
+        if let Some(issue_url) = quest.issue_url(stage) {
+          a {
+            href: issue_url,
+            "Issue"
+          }
+        }
+
+        if let Some(feature_pr_url) = quest.feature_pr_url(stage) {
+          a {
+            href: feature_pr_url,
+            "Starter PR"
+          }
+        }
+
+        if let Some(solution_pr_url) = quest.solution_pr_url(stage) {
+          a {
+            href: solution_pr_url,
+            "Solution PR"
+          }
+        }
+      }
+    }
+  }
+}
+
+fn SetChapter() -> Element {
+  let mut loading_signal = use_context::<SyncSignal<ShowLoading>>();
+  let quest = use_context::<QuestRef>();
+  let mut selected = use_signal(|| None::<usize>);
+  rsx! {
+    select {
+      onchange: move |event| selected.set(Some(event.value().parse::<usize>().unwrap())),
+
+      option {
+        disabled: true,
+        selected: selected.read().is_none(),
+        value: "",
+        "Choose a chapter..."
+      }
+
+      for (i, stage) in quest.stages.iter().enumerate() {
+        option {
+          value: i.to_string(),
+          {format!("Chapter {i}: {}", stage.config.name)}
+        }
+      }
+    }
+
+    button {
+      disabled: selected.read().is_none(),
+      onclick: move |_| {
+        let stage_index = *selected.read_unchecked().as_ref().unwrap();
+        let quest_ref = quest.clone();
+        tokio::spawn(async move {
+          loading_signal.set(ShowLoading(true));
+          quest_ref.hard_reset(stage_index).await.unwrap();
+          loading_signal.set(ShowLoading(false));
+        });
+      },
+      "Skip to chapter"
+    }
+  }
+}
+
+fn QuestView() -> Element {
+  let quest = use_context::<QuestRef>();
   let mut title_signal = use_context::<SyncSignal<Title>>();
 
   let quest_ref = quest.clone();
@@ -55,115 +210,55 @@ fn QuestView(quest: QuestRef) -> Element {
     tokio::spawn(async move { quest_ref.infer_state_loop().await });
   });
 
-  let state = quest.state_signal.read().as_ref().unwrap().clone();
+  let state = quest.state_signal.unwrap().read().as_ref().unwrap().clone();
   let cur_stage = state.stage.idx;
-  let quest_dir = quest.dir.clone();
+  let quest_dir = quest.dir.display().to_string();
 
   rsx! {
-    if let Some(err) = &*error_signal.read() {
-      pre { "{err:?}" }
-    }
-
-    button {
-      id: "refresh",
-      onclick: move |_| {
-        let quest_ref = quest.clone();
-        tokio::spawn(async move {
-          quest_ref.infer_state_update().await.unwrap();
-        });
-      },
-      "⟳"
-    }
-
     div {
-      class: "working-dir",
-      "Directory: "
-      code { {quest_dir.display().to_string()} }
-    }
+      class: "columns",
 
-    ol {
-      class: "stages",
-      for stage in 0 ..= cur_stage {
-        li {
+      div {
+        ol {
+          start: "0",
+          class: "stages",
+          for stage in 0 ..= cur_stage {
+            StageView { stage }
+          }
+        }
+      }
+
+      div {
+        class: "meta",
+
+        h2 {
+          "Controls"
+        }
+
+        div {
           div {
-            span {
-              class: "stage-title",
-              {quest.stages[stage].config.name.clone()}
-            }
-            span {
-              class: "separator",
-              "·"
-            }
-
-            if stage == cur_stage {
-              if state.status.is_start() {
-                button {
-                  onclick: {
-                    let quest_ref = quest.clone();
-                    move |_| {
-                      let quest_ref = quest_ref.clone();
-                      tokio::spawn(async move {
-                        loading_signal.set(ShowLoading(true));
-                        let res = match state.part {
-                          StagePart::Starter => quest_ref.file_feature_and_issue(cur_stage).boxed(),
-                          StagePart::Solution => quest_ref.file_solution(cur_stage).boxed(),
-                        }.await;
-                        if let Err(e) = res {
-                          error_signal.set(Some(e));
-                        }
-                        loading_signal.set(ShowLoading(false));
-                      });
-                    }
-                  },
-                  {match state.part {
-                    StagePart::Starter => if quest.stages[stage].config.no_starter() {
-                      "File issue"
-                    } else {
-                      "File issue & starter PR"
-                    },
-                    StagePart::Solution => "Give solution"
-                  }}
-                }
-              } else {
-                span {
-                  class: "status",
-                  {match state.part {
-                    StagePart::Starter if !quest.stages[stage].config.no_starter() => "Waiting for you to merge starter PR",
-                    _ => "Waiting for you to solve & close issue"
-                  }}
-                }
-              }
-            } else {
-              span {
-                class: "status",
-                "Completed"
-              }
+            button {
+              onclick: move |_| {
+                let quest_ref = quest.clone();
+                tokio::spawn(async move {
+                  quest_ref.infer_state_update().await.unwrap();
+                });
+              },
+              "Refresh state"
             }
           }
 
           div {
-            class: "gh-links",
-
-            if let Some(issue_url) = quest.issue_url(stage) {
-              a {
-                href: issue_url,
-                "Issue"
-              }
+            button {
+              onclick: move |_| {
+                eval(&format!(r#"navigator.clipboard.writeText("{quest_dir}")"#));
+              },
+              "Copy directory to 📋"
             }
+          }
 
-            if let Some(feature_pr_url) = quest.feature_pr_url(stage) {
-              a {
-                href: feature_pr_url,
-                "Starter PR"
-              }
-            }
-
-            if let Some(solution_pr_url) = quest.solution_pr_url(stage) {
-              a {
-                href: solution_pr_url,
-                "Solution PR"
-              }
-            }
+          div {
+            SetChapter {}
           }
         }
       }
@@ -181,7 +276,7 @@ fn ExistingQuestLoader(dir: PathBuf, config: QuestConfig) -> Element {
     let dir = dir.clone();
     async move {
       loading_signal.set(ShowLoading(true));
-      let quest = Quest::load(dir, config, state_signal).await?;
+      let quest = Quest::load(dir, config, Some(state_signal)).await?;
       quest_slot.set(Some(QuestRef(Arc::new(quest))));
       loading_signal.set(ShowLoading(false));
       Ok::<_, anyhow::Error>(())
@@ -201,7 +296,11 @@ fn QuestLoader() -> Element {
   let quest_slot = use_context_provider(|| SyncSignal::<Option<QuestRef>>::new_maybe_sync(None));
   use_context_provider(|| SyncSignal::<Option<QuestState>>::new_maybe_sync(None));
   match &*quest_slot.read_unchecked() {
-    Some(quest) => rsx! { QuestView { quest: quest.clone() }},
+    Some(quest) => {
+      let quest_ref = quest.clone();
+      use_context_provider(move || quest_ref);
+      rsx! { QuestView { }}
+    }
     None => {
       let dir = env::current_dir().unwrap();
       let config = QuestConfig::load(&dir);
@@ -224,6 +323,7 @@ fn InitForm() -> Element {
   let mut new_dir = use_signal(|| None::<String>);
   let mut repo = use_signal(|| None::<String>);
   let mut state = use_signal(|| InitState::AwaitingInput);
+  let mut app_error = use_context::<SyncSignal<AppError>>();
 
   let cur_state = state.read();
   match &*cur_state {
@@ -236,45 +336,53 @@ fn InitForm() -> Element {
             strong { "Start a new quest" }
           }
 
-          div {
-            select {
-              onchange: move |event| repo.set(Some(event.value())),
-              option {
-                disabled: true,
-                selected: repo.read().is_none(),
-                value: "",
-                "Choose a quest..."
-              }
-              option {
-                value: "rqst-async",
-                "rqst-async"
-              }
-            }
-          }
-
-          div {
-            label {
-              r#for: "new-quest-dir",
-              "Choose a dir"
-            }
-
-            if let Some(new_dir) = &*new_dir.read() {
-              span {
-                class: "selected-file",
-                "{new_dir}"
-              }
-            }
-
-            input {
-              id: "new-quest-dir",
-              r#type: "file",
-              "webkitdirectory": true,
-              onchange: move |event| {
-                let mut files = event.files().unwrap().files();
-                if !files.is_empty() {
-                  new_dir.set(Some(files.remove(0)));
+          table {
+            tr {
+              td { "Quest:" }
+              td {
+                select {
+                  onchange: move |event| repo.set(Some(event.value())),
+                  option {
+                    disabled: true,
+                    selected: repo.read().is_none(),
+                    value: "",
+                    "Choose a quest..."
+                  }
+                  option {
+                    value: "rqst-async",
+                    "rqst-async"
+                  }
                 }
-              },
+              }
+            }
+
+            tr {
+              td { "Directory:" }
+              td {
+                label {
+                  r#for: "new-quest-dir",
+                  "Choose a dir"
+                }
+
+                if let Some(new_dir) = &*new_dir.read() {
+                  span {
+                    class: "selected-file",
+                    "{new_dir}"
+                  }
+                }
+
+                input {
+                  id: "new-quest-dir",
+                  r#type: "file",
+                  "webkitdirectory": true,
+                  onchange: move |event| {
+                    let mut files = event.files().unwrap().files();
+                    if !files.is_empty() {
+                      new_dir.set(Some(files.remove(0)));
+                    }
+                  },
+                }
+              }
             }
           }
 
@@ -322,7 +430,13 @@ fn InitForm() -> Element {
       let config = QuestConfig::load(dir);
       match config {
         Ok(config) => rsx! { ExistingQuestLoader { dir: dir.clone(), config } },
-        Err(e) => error_view!(format!("Loading quest from {}", dir.display()), e),
+        Err(e) => {
+          app_error.set(AppError::from_error(
+            format!("Loading quest from directory: {}", dir.display()),
+            &e,
+          ));
+          rsx! {}
+        }
       }
     }
   }
@@ -333,6 +447,7 @@ fn InitView(repo: String, dir: PathBuf) -> Element {
   let state_signal = use_context::<SyncSignal<Option<QuestState>>>();
   let mut quest_slot = use_context::<SyncSignal<Option<QuestRef>>>();
   let mut loading_signal = use_context::<SyncSignal<ShowLoading>>();
+  let mut app_error = use_context::<SyncSignal<AppError>>();
   let quest = use_resource(move || {
     let repo = repo.clone();
     let dir = dir.clone();
@@ -340,7 +455,7 @@ fn InitView(repo: String, dir: PathBuf) -> Element {
       loading_signal.set(ShowLoading(true));
       let result = tokio::spawn(async move {
         let config = quest::load_config_from_remote("cognitive-engineering-lab", &repo).await?;
-        let quest = Quest::load(dir.join(repo), config, state_signal).await?;
+        let quest = Quest::load(dir.join(repo), config, Some(state_signal)).await?;
         quest.create_repo().await?;
         quest_slot.set(Some(QuestRef(Arc::new(quest))));
         loading_signal.set(ShowLoading(false));
@@ -353,17 +468,18 @@ fn InitView(repo: String, dir: PathBuf) -> Element {
   });
 
   match &*quest.read_unchecked() {
-    None => rsx! { "Initializing repo..." },
-    Some(Err(e)) => rsx! {
-      div { "Failed to initialize repo with error:" }
-      pre { "{e:?}" }
-    },
+    None => rsx! { "Initializing quest..." },
+    Some(Err(e)) => {
+      app_error.set(AppError::from_error("Initializing quest", e));
+      rsx! {}
+    }
     Some(Ok(())) => rsx! { "Unreachable?" },
   }
 }
 
 fn GithubLoader() -> Element {
   let token = use_hook(|| Rc::new(github::get_github_token()));
+  let mut app_error = use_context::<SyncSignal<AppError>>();
   match token.as_ref() {
     GithubToken::Found(token) => {
       let init_res = use_hook(|| Rc::new(github::init_octocrab(token)));
@@ -375,8 +491,11 @@ fn GithubLoader() -> Element {
         },
       }
     }
-    GithubToken::Error(err) => error_view!("Github token", err),
-    GithubToken::Missing => rsx! {
+    GithubToken::Error(err) => {
+      app_error.set(AppError::from_error("Loading GitHub API", err));
+      rsx! {}
+    }
+    GithubToken::NotFound => rsx! {
       div {
         "Before running RepoQuest, you need to provide it access to Github. "
         "Follow the instructions at the link below and restart RepoQuest."
@@ -399,10 +518,20 @@ struct ShowLoading(bool);
 #[derive(Clone)]
 struct Title(Option<String>);
 
+#[derive(Clone)]
+struct AppError(Option<(String, String)>);
+
+impl AppError {
+  pub fn from_error(action: impl Into<String>, error: &anyhow::Error) -> Self {
+    AppError(Some((action.into(), format!("{error:?}"))))
+  }
+}
+
 #[component]
 fn App() -> Element {
   let show_loading = use_context_provider(|| SyncSignal::new_maybe_sync(ShowLoading(false)));
   let title = use_context_provider(|| SyncSignal::new_maybe_sync(Title(None)));
+  let app_error = use_context_provider(|| SyncSignal::new_maybe_sync(AppError(None)));
 
   rsx! {
     link { rel: "stylesheet", href: "main.css" }
@@ -419,12 +548,31 @@ fn App() -> Element {
 
     div {
       id: "app",
+
       h1 {
         "RepoQuest"
         if let Some(title) = title.read().0.as_ref() {
           ": {title}"
         }
       }
+
+      if let Some((action, error)) = &app_error.read().0 {
+        div {
+          class: "error",
+
+          div {
+            class: "action",
+            "Fatal error while: {action}"
+          }
+
+          div {
+            "RepoQuest encountered an unrecoverable error. Please fix the issue and restart RepoQuest, or contact the developers for support. The backtrace is below."
+          }
+
+          pre { {error.clone()} }
+        }
+      }
+
       GithubLoader {}
     }
   }
