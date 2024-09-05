@@ -25,10 +25,10 @@ jobs:
             os: macos-latest
           # TODO: uncomment once Dioxus is updated to fix this issue
           # https://github.com/cognitive-engineering-lab/repo-quest/actions/runs/10273817519/job/28429168040#step:6:355
-          - target: x86_64-pc-windows-msvc
-            os: windows-latest
-          - target: aarch64-pc-windows-msvc
-            os: windows-latest
+          # - target: x86_64-pc-windows-msvc
+          #   os: windows-latest
+          # - target: aarch64-pc-windows-msvc
+          #   os: windows-latest
 
     runs-on: ${{ matrix.os }}
     steps:
