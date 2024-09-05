@@ -36,21 +36,28 @@ fn StageView(stage: usize) -> Element {
   let mut loading_signal = use_context::<SyncSignal<ShowLoading>>();
   let mut app_error = use_context::<SyncSignal<AppError>>();
 
-  let state = quest.state_signal.unwrap().read().as_ref().unwrap().clone();
-  let cur_stage = state.stage.idx;
+  let state_opt = match quest.state_signal.unwrap().read().as_ref().unwrap() {
+    QuestState::Ongoing {
+      stage,
+      part,
+      status,
+    } => Some((stage.idx, *part, *status)),
+    QuestState::Completed => None,
+  };
 
   let quest_ref = quest.clone();
   let advance_stage = move |_| {
     let quest_ref = quest_ref.clone();
     tokio::spawn(async move {
       loading_signal.set(ShowLoading(true));
-      let res = match state.part {
+      let (stage, part, _) = state_opt.unwrap();
+      let res = match part {
         StagePart::Starter => quest_ref
-          .file_feature_and_issue(cur_stage)
+          .file_feature_and_issue(stage)
           .map(|res| res.map(|_| ()))
           .boxed(),
         StagePart::Solution => quest_ref
-          .file_solution(cur_stage)
+          .file_solution(stage)
           .map(|res| res.map(|_| ()))
           .boxed(),
       }
@@ -74,54 +81,61 @@ fn StageView(stage: usize) -> Element {
           "·"
         }
 
-        if stage == cur_stage {
-          if state.status.is_start() {
-            {match state.part {
-              StagePart::Starter => rsx!{
-                button {
-                  onclick: advance_stage,
-                  if quest.stages[stage].config.no_starter() {
-                    "File issue"
-                  } else {
-                    "File issue & starter PR"
+        if let Some((cur_stage, cur_part, cur_status)) = state_opt {
+          if stage == cur_stage {
+            if cur_status.is_start() {
+              {match cur_part {
+                StagePart::Starter => rsx!{
+                  button {
+                    onclick: advance_stage,
+                    if quest.stages[cur_stage].config.no_starter() {
+                      "File issue"
+                    } else {
+                      "File issue & starter PR"
+                    }
                   }
-                }
-              },
-              StagePart::Solution => rsx! {
-                details {
-                  class: "help",
+                },
+                StagePart::Solution => rsx! {
+                  details {
+                    class: "help",
 
-                  summary { "Help" }
+                    summary { "Help" }
 
-                  div {
-                    "Try first learning from our reference solution and incorporating it into your codebase. If that doesn't work, we can replace your code with ours."
-                  }
-
-                  div {
                     div {
-                      a {
-                        href: quest.reference_solution_pr_url(stage).unwrap(),
-                        "View reference solution"
-                      }
+                      "Try first learning from our reference solution and incorporating it into your codebase. If that doesn't work, we can replace your code with ours."
                     }
 
                     div {
-                      button {
-                        onclick: advance_stage,
-                        "File reference solution"
+                      div {
+                        a {
+                          href: quest.reference_solution_pr_url(cur_stage).unwrap(),
+                          "View reference solution"
+                        }
+                      }
+
+                      div {
+                        button {
+                          onclick: advance_stage,
+                          "File reference solution"
+                        }
                       }
                     }
                   }
                 }
+              }}
+            } else {
+              span {
+                class: "status",
+                {match cur_part {
+                  StagePart::Starter if !quest.stages[stage].config.no_starter() => "Waiting for you to merge starter PR",
+                  _ => "Waiting for you to merge solution PR and close issue"
+                }}
               }
-            }}
+            }
           } else {
             span {
               class: "status",
-              {match state.part {
-                StagePart::Starter if !quest.stages[stage].config.no_starter() => "Waiting for you to merge starter PR",
-                _ => "Waiting for you to merge solution PR and close issue"
-              }}
+              "Completed"
             }
           }
         } else {
@@ -162,8 +176,15 @@ fn StageView(stage: usize) -> Element {
 
 fn SetChapter() -> Element {
   let mut loading_signal = use_context::<SyncSignal<ShowLoading>>();
+  let mut dialog_signal = use_signal(|| false);
   let quest = use_context::<QuestRef>();
   let mut selected = use_signal(|| None::<usize>);
+
+  let cur_stage = match quest.state_signal.unwrap().read().as_ref().unwrap() {
+    QuestState::Ongoing { stage, .. } => stage.idx,
+    QuestState::Completed => quest.stages.len(),
+  };
+
   rsx! {
     select {
       onchange: move |event| selected.set(Some(event.value().parse::<usize>().unwrap())),
@@ -175,7 +196,7 @@ fn SetChapter() -> Element {
         "Choose a chapter..."
       }
 
-      for (i, stage) in quest.stages.iter().enumerate() {
+      for (i, stage) in quest.stages.iter().enumerate().filter(|(i, _)| *i > cur_stage) {
         option {
           value: i.to_string(),
           {format!("Chapter {i}: {}", stage.config.name)}
@@ -183,16 +204,43 @@ fn SetChapter() -> Element {
       }
     }
 
+    if *dialog_signal.read() {
+      dialog {
+        "open": true,
+
+        "Skipping a chapter will irrevocably overwrite any changes in your repository! This cannot be undone! Are you sure you want to proceed?"
+
+        form {
+          method: "dialog",
+
+          button {
+            onclick: move |_| {
+              dialog_signal.set(false);
+              let stage_index = *selected.read_unchecked().as_ref().unwrap();
+              let quest_ref = quest.clone();
+              tokio::spawn(async move {
+                loading_signal.set(ShowLoading(true));
+                quest_ref.hard_reset(stage_index).await.unwrap();
+                loading_signal.set(ShowLoading(false));
+              });
+            },
+
+            "Yes"
+          }
+          button {
+            onclick: move |_| {
+              dialog_signal.set(false);
+            },
+            "No"
+          }
+        }
+      }
+    }
+
     button {
       disabled: selected.read().is_none(),
       onclick: move |_| {
-        let stage_index = *selected.read_unchecked().as_ref().unwrap();
-        let quest_ref = quest.clone();
-        tokio::spawn(async move {
-          loading_signal.set(ShowLoading(true));
-          quest_ref.hard_reset(stage_index).await.unwrap();
-          loading_signal.set(ShowLoading(false));
-        });
+        dialog_signal.set(true);
       },
       "Skip to chapter"
     }
@@ -211,7 +259,10 @@ fn QuestView() -> Element {
   });
 
   let state = quest.state_signal.unwrap().read().as_ref().unwrap().clone();
-  let cur_stage = state.stage.idx;
+  let cur_stage = match state {
+    QuestState::Ongoing { stage, .. } => stage.idx,
+    QuestState::Completed => quest.stages.len() - 1,
+  };
   let quest_dir = quest.dir.display().to_string();
 
   rsx! {
@@ -556,8 +607,8 @@ fn App() -> Element {
         }
       }
 
-      if let Some((action, error)) = &app_error.read().0 {
-        div {
+      {match &app_error.read().0 {
+        Some((action, error)) => rsx!(div {
           class: "error",
 
           div {
@@ -570,10 +621,9 @@ fn App() -> Element {
           }
 
           pre { {error.clone()} }
-        }
-      }
-
-      GithubLoader {}
+        }),
+        None => rsx!(GithubLoader {})
+      }}
     }
   }
 }

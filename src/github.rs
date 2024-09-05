@@ -22,7 +22,7 @@ use std::{env, fs, process::Command, sync::Arc, time::Duration};
 use tokio::{time::timeout, try_join};
 use tracing::warn;
 
-use crate::utils;
+use crate::{git::MergeType, utils};
 
 pub struct GithubRepo {
   user: String,
@@ -36,6 +36,8 @@ pub enum PullSelector {
   Branch(String),
   Label(String),
 }
+
+const RESET_LABEL: &str = "reset";
 
 impl GithubRepo {
   pub fn new(user: &str, name: &str) -> Self {
@@ -216,8 +218,22 @@ impl GithubRepo {
     base: &GithubRepo,
     base_pr: &PullRequest,
     head: &str,
+    merge_type: MergeType,
   ) -> Result<PullRequest> {
     let pulls = self.pr_handler();
+    let mut body = base_pr
+      .body
+      .as_ref()
+      .expect("Author error: PR missing body")
+      .clone();
+
+    let is_reset = matches!(merge_type, MergeType::HardReset);
+    if is_reset {
+      body.push_str(r#"
+      
+Note: due to a merge conflict, this PR is a hard reset to the reference solution, and may have overwritten your previous changes."#);
+    }
+
     let request = pulls
       .create(
         base_pr
@@ -227,23 +243,21 @@ impl GithubRepo {
         &base_pr.head.ref_field,
         "main", // don't copy base
       )
-      .body(
-        base_pr
-          .body
-          .as_ref()
-          .expect("Author error: PR missing body"),
-      );
+      .body(body);
     let self_pr = request.send().await?;
 
     // TODO: lots of parallelism below we should exploit
 
-    let labels = match &base_pr.labels {
+    let mut labels = match &base_pr.labels {
       Some(labels) => labels
         .iter()
         .map(|label| label.name.clone())
         .collect::<Vec<_>>(),
       None => Vec::new(),
     };
+    if is_reset {
+      labels.push(RESET_LABEL.into());
+    }
     self
       .issue_handler()
       .add_labels(self_pr.number, &labels)

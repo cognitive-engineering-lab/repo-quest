@@ -130,7 +130,7 @@ input[type=file] {
   display: none;
 }
 
-button, label {
+button, label, input[type=submit] {
   display: inline-block;
   appearance: none;
   background: #eee;
@@ -205,5 +205,17 @@ button, label {
 
   select {
     max-width: 100%;
+  }
+}
+
+dialog {
+  z-index: 1000; 
+  max-width: 400px;
+  box-shadow: 4px 4px 8px #aaa;
+
+  form {
+    margin-top: 1rem;
+    display: flex;
+    gap: 0.5rem;
   }
 }
