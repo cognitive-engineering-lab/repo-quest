@@ -47,7 +47,7 @@ jobs:
         uses: baptiste0928/cargo-install@v3
         with:
           crate: dioxus-cli
-          version: 0.5.6
+          version: 0.6.0-alpha.2
 
       - name: Build bundle
         run: dx bundle --release --target ${{ matrix.target }}
