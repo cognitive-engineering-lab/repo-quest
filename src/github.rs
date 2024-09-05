@@ -402,7 +402,7 @@ fn read_github_token_from_fs() -> GithubToken {
 }
 
 fn generate_github_token_from_cli() -> GithubToken {
-  let shell = env::var("SHELL").unwrap();
+  let shell = env::var("SHELL").unwrap_or_else(|_| "sh".into());
   let which_status = Command::new(&shell).args(["-c", "which gh"]).status();
   match which_status {
     Ok(status) => {

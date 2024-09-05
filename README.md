@@ -40,7 +40,7 @@ sudo apt install ./repo-quest_x86_64-unknown-linux-gnu.deb
 You will need [Rust](https://rustup.rs/). Then install the `dioxus-cli`:
 
 ```console
-cargo install dioxus-cli --version 0.5.6 --locked
+cargo install dioxus-cli --version 0.5.7 --locked
 ```
 
 Then clone the repository and build it:

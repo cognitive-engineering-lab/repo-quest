@@ -578,6 +578,9 @@ impl AppError {
   }
 }
 
+const _: &str = manganis::mg!(file("./assets/normalize.css"));
+const _: &str = manganis::mg!(file("./assets/main.css"));
+
 #[component]
 fn App() -> Element {
   let show_loading = use_context_provider(|| SyncSignal::new_maybe_sync(ShowLoading(false)));
@@ -585,8 +588,6 @@ fn App() -> Element {
   let app_error = use_context_provider(|| SyncSignal::new_maybe_sync(AppError(None)));
 
   rsx! {
-    link { rel: "stylesheet", href: "main.css" }
-
     if show_loading.read().0 {
       div {
         id: "loading-cover",
