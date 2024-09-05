@@ -18,8 +18,8 @@ jobs:
             os: ubuntu-latest
           # TODO: get ARM to properly cross-compile on x86_64
           # https://github.com/cognitive-engineering-lab/repo-quest/actions/runs/10222842981/job/28288152603#step:6:73
-          - target: aarch64-unknown-linux-gnu
-            os: ubuntu-latest
+          # - target: aarch64-unknown-linux-gnu
+          #   os: ubuntu-latest
           - target: x86_64-apple-darwin
             os: macos-latest
           - target: aarch64-apple-darwin
@@ -39,6 +39,10 @@ jobs:
       - name: Install dependencies (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
         run: sudo apt update -y && sudo apt install -y libgtk-3-dev libjavascriptcoregtk-4.1-dev libsoup-3.0-dev libwebkit2gtk-4.1-dev libxdo-dev
+
+      - name: Install dependencies (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: ilammy/setup-nasm@v1
 
       - name: Install Rust toolchain for target
         uses: actions-rust-lang/setup-rust-toolchain@v1
