@@ -40,6 +40,11 @@ pub struct GitRepo {}
 
 pub const UPSTREAM: &str = "upstream";
 
+pub enum MergeType {
+  CherryPick,
+  HardReset,
+}
+
 impl GitRepo {
   pub fn new() -> Self {
     GitRepo {}
@@ -66,7 +71,11 @@ impl GitRepo {
     Ok(())
   }
 
-  pub fn create_branch_from(&self, target_branch: &str, base_branch: &str) -> Result<String> {
+  pub fn create_branch_from(
+    &self,
+    target_branch: &str,
+    base_branch: &str,
+  ) -> Result<(String, MergeType)> {
     git(|cmd| {
       cmd.args(["checkout", "-b", target_branch]);
     })
@@ -79,30 +88,35 @@ impl GitRepo {
       ]);
     });
 
-    if res.is_err() {
-      tracing::warn!("Merge conflicts when cherry-picking, resorting to hard reset");
+    let merge_type = match res {
+      Ok(_) => MergeType::CherryPick,
+      Err(e) => {
+        tracing::warn!("Merge conflicts when cherry-picking, resorting to hard reset: ${e:?}");
 
-      git(|cmd| {
-        cmd.args(["cherry-pick", "--abort"]);
-      })
-      .context("Failed to abort cherry-pick")?;
+        git(|cmd| {
+          cmd.args(["cherry-pick", "--abort"]);
+        })
+        .context("Failed to abort cherry-pick")?;
 
-      let upstream_target = format!("{UPSTREAM}/{target_branch}");
-      git(|cmd| {
-        cmd.args(["reset", "--hard", &upstream_target]);
-      })
-      .with_context(|| format!("Failed to hard reset to {upstream_target}"))?;
+        let upstream_target = format!("{UPSTREAM}/{target_branch}");
+        git(|cmd| {
+          cmd.args(["reset", "--hard", &upstream_target]);
+        })
+        .with_context(|| format!("Failed to hard reset to {upstream_target}"))?;
 
-      git(|cmd| {
-        cmd.args(["reset", "--soft", "main"]);
-      })
-      .context("Failed to soft reset to main")?;
+        git(|cmd| {
+          cmd.args(["reset", "--soft", "main"]);
+        })
+        .context("Failed to soft reset to main")?;
 
-      git(|cmd| {
-        cmd.args(["commit", "-m", "Override with reference solution"]);
-      })
-      .context("Failed to commit reference solution")?;
-    }
+        git(|cmd| {
+          cmd.args(["commit", "-m", "Override with reference solution"]);
+        })
+        .context("Failed to commit reference solution")?;
+
+        MergeType::HardReset
+      }
+    };
 
     git(|cmd| {
       cmd.args(["push", "-u", "origin", target_branch]);
@@ -116,7 +130,7 @@ impl GitRepo {
     })
     .context("Failed to checkout main")?;
 
-    Ok(head)
+    Ok((head, merge_type))
   }
 
   pub fn checkout_main_and_pull(&self) -> Result<()> {

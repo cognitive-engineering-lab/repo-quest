@@ -51,10 +51,13 @@ impl QuestConfig {
 }
 
 #[derive(Clone, Debug)]
-pub struct QuestState {
-  pub stage: Stage,
-  pub part: StagePart,
-  pub status: StagePartStatus,
+pub enum QuestState {
+  Ongoing {
+    stage: Stage,
+    part: StagePart,
+    status: StagePartStatus,
+  },
+  Completed,
 }
 
 pub struct Quest {
@@ -174,7 +177,7 @@ impl Quest {
         },
         ..
       }) => {
-        return Ok(QuestState {
+        return Ok(QuestState::Ongoing {
           stage: self.stages[0].clone(),
           part: StagePart::Starter,
           status: StagePartStatus::Start,
@@ -227,14 +230,14 @@ impl Quest {
       })
     });
 
-    tracing::debug!("PRs: {:#?}", pr_stages.clone().collect::<Vec<_>>());
-    tracing::debug!("Issues: {:#?}", issue_stages.clone().collect::<Vec<_>>());
+    tracing::trace!("PRs: {:#?}", pr_stages.clone().collect::<Vec<_>>());
+    tracing::trace!("Issues: {:#?}", issue_stages.clone().collect::<Vec<_>>());
 
     let Some((stage, part, finished)) = pr_stages
       .chain(issue_stages)
       .max_by_key(|(stage, part, finished)| (stage.idx, *part, *finished))
     else {
-      return Ok(QuestState {
+      return Ok(QuestState::Ongoing {
         stage: self.stages[0].clone(),
         part: StagePart::Starter,
         status: StagePartStatus::Start,
@@ -243,19 +246,25 @@ impl Quest {
 
     Ok(if finished {
       match part.next_part() {
-        Some(next_part) => QuestState {
+        Some(next_part) => QuestState::Ongoing {
           stage,
           part: next_part,
           status: StagePartStatus::Start,
         },
-        None => QuestState {
-          stage: self.stages[stage.idx + 1].clone(),
-          part: StagePart::Starter,
-          status: StagePartStatus::Start,
-        },
+        None => {
+          if stage.idx == self.stages.len() - 1 {
+            QuestState::Completed
+          } else {
+            QuestState::Ongoing {
+              stage: self.stages[stage.idx + 1].clone(),
+              part: StagePart::Starter,
+              status: StagePartStatus::Start,
+            }
+          }
+        }
       }
     } else {
-      QuestState {
+      QuestState::Ongoing {
         stage,
         part,
         status: StagePartStatus::Ongoing,
@@ -303,7 +312,7 @@ impl Quest {
   async fn file_pr(&self, target_branch: &str, base_branch: &str) -> Result<PullRequest> {
     self.origin_git.checkout_main_and_pull()?;
 
-    let branch_head = self
+    let (branch_head, merge_type) = self
       .origin_git
       .create_branch_from(target_branch, base_branch)?;
 
@@ -314,7 +323,7 @@ impl Quest {
       .clone();
     let new_pr = self
       .origin
-      .copy_pr(&self.upstream, &pr, &branch_head)
+      .copy_pr(&self.upstream, &pr, &branch_head, merge_type)
       .await?;
 
     tracing::debug!("Filed PR: {base_branch} -> {target_branch}");
@@ -524,7 +533,14 @@ mod test {
     macro_rules! state_is {
       ($a:expr, $b:expr, $c:expr) => {
         let state = quest.infer_state().await?;
-        assert_eq!((state.stage.idx, state.part, state.status), ($a, $b, $c));
+        match state {
+          QuestState::Ongoing {
+            stage,
+            part,
+            status,
+          } => assert_eq!((stage.idx, part, status), ($a, $b, $c)),
+          QuestState::Completed => panic!("finished"),
+        };
       };
     }
 
@@ -564,7 +580,14 @@ mod test {
     macro_rules! state_is {
       ($a:expr, $b:expr, $c:expr) => {
         let state = quest.infer_state().await?;
-        assert_eq!((state.stage.idx, state.part, state.status), ($a, $b, $c));
+        match state {
+          QuestState::Ongoing {
+            stage,
+            part,
+            status,
+          } => assert_eq!((stage.idx, part, status), ($a, $b, $c)),
+          QuestState::Completed => panic!("finished"),
+        };
       };
     }
 
