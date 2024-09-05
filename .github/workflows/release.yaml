@@ -15,6 +15,9 @@ jobs:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             ext: deb
+          # - target: aarch64-unknown-linux-gnu
+          #   os: ubuntu-latest
+          #   ext: deb
           - target: x86_64-apple-darwin
             os: macos-latest
             ext: tar.gz
@@ -47,7 +50,7 @@ jobs:
         uses: baptiste0928/cargo-install@v3
         with:
           crate: dioxus-cli
-          version: 0.5.6
+          version: 0.5.7
 
       - name: Build bundle
         run: dx bundle --release --target ${{ matrix.target }}

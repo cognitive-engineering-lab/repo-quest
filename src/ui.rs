@@ -337,7 +337,7 @@ fn ExistingQuestLoader(dir: PathBuf, config: QuestConfig) -> Element {
     None => rsx! { "Loading quest..." },
     Some(Ok(())) => unreachable!(),
     Some(Err(e)) => rsx! {
-      div { "Failed to load quest with error:" },
+      div { "Failed to load quest with error:" }
       pre { "{e:?}" }
     },
   }

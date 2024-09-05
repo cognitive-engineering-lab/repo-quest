@@ -1,11 +1,11 @@
 [package]
 name = "repo-quest"
-version = "0.0.3"
+version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 anyhow = "1.0.86"
-dioxus = { version = "0.5.1", features = ["desktop"] }
+dioxus = { version = "0.5.6", features = ["desktop"] }
 dioxus-logger = "0.5.1"
 futures-util = "0.3.30"
 home = "0.5.9"
