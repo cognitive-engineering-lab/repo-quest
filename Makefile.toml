@@ -1,9 +1,0 @@
-[config]
-skip_core_tasks = true
-default_to_workspace = false
-
-[tasks.bundle]
-script = "dx bundle --release"
-
-[tasks.watch]
-script = "cargo watch -s 'dx build'"
