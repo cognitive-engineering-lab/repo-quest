@@ -1,18 +1,13 @@
-#![allow(warnings)]
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::{env, error::Error, path::PathBuf, sync::Arc};
+use std::{env, path::PathBuf, sync::Arc};
 
-use self::quest::{Quest, QuestConfig, StateDescriptor};
+use self::quest::{Quest, QuestConfig};
 use github::GithubToken;
-use octocrab::auth::AppAuth;
 use quest::StateEvent;
-use serde::{Deserialize, Serialize};
-use specta::Type;
 use tauri::{AppHandle, Manager, State};
 use tauri_specta::collect_events;
-use tokio::runtime::Handle;
 
 mod git;
 mod github;
@@ -100,6 +95,14 @@ async fn refresh_state(quest: State<'_, Arc<Quest>>) -> Result<(), String> {
   fmt_err(quest.infer_state_update().await)
 }
 
+#[tauri::command]
+#[specta::specta]
+async fn hard_reset(quest: State<'_, Arc<Quest>>, stage: u32) -> Result<(), String> {
+  let stage = usize::try_from(stage).unwrap();
+  fmt_err(quest.hard_reset(stage).await)?;
+  Ok(())
+}
+
 pub fn specta_builder() -> tauri_specta::Builder {
   tauri_specta::Builder::<tauri::Wry>::new()
     .commands(tauri_specta::collect_commands![
@@ -110,7 +113,8 @@ pub fn specta_builder() -> tauri_specta::Builder {
       new_quest,
       file_feature_and_issue,
       file_solution,
-      refresh_state
+      refresh_state,
+      hard_reset
     ])
     .events(collect_events![StateEvent])
 }

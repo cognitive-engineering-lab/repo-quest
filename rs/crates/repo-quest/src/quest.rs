@@ -482,7 +482,6 @@ mod test {
     fs,
     sync::{Arc, Once},
   };
-  use tracing::Level;
 
   const TEST_ORG: &str = "cognitive-engineering-lab";
   const TEST_REPO: &str = "rqst-test";

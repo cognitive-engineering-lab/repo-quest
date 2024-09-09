@@ -8,51 +8,42 @@ on:
 
 jobs:
   test-artifacts:
-    if: contains(github.event.pull_request.labels.*.name, 'release')
+    # if: contains(github.event.pull_request.labels.*.name, 'release')
 
     strategy:
+      fail-fast: false
       matrix:
         include:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
-          # TODO: get ARM to properly cross-compile on x86_64
-          # https://github.com/cognitive-engineering-lab/repo-quest/actions/runs/10222842981/job/28288152603#step:6:73
-          # - target: aarch64-unknown-linux-gnu
-          #   os: ubuntu-latest
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
           - target: x86_64-apple-darwin
             os: macos-latest
           - target: aarch64-apple-darwin
             os: macos-latest
-          # TODO: uncomment once Dioxus is updated to fix this issue
-          # https://github.com/cognitive-engineering-lab/repo-quest/actions/runs/10273817519/job/28429168040#step:6:355
-          # - target: x86_64-pc-windows-msvc
-          #   os: windows-latest
-          # - target: aarch64-pc-windows-msvc
-          #   os: windows-latest
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+          - target: aarch64-pc-windows-msvc
+            os: windows-latest
 
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install dependencies (Ubuntu)
-        if: matrix.os == 'ubuntu-latest'
-        run: sudo apt update -y && sudo apt install -y libgtk-3-dev libjavascriptcoregtk-4.1-dev libsoup-3.0-dev libwebkit2gtk-4.1-dev libxdo-dev
-
-      - name: Install dependencies (Windows)
-        if: matrix.os == 'windows-latest'
-        uses: ilammy/setup-nasm@v1
+      - name: Setup
+        uses: ./.github/workflows/setup
 
       - name: Install Rust toolchain for target
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          target: ${{ matrix.target }}
+        uses: dtolnay/rust-toolchain@stable
+        with:          
+          targets: ${{ matrix.target }}
 
-      - name: Install dioxus-cli
-        uses: baptiste0928/cargo-install@v3
-        with:
-          crate: dioxus-cli
-          version: 0.5.7
-
-      - name: Build bundle
-        run: dx bundle --target ${{ matrix.target }}
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:          
+          args: --target ${{ matrix.target }}
+          projectPath: rs/crates/repo-quest
+          tauriScript: cargo tauri
