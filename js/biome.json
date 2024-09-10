@@ -31,8 +31,5 @@
         "noArrayIndexKey": "off"
       }
     }
-  },
-  "files": {
-    "ignore": ["src/bindings/backend.ts"]
   }
 }

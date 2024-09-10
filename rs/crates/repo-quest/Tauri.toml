@@ -1,10 +1,10 @@
-product-name = "repo-quest"
+product-name = "RepoQuest"
 version = "0.1.0"
 identifier = "com.repo-quest.app"
 
 [build]
-before-build-command = "cd ../../js && depot -p repo-quest build --release"
 before-dev-command = "cd ../../js && depot --no-fullscreen -p repo-quest build --watch"
+before-build-command = "cd ../../js && pnpm install && pnpm -r exec vite build"
 dev-url = "http://localhost:5173"
 frontend-dist = "../../../js/packages/repo-quest/dist"
 
