@@ -1,12 +1,9 @@
-#![allow(warnings)]
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::{env, error::Error, path::PathBuf};
+use std::env;
 
-use serde::{Deserialize, Serialize};
-use specta::Type;
-use tauri::{AppHandle, Manager, State};
+use tauri::Manager;
 use tokio::runtime::Handle;
 
 #[tokio::main]
