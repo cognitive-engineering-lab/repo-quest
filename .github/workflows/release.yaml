@@ -58,3 +58,4 @@ jobs:
           projectPath: rs/crates/repo-quest
           tauriScript: cargo tauri
           tagName: v__VERSION__
+          releaseName: 'RepoQuest v__VERSION__'          
