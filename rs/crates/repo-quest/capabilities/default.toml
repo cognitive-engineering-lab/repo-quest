@@ -4,6 +4,6 @@ description = "Capability for the main window"
 windows = ["main"]
 permissions = [
   "core:default",
-  "dialog:allow-open",
-  "shell:allow-open"
+  "dialog:default",  
+  "shell:default"
 ]

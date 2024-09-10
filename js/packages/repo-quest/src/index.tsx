@@ -9,6 +9,7 @@ import {
   events,
   type QuestConfig,
   type QuestState,
+  type Stage,
   type StageState,
   type StateDescriptor,
   commands
@@ -279,6 +280,7 @@ let QuestView: React.FC<{ quest: QuestConfig }> = ({ quest }) => {
               Refresh state
             </button>
           </div>
+
           <div>
             <button
               type="button"
@@ -288,6 +290,34 @@ let QuestView: React.FC<{ quest: QuestConfig }> = ({ quest }) => {
             >
               Copy directory to 📋
             </button>
+          </div>
+
+          <div>
+            <select
+              defaultValue={""}
+              onChange={async e => {
+                if (e.target.value === "") return;
+                let confirmed = await dialog.confirm(
+                  "This will irrevocably overwrite any changes you've made. Are you sure?"
+                );
+                let stage = Number.parseInt(e.target.value);
+                e.target.value = "";
+                if (confirmed)
+                  await loader.loadAwait(commands.hardReset(stage));
+              }}
+            >
+              <option disabled={true} value="">
+                Skip to chapter...
+              </option>
+              {quest.stages
+                .map<[Stage, number]>((stage, i) => [stage, i])
+                .filter(([_stage, i]) => i > cur_stage)
+                .map(([stage, i]) => (
+                  <option key={stage.label} value={i}>
+                    Chapter {i}: {stage.name}
+                  </option>
+                ))}
+            </select>
           </div>
         </div>
       </div>
