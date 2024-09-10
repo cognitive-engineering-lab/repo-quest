@@ -2,8 +2,5 @@
 skip_core_tasks = true
 default_to_workspace = false
 
-[tasks.bundle]
-script = "dx bundle --release"
-
-[tasks.watch]
-script = "cargo watch -s 'dx build'"
+[tasks.init-bindings]
+script = "cd rs/crates/repo-quest && cargo run -p repo-quest --bin export-bindings"

@@ -1,0 +1,25 @@
+name: Setup
+runs:
+  using: composite
+  steps:
+    - name: Install dependencies (Ubuntu)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt update -y
+        sudo apt install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      shell: bash
+    - name: Install cargo-make
+      uses: davidB/rust-cargo-make@v1
+      with:
+        version: '0.37.16'
+    - name: Install Depot
+      run: curl https://raw.githubusercontent.com/cognitive-engineering-lab/depot/main/scripts/install.sh | sh
+      shell: bash
+    - name: Install Tauri CLI
+      uses: baptiste0928/cargo-install@v3
+      with:
+        crate: tauri-cli
+        version: "^2.0.0-rc"      
+    - name: Init TS bindings
+      run: cargo make init-bindings
+      shell: bash

@@ -1,0 +1,19 @@
+{
+  "private": true,
+  "depot": {
+    "depot-version": "0.2.18"
+  },
+  "pnpm": {
+    "overrides": {
+      "rollup": "npm:@rollup/wasm-node"
+    }
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.8.3",
+    "@types/node": "^22.5.4",
+    "typedoc": "^0.26.6",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.3",
+    "vitest": "^2.0.5"
+  }
+}

@@ -1,0 +1,23 @@
+product-name = "RepoQuest"
+version = "0.1.0"
+identifier = "com.repo-quest.app"
+
+[build]
+before-dev-command = "cd ../../js && depot --no-fullscreen -p repo-quest build --watch"
+before-build-command = "cd ../../js && pnpm install && pnpm -r exec vite build"
+dev-url = "http://localhost:5173"
+frontend-dist = "../../../js/packages/repo-quest/dist"
+
+[app]
+windows = [{title = "RepoQuest", width = 1200, height = 800}]
+
+[bundle]
+active = true
+targets = "all"
+icon = [
+  "icons/32x32.png",
+  "icons/128x128.png",
+  "icons/128x128@2x.png",
+  "icons/icon.icns",
+  "icons/icon.ico"
+]
