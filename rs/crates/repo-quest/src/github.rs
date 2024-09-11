@@ -411,22 +411,18 @@ fn read_github_token_from_fs() -> GithubToken {
 }
 
 fn generate_github_token_from_cli() -> GithubToken {
-  let shell = env::var("SHELL").unwrap_or_else(|_| "sh".into());
-  let which_status = Command::new(&shell).args(["-c", "which gh"]).status();
-  match which_status {
-    Ok(status) => {
-      if status.success() {
-        let token_output = token_try!(Command::new(shell)
-          .args(["-c", "gh auth token"])
-          .output()
-          .context("Failed to run `gh auth token`"));
-        let token = token_try!(String::from_utf8(token_output.stdout));
-        let token_clean = token.trim_end().to_string();
-        GithubToken::Found(token_clean)
-      } else {
-        GithubToken::NotFound
-      }
+  let gh_path_res = which::which("gh");
+  match gh_path_res {
+    Ok(gh_path) => {
+      let token_output = token_try!(Command::new(gh_path)
+        .args(["auth", "token"])
+        .output()
+        .context("Failed to run `gh auth token`"));
+      let token = token_try!(String::from_utf8(token_output.stdout));
+      let token_clean = token.trim_end().to_string();
+      GithubToken::Found(token_clean)
     }
+    Err(which::Error::CannotFindBinaryPath) => GithubToken::NotFound,
     Err(err) => GithubToken::Error(format!("{err:?}")),
   }
 }

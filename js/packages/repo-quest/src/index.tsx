@@ -114,7 +114,7 @@ let GithubLoader = () => (
           </div>
         </>
       ) : (
-        <pre>ERROR: {token.value}</pre>
+        <ErrorView action="Loading Github token" message={token.value} />
       )
     }
   </Await>
