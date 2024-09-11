@@ -1,34 +1,42 @@
 # RepoQuest
 
-RepoQuest is an experimental tool for interactive programming tutorials. Each lesson takes place in a Github repository, and RepoQuest uses the Github interface for issues and pull requests to provide starter code and explain programming concepts.
+RepoQuest is an experimental tool for interactive programming tutorials. Each lesson takes place in a Github repository, and RepoQuest uses the Github interface for issues and pull requests to provide starter code and explain programming concepts. You can see how RepoQuest works in this short video: <https://www.youtube.com/watch?v=MY75S1sEuc8>
 
 ## Installation
 
-### From binaries
+### Option A: Download prebuilt binary
 
 The latest binary release is on our Github releases page: <https://github.com/cognitive-engineering-lab/repo-quest/releases/latest>
 
+We have prebuilt binaries for MacOS (x86-64 and ARM64), Linux (x86-64), and Windows (x86-64 and ARM64).
+
 #### MacOS
 
-1. Download the `.dmg` for your platform (aarch64 for M-series Macs, x84 otherwise).
+1. Download the `.dmg` for your platform (aarch64 for M-series Macs, x64 otherwise).
 2. Drag `RepoQuest.app` into `/Applications`.
-3. In the console, run:
+3. Configure your OS to allow the app by running at the terminal:
    ```console
    xattr -cr /Applications/RepoQuest.app
    ```
+4. Launch RepoQuest, e.g. by opening Spotlight (Cmd+Space) and searching for "RepoQuest".
 
 #### Linux
 
 1. Download the relevant package file for your distro (`.deb` for Ubuntu, `.rpm` for Fedora, `.AppImage` otherwise).
 2. Install it through your package manager (e.g., `apt install ./the-file.deb`).
-3. Install additional dependencies. On Ubuntu, this is:
-   ```console
-   sudo apt install -y libgtk-3-dev libjavascriptcoregtk-4.1-dev libsoup-3.0-dev libwebkit2gtk-4.1-dev libxdo-dev
-   ```
+3. Launch RepoQuest by running `repo-quest` from the command line.
 
-### From source
+#### Windows
 
-You will need [Rust](https://rustup.rs/). Then install the `tauri-cli`:
+1. Download the installer (either `.msi` or `.exe) for your platform (arm64 for ARM chips, x64 otherwise).
+2. Run the installer.
+3. Launch RepoQuest, e.g. by searching for "RepoQuest" in your applications list.
+
+Note that Windows will aggressively prevent you from running the installer. For example, in Edge you will need to right click the download and select "Keep", then hit "Show More", then hit "Keep anyway". When you open the installer, Windows Defender will stop it from running &mdash; again, hit "More Info" and click "Run anyway".
+
+### Option B: Build from source
+
+You will need [Rust](https://rustup.rs/) and [pnpm](https://pnpm.io/installation). Then install `tauri-cli`:
 
 ```console
 cargo install tauri-cli --version "^2.0.0-rc"
@@ -39,6 +47,7 @@ Then clone the repository and build it:
 ```console
 git clone https://github.com/cognitive-engineering-lab/repo-quest
 cd repo-quest/rs/crates/repo-quest
+cargo run --bin export-bindings
 cargo tauri build
 ```
 
@@ -46,19 +55,21 @@ Then install the generated bundle. (TODO: flesh this out)
 
 ## Setup
 
-To setup RepoQuest, you need a Github account. 
+To setup RepoQuest, you first need to have Git installed on your computer with the `git` executable accessible on your PATH. You will need a Github account.
 
-### Github Token
+### Option A: Github Token
 
 You need to generate a Github access token that allows RepoQuest to perform automatically Github actions (e.g., filing an issue). You can do this in one of two ways:
 
-#### Generate a one-off token
+#### Option B: Generate a one-off token
 
 Go to <https://github.com/settings/tokens/new>. Select the **repo** scope. Click "Generate Token" at the bottom. Copy the token into the file `~/.rqst-token`. On MacOS, you can run:
 
 ```console
 pbpaste > ~/.rqst-token
 ```
+
+*Note:* these tokens will expire after a few months. You will have to refresh the token if you want to use RepoQuest after its expiration.
 
 #### Use the github CLI
 
