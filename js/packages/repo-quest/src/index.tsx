@@ -9,6 +9,7 @@ import {
   events,
   type QuestConfig,
   type QuestState,
+  type Result,
   type Stage,
   type StageState,
   type StateDescriptor,
@@ -87,6 +88,17 @@ let ErrorView: React.FC<{ message: string; action: string }> = ({
   useEffect(() => setMessage({ message, action }), [message, action]);
   return null;
 };
+
+async function tryAwait<T>(
+  promise: Promise<Result<T, string>>,
+  action: string,
+  setMessage: (message: ErrorMessage) => void
+) {
+  let result = await promise;
+  if (result.status === "error") {
+    setMessage({ action, message: result.error });
+  }
+}
 
 let GithubLoader = () => (
   <Await promise={commands.getGithubToken()}>
@@ -343,6 +355,7 @@ let StageView: React.FC<{
   state: QuestState;
 }> = ({ index, stage, state }) => {
   let loader = useContext(Loader.context)!;
+  let setMessage = useContext(ErrorContext)!;
   return (
     <li>
       <div>
@@ -354,7 +367,13 @@ let StageView: React.FC<{
               <button
                 type="button"
                 onClick={() =>
-                  loader.loadAwait(commands.fileFeatureAndIssue(index))
+                  loader.loadAwait(
+                    tryAwait(
+                      commands.fileFeatureAndIssue(index),
+                      "Filing issue or feature PR",
+                      setMessage
+                    )
+                  )
                 }
               >
                 {stage.stage["no-starter"]
@@ -384,7 +403,13 @@ let StageView: React.FC<{
                   <button
                     type="button"
                     onClick={() =>
-                      loader.loadAwait(commands.fileSolution(index))
+                      loader.loadAwait(
+                        tryAwait(
+                          commands.fileSolution(index),
+                          "Filing solution PR",
+                          setMessage
+                        )
+                      )
                     }
                   >
                     File reference solution

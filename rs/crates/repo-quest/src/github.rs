@@ -20,7 +20,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use specta::Type;
-use std::{env, fs, process::Command, sync::Arc, time::Duration};
+use std::{fs, process::Command, sync::Arc, time::Duration};
 use tokio::{time::timeout, try_join};
 use tracing::warn;
 
