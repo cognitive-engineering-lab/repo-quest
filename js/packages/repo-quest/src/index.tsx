@@ -129,7 +129,10 @@ let LoaderEntry = () => {
     <Await promise={promise}>
       {quest_res =>
         quest_res.status === "ok" ? (
-          <QuestView quest={quest_res.data} />
+          <QuestView
+            quest={quest_res.data[0]}
+            initialState={quest_res.data[1]}
+          />
         ) : (
           <InitForm />
         )
@@ -163,7 +166,10 @@ let InitForm = () => {
     <Await promise={commands.loadQuest(selected.dir)}>
       {quest_res =>
         quest_res.status === "ok" ? (
-          <QuestView quest={quest_res.data} />
+          <QuestView
+            quest={quest_res.data[0]}
+            initialState={quest_res.data[1]}
+          />
         ) : (
           <ErrorView action="Creating new quest" message={quest_res.error} />
         )
@@ -229,7 +235,10 @@ let NewQuest = () => {
     <Await promise={commands.newQuest(dir!, quest!)}>
       {quest_res =>
         quest_res.status === "ok" ? (
-          <QuestView quest={quest_res.data} />
+          <QuestView
+            quest={quest_res.data[0]}
+            initialState={quest_res.data[1]}
+          />
         ) : (
           <ErrorView action="Creating new quest" message={quest_res.error} />
         )
@@ -238,9 +247,12 @@ let NewQuest = () => {
   );
 };
 
-let QuestView: React.FC<{ quest: QuestConfig }> = ({ quest }) => {
+let QuestView: React.FC<{
+  quest: QuestConfig;
+  initialState: StateDescriptor;
+}> = ({ quest, initialState }) => {
   let loader = useContext(Loader.context)!;
-  let [state, setState] = useState<StateDescriptor | undefined>(undefined);
+  let [state, setState] = useState<StateDescriptor | undefined>(initialState);
   let setTitle = useContext(TitleContext)!;
   useEffect(() => setTitle(quest.title), [quest.title]);
 

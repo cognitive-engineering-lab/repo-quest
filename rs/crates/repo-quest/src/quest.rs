@@ -3,6 +3,7 @@ use std::{
   env::{self, set_current_dir},
   path::{Path, PathBuf},
   process::Command,
+  sync::atomic::{AtomicBool, Ordering},
   time::Duration,
 };
 
@@ -77,6 +78,7 @@ pub struct Quest {
   upstream: GithubRepo,
   origin: GithubRepo,
   origin_git: GitRepo,
+  origin_exists: AtomicBool,
   stage_index: HashMap<String, usize>,
   dir: PathBuf,
   app: Option<AppHandle>,
@@ -129,6 +131,9 @@ impl Quest {
       .map(|(i, stage)| (stage.label.clone(), i))
       .collect::<HashMap<_, _>>();
 
+    let (origin_exists, _) = try_join!(origin.fetch(), upstream.fetch())?;
+    let origin_exists = AtomicBool::new(origin_exists);
+
     let q = Quest {
       dir,
       user,
@@ -136,13 +141,11 @@ impl Quest {
       upstream,
       origin,
       origin_git,
+      origin_exists,
       stage_index,
       app,
     };
 
-    try_join!(q.origin.fetch(), q.upstream.fetch())?;
-
-    // Need to infer_state_update after fetching repo data so issues/PRs are populated
     q.infer_state_update().await?;
 
     if q.dir.exists() {
@@ -297,15 +300,26 @@ impl Quest {
     })
   }
 
+  pub async fn state_descriptor(&self) -> Result<StateDescriptor> {
+    let state = self.infer_state().await?;
+    Ok(StateDescriptor {
+      dir: self.dir.clone(),
+      stages: self.stage_states(),
+      state,
+    })
+  }
+
   pub async fn infer_state_update(&self) -> Result<()> {
-    let (new_state, _) = try_join!(self.infer_state(), self.origin.fetch())?;
+    // If the repo is not yet created, then there's nothing to fetch.
+    // This also prevents panics wrt trying to access issues/PRs on origin
+    if !self.origin_exists.load(Ordering::SeqCst) {
+      return Ok(());
+    }
+
+    self.origin.fetch().await?;
+    let state = self.state_descriptor().await?;
     if let Some(app) = &self.app {
-      let descriptor = StateDescriptor {
-        dir: self.dir.clone(),
-        stages: self.stage_states(),
-        state: new_state,
-      };
-      StateEvent(descriptor).emit(app)?;
+      StateEvent(state).emit(app)?;
     }
 
     Ok(())
@@ -335,6 +349,10 @@ impl Quest {
 
     // Initialize the upstreams and fetch content
     self.origin_git.setup_upstream(&self.upstream)?;
+
+    self.origin_exists.store(true, Ordering::SeqCst);
+
+    self.infer_state_update().await?;
 
     Ok(())
   }

@@ -52,7 +52,8 @@ impl GithubRepo {
     }
   }
 
-  pub async fn fetch(&self) -> Result<()> {
+  /// Returns true if repo
+  pub async fn fetch(&self) -> Result<bool> {
     let (pr_handler, issue_handler) = (self.pr_handler(), self.issue_handler());
     let res = try_join!(
       pr_handler.list().state(octocrab::params::State::All).send(),
@@ -69,7 +70,7 @@ impl GithubRepo {
           ..
         },
         ..
-      }) => return Ok(()),
+      }) => return Ok(false),
       Err(e) => return Err(e.into()),
     };
     let (prs, mut issues) = (pr_page.take_items(), issue_page.take_items());
@@ -79,7 +80,8 @@ impl GithubRepo {
 
     *self.prs.lock() = Some(prs);
     *self.issues.lock() = Some(issues);
-    Ok(())
+
+    Ok(true)
   }
 
   pub fn remote(&self) -> String {
@@ -236,7 +238,7 @@ impl GithubRepo {
     let is_reset = matches!(merge_type, MergeType::HardReset);
     if is_reset {
       body.push_str(r#"
-      
+
 Note: due to a merge conflict, this PR is a hard reset to the reference solution, and may have overwritten your previous changes."#);
     }
 

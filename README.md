@@ -28,7 +28,7 @@ We have prebuilt binaries for MacOS (x86-64 and ARM64), Linux (x86-64), and Wind
 
 #### Windows
 
-1. Download the installer (either `.msi` or `.exe) for your platform (arm64 for ARM chips, x64 otherwise).
+1. Download the installer (either `.msi` or `.exe`) for your platform (arm64 for ARM chips, x64 otherwise).
 2. Run the installer.
 3. Launch RepoQuest, e.g. by searching for "RepoQuest" in your applications list.
 
