@@ -5,7 +5,7 @@ use std::{env, path::PathBuf, sync::Arc};
 
 use self::quest::{Quest, QuestConfig};
 use github::GithubToken;
-use quest::StateEvent;
+use quest::{StateDescriptor, StateEvent};
 use tauri::{AppHandle, Manager, State};
 use tauri_specta::collect_events;
 
@@ -58,19 +58,28 @@ async fn load_quest_core(
 
 #[tauri::command]
 #[specta::specta]
-async fn load_quest(dir: PathBuf, app: AppHandle) -> Result<QuestConfig, String> {
+async fn load_quest(
+  dir: PathBuf,
+  app: AppHandle,
+) -> Result<(QuestConfig, StateDescriptor), String> {
   let config = fmt_err(QuestConfig::load(&dir))?;
-  load_quest_core(dir, &config, app).await?;
-  Ok(config)
+  let quest = load_quest_core(dir, &config, app).await?;
+  let state = fmt_err(quest.state_descriptor().await)?;
+  Ok((config, state))
 }
 
 #[tauri::command]
 #[specta::specta]
-async fn new_quest(dir: PathBuf, quest: String, app: AppHandle) -> Result<QuestConfig, String> {
+async fn new_quest(
+  dir: PathBuf,
+  quest: String,
+  app: AppHandle,
+) -> Result<(QuestConfig, StateDescriptor), String> {
   let config = fmt_err(quest::load_config_from_remote("cognitive-engineering-lab", &quest).await)?;
   let quest = load_quest_core(dir.join(quest), &config, app).await?;
   fmt_err(quest.create_repo().await)?;
-  Ok(config)
+  let state = fmt_err(quest.state_descriptor().await)?;
+  Ok((config, state))
 }
 
 #[tauri::command]

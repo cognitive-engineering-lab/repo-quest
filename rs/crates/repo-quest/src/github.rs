@@ -20,7 +20,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use specta::Type;
-use std::{env, fs, process::Command, sync::Arc, time::Duration};
+use std::{fs, process::Command, sync::Arc, time::Duration};
 use tokio::{time::timeout, try_join};
 use tracing::warn;
 
@@ -52,7 +52,8 @@ impl GithubRepo {
     }
   }
 
-  pub async fn fetch(&self) -> Result<()> {
+  /// Returns true if repo
+  pub async fn fetch(&self) -> Result<bool> {
     let (pr_handler, issue_handler) = (self.pr_handler(), self.issue_handler());
     let res = try_join!(
       pr_handler.list().state(octocrab::params::State::All).send(),
@@ -69,7 +70,7 @@ impl GithubRepo {
           ..
         },
         ..
-      }) => return Ok(()),
+      }) => return Ok(false),
       Err(e) => return Err(e.into()),
     };
     let (prs, mut issues) = (pr_page.take_items(), issue_page.take_items());
@@ -79,7 +80,8 @@ impl GithubRepo {
 
     *self.prs.lock() = Some(prs);
     *self.issues.lock() = Some(issues);
-    Ok(())
+
+    Ok(true)
   }
 
   pub fn remote(&self) -> String {
@@ -236,7 +238,7 @@ impl GithubRepo {
     let is_reset = matches!(merge_type, MergeType::HardReset);
     if is_reset {
       body.push_str(r#"
-      
+
 Note: due to a merge conflict, this PR is a hard reset to the reference solution, and may have overwritten your previous changes."#);
     }
 
@@ -409,22 +411,18 @@ fn read_github_token_from_fs() -> GithubToken {
 }
 
 fn generate_github_token_from_cli() -> GithubToken {
-  let shell = env::var("SHELL").unwrap_or_else(|_| "sh".into());
-  let which_status = Command::new(&shell).args(["-c", "which gh"]).status();
-  match which_status {
-    Ok(status) => {
-      if status.success() {
-        let token_output = token_try!(Command::new(shell)
-          .args(["-c", "gh auth token"])
-          .output()
-          .context("Failed to run `gh auth token`"));
-        let token = token_try!(String::from_utf8(token_output.stdout));
-        let token_clean = token.trim_end().to_string();
-        GithubToken::Found(token_clean)
-      } else {
-        GithubToken::NotFound
-      }
+  let gh_path_res = which::which("gh");
+  match gh_path_res {
+    Ok(gh_path) => {
+      let token_output = token_try!(Command::new(gh_path)
+        .args(["auth", "token"])
+        .output()
+        .context("Failed to run `gh auth token`"));
+      let token = token_try!(String::from_utf8(token_output.stdout));
+      let token_clean = token.trim_end().to_string();
+      GithubToken::Found(token_clean)
     }
+    Err(which::Error::CannotFindBinaryPath) => GithubToken::NotFound,
     Err(err) => GithubToken::Error(format!("{err:?}")),
   }
 }

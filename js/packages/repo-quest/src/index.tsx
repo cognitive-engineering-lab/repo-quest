@@ -9,6 +9,7 @@ import {
   events,
   type QuestConfig,
   type QuestState,
+  type Result,
   type Stage,
   type StageState,
   type StateDescriptor,
@@ -88,6 +89,17 @@ let ErrorView: React.FC<{ message: string; action: string }> = ({
   return null;
 };
 
+async function tryAwait<T>(
+  promise: Promise<Result<T, string>>,
+  action: string,
+  setMessage: (message: ErrorMessage) => void
+) {
+  let result = await promise;
+  if (result.status === "error") {
+    setMessage({ action, message: result.error });
+  }
+}
+
 let GithubLoader = () => (
   <Await promise={commands.getGithubToken()}>
     {token =>
@@ -114,7 +126,7 @@ let GithubLoader = () => (
           </div>
         </>
       ) : (
-        <pre>ERROR: {token.value}</pre>
+        <ErrorView action="Loading Github token" message={token.value} />
       )
     }
   </Await>
@@ -129,7 +141,10 @@ let LoaderEntry = () => {
     <Await promise={promise}>
       {quest_res =>
         quest_res.status === "ok" ? (
-          <QuestView quest={quest_res.data} />
+          <QuestView
+            quest={quest_res.data[0]}
+            initialState={quest_res.data[1]}
+          />
         ) : (
           <InitForm />
         )
@@ -163,7 +178,10 @@ let InitForm = () => {
     <Await promise={commands.loadQuest(selected.dir)}>
       {quest_res =>
         quest_res.status === "ok" ? (
-          <QuestView quest={quest_res.data} />
+          <QuestView
+            quest={quest_res.data[0]}
+            initialState={quest_res.data[1]}
+          />
         ) : (
           <ErrorView action="Creating new quest" message={quest_res.error} />
         )
@@ -229,7 +247,10 @@ let NewQuest = () => {
     <Await promise={commands.newQuest(dir!, quest!)}>
       {quest_res =>
         quest_res.status === "ok" ? (
-          <QuestView quest={quest_res.data} />
+          <QuestView
+            quest={quest_res.data[0]}
+            initialState={quest_res.data[1]}
+          />
         ) : (
           <ErrorView action="Creating new quest" message={quest_res.error} />
         )
@@ -238,9 +259,12 @@ let NewQuest = () => {
   );
 };
 
-let QuestView: React.FC<{ quest: QuestConfig }> = ({ quest }) => {
+let QuestView: React.FC<{
+  quest: QuestConfig;
+  initialState: StateDescriptor;
+}> = ({ quest, initialState }) => {
   let loader = useContext(Loader.context)!;
-  let [state, setState] = useState<StateDescriptor | undefined>(undefined);
+  let [state, setState] = useState<StateDescriptor | undefined>(initialState);
   let setTitle = useContext(TitleContext)!;
   useEffect(() => setTitle(quest.title), [quest.title]);
 
@@ -331,6 +355,7 @@ let StageView: React.FC<{
   state: QuestState;
 }> = ({ index, stage, state }) => {
   let loader = useContext(Loader.context)!;
+  let setMessage = useContext(ErrorContext)!;
   return (
     <li>
       <div>
@@ -342,7 +367,13 @@ let StageView: React.FC<{
               <button
                 type="button"
                 onClick={() =>
-                  loader.loadAwait(commands.fileFeatureAndIssue(index))
+                  loader.loadAwait(
+                    tryAwait(
+                      commands.fileFeatureAndIssue(index),
+                      "Filing issue or feature PR",
+                      setMessage
+                    )
+                  )
                 }
               >
                 {stage.stage["no-starter"]
@@ -372,7 +403,13 @@ let StageView: React.FC<{
                   <button
                     type="button"
                     onClick={() =>
-                      loader.loadAwait(commands.fileSolution(index))
+                      loader.loadAwait(
+                        tryAwait(
+                          commands.fileSolution(index),
+                          "Filing solution PR",
+                          setMessage
+                        )
+                      )
                     }
                   >
                     File reference solution

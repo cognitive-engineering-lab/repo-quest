@@ -1,5 +1,5 @@
 productName = "RepoQuest"
-version = "0.1.1"
+version = "0.1.2"
 identifier = "com.repo-quest.app"
 
 [build]
@@ -9,7 +9,7 @@ dev-url = "http://localhost:5173"
 frontend-dist = "../../../js/packages/repo-quest/dist"
 
 [app]
-windows = [{title = "RepoQuest", width = 1200, height = 800}]
+windows = [{title = "RepoQuest", width = 1000, height = 600}]
 
 [bundle]
 active = true
