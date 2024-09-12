@@ -553,7 +553,7 @@ mod test {
   }
 
   async fn load_test_quest() -> Result<Arc<Quest>> {
-    let config = load_config_from_remote(TEST_ORG, TEST_REPO).await?;
+    let config = QuestConfig::load_from_remote(TEST_ORG, TEST_REPO).await?;
     assert_eq!(
       config,
       QuestConfig {
@@ -576,7 +576,8 @@ mod test {
             name: "C".into(),
             no_starter: None
           }
-        ]
+        ],
+        r#final: None
       }
     );
 
