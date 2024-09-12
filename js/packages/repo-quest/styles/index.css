@@ -1,4 +1,5 @@
 @import "normalize.css/normalize.css";
+@import "@wcrichto/quiz/lib.scss";
 @import url('https://fonts.googleapis.com/css2?family=Open+Sans:ital,wght@0,300..800;1,300..800&family=Source+Code+Pro:ital,wght@0,200..900;1,200..900&display=swap');
 
 :root {
@@ -132,7 +133,7 @@ input[type=file] {
   display: none;
 }
 
-button, label, input[type=submit] {
+button, input[type=submit] {
   display: inline-block;
   appearance: none;
   background: #eee;

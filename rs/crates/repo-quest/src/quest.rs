@@ -1,6 +1,7 @@
 use std::{
   collections::HashMap,
   env::{self, set_current_dir},
+  future::Future,
   path::{Path, PathBuf},
   process::Command,
   sync::atomic::{AtomicBool, Ordering},
@@ -32,6 +33,7 @@ pub struct QuestConfig {
   pub author: String,
   pub repo: String,
   pub stages: Vec<Stage>,
+  pub r#final: Option<serde_json::Value>,
 }
 
 #[derive(Serialize, Deserialize, Type, Clone)]
@@ -44,21 +46,51 @@ pub struct StageState {
 }
 
 impl QuestConfig {
-  pub fn load(dir: impl AsRef<Path>) -> Result<Self> {
-    let output = Command::new("git")
-      .arg("show")
-      .arg(format!("{UPSTREAM}/meta:rqst.toml"))
-      .current_dir(dir)
-      .output()
-      .context("git failed")?;
-    ensure!(
-      output.status.success(),
-      "git exited with non-zero status code"
-    );
-    let stdout = String::from_utf8(output.stdout)?.trim().to_string();
-    let config = toml::de::from_str::<QuestConfig>(&stdout)?;
-
+  async fn load_core<'a, Fut: Future<Output = Result<String>> + 'a>(
+    read: impl Fn(&'a str) -> Fut,
+  ) -> Result<Self> {
+    let config_str = read("rqst.toml").await?;
+    let mut config = toml::de::from_str::<QuestConfig>(&config_str)?;
+    let final_str_res = read("final.toml").await;
+    if let Ok(final_str) = final_str_res {
+      let r#final = toml::de::from_str::<serde_json::Value>(&final_str)?;
+      config.r#final = Some(r#final);
+    }
     Ok(config)
+  }
+
+  pub async fn load_from_fs(dir: impl AsRef<Path>) -> Result<Self> {
+    let dir = dir.as_ref();
+    Self::load_core(|path| async move {
+      let arg = format!("{UPSTREAM}/meta:{path}");
+      let output = Command::new("git")
+        .arg("show")
+        .arg(&arg)
+        .current_dir(dir)
+        .output()
+        .context("git failed")?;
+      ensure!(
+        output.status.success(),
+        "`git show {arg}` exited with non-zero status code"
+      );
+      let stdout = String::from_utf8(output.stdout)?.trim().to_string();
+      Ok(stdout)
+    })
+    .await
+  }
+
+  pub async fn load_from_remote(owner: &str, repo: &str) -> Result<Self> {
+    Self::load_core(|path| async move {
+      let items = octocrab::instance()
+        .repos(owner, repo)
+        .get_content()
+        .path(path)
+        .r#ref("meta")
+        .send()
+        .await?;
+      Ok(items.items[0].decoded_content().expect("Missing content"))
+    })
+    .await
   }
 }
 
@@ -84,19 +116,6 @@ pub struct Quest {
   app: Option<AppHandle>,
 
   pub config: QuestConfig,
-}
-
-pub async fn load_config_from_remote(owner: &str, repo: &str) -> Result<QuestConfig> {
-  let items = octocrab::instance()
-    .repos(owner, repo)
-    .get_content()
-    .path("rqst.toml")
-    .r#ref("meta")
-    .send()
-    .await?;
-  let config_contents = items.items[0].decoded_content().expect("Missing content");
-  let config = toml::de::from_str::<QuestConfig>(&config_contents)?;
-  Ok(config)
 }
 
 async fn load_user() -> Result<String> {
