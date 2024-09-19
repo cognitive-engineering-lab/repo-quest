@@ -24,7 +24,7 @@ toml = "0.8.15"
 tracing = "0.1.40"
 tauri-plugin-dialog = "2.0.0-rc"
 tauri-plugin-shell = "2.0.0-rc"
-specta = "=2.0.0-rc.20"
+specta = { version = "=2.0.0-rc.20", features = ["serde_json"] }
 specta-typescript = "0.0.7"
 tauri-specta = { version = "=2.0.0-rc.19", features = ["derive", "typescript"] }
 which = "6.0.3"

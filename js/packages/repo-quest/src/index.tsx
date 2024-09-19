@@ -1,4 +1,5 @@
 import * as dialog from "@tauri-apps/plugin-dialog";
+import { type Quiz, QuizView } from "@wcrichto/quiz";
 import _ from "lodash";
 import { action, makeAutoObservable } from "mobx";
 import { observer } from "mobx-react";
@@ -211,8 +212,22 @@ let NewQuest = () => {
                 <option disabled={true} value="">
                   Choose a quest
                 </option>
-                <option value="rqst-async">rqst-async</option>
+                <option value="cognitive-engineering-lab/rqst-async">
+                  cognitive-engineering-lab/rqst-async
+                </option>
               </select>
+
+              <span className="separator">or</span>
+
+              <input
+                type="text"
+                placeholder="Enter a GitHub repo"
+                onChange={e => {
+                  if (e.target.checkValidity()) setQuest(e.target.value);
+                  else setQuest(undefined);
+                }}
+                pattern="[^\/]+\/.+"
+              />
             </td>
           </tr>
           <tr>
@@ -259,12 +274,30 @@ let NewQuest = () => {
   );
 };
 
+let QuizPage: React.FC<{ quest: QuestConfig }> = ({ quest }) => {
+  let quiz = quest.final as
+    /* biome-ignore lint/suspicious/noExplicitAny: backend guarantees that this satisfies Quiz */
+    any as Quiz;
+  return (
+    <QuizView
+      name={quest.title}
+      quiz={quiz}
+      cacheAnswers={true}
+      autoStart={true}
+      allowRetry={true}
+    />
+  );
+};
+
 let QuestView: React.FC<{
   quest: QuestConfig;
   initialState: StateDescriptor;
 }> = ({ quest, initialState }) => {
+  console.log(quest);
+
   let loader = useContext(Loader.context)!;
   let [state, setState] = useState<StateDescriptor | undefined>(initialState);
+  let [showQuiz, setShowQuiz] = useState(false);
   let setTitle = useContext(TitleContext)!;
   useEffect(() => setTitle(quest.title), [quest.title]);
 
@@ -275,7 +308,11 @@ let QuestView: React.FC<{
   let cur_stage =
     state && state.state.type === "Ongoing"
       ? state.state.stage
-      : quest.stages.length;
+      : quest.stages.length - 1;
+
+  if (showQuiz) {
+    return <QuizPage quest={quest} />;
+  }
 
   return (
     <div className="columns">
@@ -290,6 +327,18 @@ let QuestView: React.FC<{
                 state={state.state}
               />
             ))}
+            {state.state.type === "Completed" && quest.final && (
+              <li>
+                <div>
+                  <span className="stage-title">Quiz</span>
+                </div>
+                <div>
+                  <button type="button" onClick={() => setShowQuiz(true)}>
+                    Start
+                  </button>
+                </div>
+              </li>
+            )}
           </ol>
         )}
       </div>
