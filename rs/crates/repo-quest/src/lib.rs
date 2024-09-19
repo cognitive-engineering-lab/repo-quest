@@ -75,8 +75,11 @@ async fn new_quest(
   quest: String,
   app: AppHandle,
 ) -> Result<(QuestConfig, StateDescriptor), String> {
-  let config = fmt_err(QuestConfig::load_from_remote("cognitive-engineering-lab", &quest).await)?;
-  let quest = load_quest_core(dir.join(quest), &config, app).await?;
+  let (owner, repo) = quest
+    .split_once("/")
+    .ok_or_else(|| format!("Invalid quest name: {quest}"))?;
+  let config = fmt_err(QuestConfig::load_from_remote(owner, repo).await)?;
+  let quest = load_quest_core(dir.join(repo), &config, app).await?;
   fmt_err(quest.create_repo().await)?;
   let state = fmt_err(quest.state_descriptor().await)?;
   Ok((config, state))

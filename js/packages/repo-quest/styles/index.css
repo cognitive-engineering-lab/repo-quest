@@ -26,11 +26,11 @@ code, pre {
   border-radius: 8px;
   padding: 0.5rem 1rem;
   margin: 2rem 0;
-  
+
   > div {
     margin-bottom: 1rem;
   }
-  
+
   .action {
     font-weight: bold;
   }
@@ -73,7 +73,7 @@ h1 {
 }
 
 .help {
-  display: inline-block;  
+  display: inline-block;
   border: 1px solid #ccc;
   background: #fafafa;
   padding: 3px 5px;
@@ -123,7 +123,7 @@ h1 {
   100% {
     transform: rotate(360deg);
   }
-} 
+}
 
 .gh-links a:not(:first-child) {
   margin-left: 0.5rem;
@@ -138,9 +138,9 @@ button, input[type=submit] {
   appearance: none;
   background: #eee;
   border: 1px solid #aaa;
-  border-radius: 4px;  
+  border-radius: 4px;
   padding: 3px 5px;
-  
+
   &:not([disabled]) {
     cursor: pointer;
 
@@ -157,31 +157,41 @@ button, input[type=submit] {
 
 .controls {
   display: flex;
-  gap: 1rem;  
+  gap: 1rem;
 }
 
 .new-quest {
   display: flex;
   flex-direction: column;
-  gap: 1rem;  
+  gap: 1rem;
 
   table {
     width: max-content;
 
     td {
       padding-bottom: 0.5rem;
-    }
 
-    td:first-child {
-      padding-right: 1rem;
-    }    
+      &:first-child {
+        padding-right: 1rem;
+      }
+
+      input[type=text] {
+        border: 1px solid #ccc;
+        font-size: 80%;
+        width: 300px;
+        
+        &:invalid {
+          box-shadow: 0 0 4px red;          
+        }
+      }
+    }
   }
 }
 
 .columns {
   display: flex;
   justify-content: space-between;
-  gap: 2rem;  
+  gap: 2rem;
 }
 
 .meta {
@@ -212,7 +222,7 @@ button, input[type=submit] {
 }
 
 dialog {
-  z-index: 1000; 
+  z-index: 1000;
   max-width: 400px;
   box-shadow: 4px 4px 8px #aaa;
 

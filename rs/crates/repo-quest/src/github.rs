@@ -110,7 +110,8 @@ impl GithubRepo {
       .owner(&self.user)
       .private(true)
       .send()
-      .await?;
+      .await
+      .with_context(|| format!("Failed to clone template repo {}/{}", base.user, base.name))?;
 
     // There is some unknown delay between creating a repo from a template and its contents being added.
     // We have to wait until that happens.

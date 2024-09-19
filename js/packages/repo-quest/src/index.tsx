@@ -212,8 +212,22 @@ let NewQuest = () => {
                 <option disabled={true} value="">
                   Choose a quest
                 </option>
-                <option value="rqst-async">rqst-async</option>
+                <option value="cognitive-engineering-lab/rqst-async">
+                  cognitive-engineering-lab/rqst-async
+                </option>
               </select>
+
+              <span className="separator">or</span>
+
+              <input
+                type="text"
+                placeholder="Enter a GitHub repo"
+                onChange={e => {
+                  if (e.target.checkValidity()) setQuest(e.target.value);
+                  else setQuest(undefined);
+                }}
+                pattern="[^\/]+\/.+"
+              />
             </td>
           </tr>
           <tr>

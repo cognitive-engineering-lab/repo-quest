@@ -49,7 +49,9 @@ impl QuestConfig {
   async fn load_core<'a, Fut: Future<Output = Result<String>> + 'a>(
     read: impl Fn(&'a str) -> Fut,
   ) -> Result<Self> {
-    let config_str = read("rqst.toml").await?;
+    let config_str = read("rqst.toml")
+      .await
+      .context("Quest is malformed, missing rqst.toml")?;
     let mut config = toml::de::from_str::<QuestConfig>(&config_str)?;
     let final_str_res = read("final.toml").await;
     if let Ok(final_str) = final_str_res {
@@ -68,7 +70,7 @@ impl QuestConfig {
         .arg(&arg)
         .current_dir(dir)
         .output()
-        .context("git failed")?;
+        .context("`git show` failed")?;
       ensure!(
         output.status.success(),
         "`git show {arg}` exited with non-zero status code"
@@ -87,7 +89,8 @@ impl QuestConfig {
         .path(path)
         .r#ref("meta")
         .send()
-        .await?;
+        .await
+        .context("Quest is malformed, missing the meta branch")?;
       Ok(items.items[0].decoded_content().expect("Missing content"))
     })
     .await
