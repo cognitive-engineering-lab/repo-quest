@@ -249,23 +249,17 @@ impl GitRepo {
     git!(self, "push -u origin main")?;
 
     git!(self, "checkout -b meta")?;
-    package.save(&self.path.join("package.json.gz"))?;
-    git!(self, "add .")?;
-    git!(self, "commit -m 'Add package'")?;
-    git!(self, "push -u origin meta")?;
-    git!(self, "checkout main")?;
 
-    Ok(())
-  }
-
-  pub fn write_config(&self, config: &QuestConfig) -> Result<()> {
-    git!(self, "checkout meta")?;
-    let config_str = toml::to_string_pretty(&config)?;
+    let config_str = toml::to_string_pretty(&package.config)?;
     fs::write(self.path.join("rqst.toml"), config_str)?;
+
+    package.save(&self.path.join("package.json.gz"))?;
+
     git!(self, "add .")?;
-    git!(self, "commit -m 'Add config'")?;
+    git!(self, "commit -m 'Add meta'")?;
     git!(self, "push -u origin meta")?;
     git!(self, "checkout main")?;
+
     Ok(())
   }
 }

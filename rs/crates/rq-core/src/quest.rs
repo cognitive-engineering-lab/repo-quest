@@ -140,7 +140,6 @@ impl Quest {
       origin_git,
       config,
     } = template.instantiate(&dir).await?;
-    origin_git.write_config(&config)?;
 
     Self::load_core(
       dir.join(&config.repo),
