@@ -3,17 +3,27 @@
 
 use std::{env, path::PathBuf, sync::Arc};
 
-use self::quest::{Quest, QuestConfig};
-use github::GithubToken;
-use quest::{StateDescriptor, StateEvent};
+use rq_core::{
+  github::{self, GithubToken},
+  package::QuestPackage,
+  quest::{CreateSource, Quest, QuestConfig, StateDescriptor, StateEmitter},
+};
+use serde::{Deserialize, Serialize};
+use specta::Type;
 use tauri::{AppHandle, Manager, State};
 use tauri_specta::collect_events;
+use tauri_specta::Event;
 
-mod git;
-mod github;
-mod quest;
-mod stage;
-mod utils;
+struct TauriEmitter(AppHandle);
+
+#[derive(Serialize, Deserialize, Clone, Type, Event)]
+pub struct StateEvent(StateDescriptor);
+
+impl StateEmitter for TauriEmitter {
+  fn emit(&self, state: StateDescriptor) -> anyhow::Result<()> {
+    Ok(StateEvent(state).emit(&self.0)?)
+  }
+}
 
 #[inline]
 fn fmt_err<T>(r: anyhow::Result<T>) -> Result<T, String> {
@@ -38,13 +48,7 @@ fn current_dir() -> PathBuf {
   env::current_dir().unwrap()
 }
 
-async fn load_quest_core(
-  dir: PathBuf,
-  config: &QuestConfig,
-  app: AppHandle,
-) -> Result<Arc<Quest>, String> {
-  let quest = fmt_err(Quest::load(dir, config.clone(), Some(app.clone())).await)?;
-
+fn manage_quest(quest: Quest, app: &AppHandle) -> Arc<Quest> {
   let quest = Arc::new(quest);
   app.manage(Arc::clone(&quest));
 
@@ -53,7 +57,7 @@ async fn load_quest_core(
     quest_ref.infer_state_loop().await;
   });
 
-  Ok(quest)
+  quest
 }
 
 #[tauri::command]
@@ -62,27 +66,45 @@ async fn load_quest(
   dir: PathBuf,
   app: AppHandle,
 ) -> Result<(QuestConfig, StateDescriptor), String> {
-  let config = fmt_err(QuestConfig::load_from_fs(&dir).await)?;
-  let quest = load_quest_core(dir, &config, app).await?;
+  let quest = fmt_err(Quest::load(dir, Box::new(TauriEmitter(app.clone()))).await)?;
+  let quest = manage_quest(quest, &app);
   let state = fmt_err(quest.state_descriptor().await)?;
-  Ok((config, state))
+  Ok((quest.config.clone(), state))
+}
+
+#[derive(Serialize, Deserialize, Type)]
+#[serde(tag = "type", content = "value")]
+pub enum QuestLocation {
+  Remote(String),
+  Local(PathBuf),
 }
 
 #[tauri::command]
 #[specta::specta]
 async fn new_quest(
   dir: PathBuf,
-  quest: String,
+  quest_loc: QuestLocation,
   app: AppHandle,
 ) -> Result<(QuestConfig, StateDescriptor), String> {
-  let (owner, repo) = quest
-    .split_once("/")
-    .ok_or_else(|| format!("Invalid quest name: {quest}"))?;
-  let config = fmt_err(QuestConfig::load_from_remote(owner, repo).await)?;
-  let quest = load_quest_core(dir.join(repo), &config, app).await?;
-  fmt_err(quest.create_repo().await)?;
+  let source = match quest_loc {
+    QuestLocation::Remote(remote) => {
+      let (user, repo) = remote
+        .split_once("/")
+        .ok_or_else(|| format!("Invalid quest name: {remote}"))?;
+      CreateSource::Remote {
+        user: user.to_string(),
+        repo: repo.to_string(),
+      }
+    }
+    QuestLocation::Local(local) => {
+      let package = fmt_err(QuestPackage::load_from_file(&local))?;
+      CreateSource::Package(package)
+    }
+  };
+  let quest = fmt_err(Quest::create(dir, source, Box::new(TauriEmitter(app.clone()))).await)?;
+  let quest = manage_quest(quest, &app);
   let state = fmt_err(quest.state_descriptor().await)?;
-  Ok((config, state))
+  Ok((quest.config.clone(), state))
 }
 
 #[tauri::command]

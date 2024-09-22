@@ -1,19 +1,13 @@
-use std::{
-  collections::HashMap,
-  env::{self, set_current_dir},
-  future::Future,
-  path::{Path, PathBuf},
-  process::Command,
-  sync::atomic::{AtomicBool, Ordering},
-  time::Duration,
-};
+use std::{collections::HashMap, path::PathBuf, time::Duration};
 
 use crate::{
   git::{GitRepo, UPSTREAM},
-  github::{GithubRepo, PullSelector},
+  github::{load_user, GithubRepo, PullSelector},
+  package::QuestPackage,
   stage::{Stage, StagePart, StagePartStatus},
+  template::{InstanceOutputs, PackageTemplate, QuestTemplate, RepoTemplate},
 };
-use anyhow::{ensure, Context, Result};
+use anyhow::Result;
 use http::StatusCode;
 use octocrab::{
   models::{issues::Issue, pulls::PullRequest, IssueState},
@@ -23,9 +17,19 @@ use octocrab::{
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use specta::Type;
-use tauri::AppHandle;
-use tauri_specta::Event;
 use tokio::{time::sleep, try_join};
+
+pub trait StateEmitter: Send + Sync + 'static {
+  fn emit(&self, state: StateDescriptor) -> Result<()>;
+}
+
+pub struct NoopEmitter;
+
+impl StateEmitter for NoopEmitter {
+  fn emit(&self, _state: StateDescriptor) -> Result<()> {
+    Ok(())
+  }
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize, Type, PartialEq, Eq)]
 pub struct QuestConfig {
@@ -46,54 +50,10 @@ pub struct StageState {
 }
 
 impl QuestConfig {
-  async fn load_core<'a, Fut: Future<Output = Result<String>> + 'a>(
-    read: impl Fn(&'a str) -> Fut,
-  ) -> Result<Self> {
-    let config_str = read("rqst.toml")
-      .await
-      .context("Quest is malformed, missing rqst.toml")?;
-    let mut config = toml::de::from_str::<QuestConfig>(&config_str)?;
-    let final_str_res = read("final.toml").await;
-    if let Ok(final_str) = final_str_res {
-      let r#final = toml::de::from_str::<serde_json::Value>(&final_str)?;
-      config.r#final = Some(r#final);
-    }
+  pub fn load(repo: &GitRepo, remote: &str) -> Result<Self> {
+    let contents = repo.show(&format!("{remote}/meta"), "rqst.toml")?;
+    let config = toml::de::from_str::<QuestConfig>(&contents)?;
     Ok(config)
-  }
-
-  pub async fn load_from_fs(dir: impl AsRef<Path>) -> Result<Self> {
-    let dir = dir.as_ref();
-    Self::load_core(|path| async move {
-      let arg = format!("{UPSTREAM}/meta:{path}");
-      let output = Command::new("git")
-        .arg("show")
-        .arg(&arg)
-        .current_dir(dir)
-        .output()
-        .context("`git show` failed")?;
-      ensure!(
-        output.status.success(),
-        "`git show {arg}` exited with non-zero status code"
-      );
-      let stdout = String::from_utf8(output.stdout)?.trim().to_string();
-      Ok(stdout)
-    })
-    .await
-  }
-
-  pub async fn load_from_remote(owner: &str, repo: &str) -> Result<Self> {
-    Self::load_core(|path| async move {
-      let items = octocrab::instance()
-        .repos(owner, repo)
-        .get_content()
-        .path(path)
-        .r#ref("meta")
-        .send()
-        .await
-        .context("Quest is malformed, missing the meta branch")?;
-      Ok(items.items[0].decoded_content().expect("Missing content"))
-    })
-    .await
   }
 }
 
@@ -109,25 +69,14 @@ pub enum QuestState {
 }
 
 pub struct Quest {
-  user: String,
-  upstream: GithubRepo,
+  template: Box<dyn QuestTemplate>,
   origin: GithubRepo,
   origin_git: GitRepo,
-  origin_exists: AtomicBool,
   stage_index: HashMap<String, usize>,
   dir: PathBuf,
-  app: Option<AppHandle>,
+  state_event: Box<dyn StateEmitter>,
 
   pub config: QuestConfig,
-}
-
-async fn load_user() -> Result<String> {
-  let user = octocrab::instance()
-    .current()
-    .user()
-    .await
-    .context("Failed to get current user")?;
-  Ok(user.login)
 }
 
 #[derive(Serialize, Deserialize, Clone, Type)]
@@ -137,15 +86,20 @@ pub struct StateDescriptor {
   state: QuestState,
 }
 
-#[derive(Serialize, Deserialize, Clone, Type, Event)]
-pub struct StateEvent(StateDescriptor);
+pub enum CreateSource {
+  Remote { user: String, repo: String },
+  Package(QuestPackage),
+}
 
 impl Quest {
-  pub async fn load(dir: PathBuf, config: QuestConfig, app: Option<AppHandle>) -> Result<Self> {
-    let user = load_user().await?;
-    let upstream = GithubRepo::new(&config.author, &config.repo);
-    let origin = GithubRepo::new(&user, &config.repo);
-    let origin_git = GitRepo::new();
+  async fn load_core(
+    dir: PathBuf,
+    config: QuestConfig,
+    state_event: Box<dyn StateEmitter>,
+    template: Box<dyn QuestTemplate>,
+    origin: GithubRepo,
+    origin_git: GitRepo,
+  ) -> Result<Self> {
     let stage_index = config
       .stages
       .iter()
@@ -153,30 +107,66 @@ impl Quest {
       .map(|(i, stage)| (stage.label.clone(), i))
       .collect::<HashMap<_, _>>();
 
-    let (origin_exists, _) = try_join!(origin.fetch(), upstream.fetch())?;
-    let origin_exists = AtomicBool::new(origin_exists);
-
     let q = Quest {
       dir,
-      user,
       config,
-      upstream,
+      template,
       origin,
       origin_git,
-      origin_exists,
       stage_index,
-      app,
+      state_event,
     };
 
     q.infer_state_update().await?;
 
-    if q.dir.exists() {
-      set_current_dir(&q.dir)?;
-    } else {
-      set_current_dir(q.dir.parent().unwrap())?;
-    }
-
     Ok(q)
+  }
+
+  pub async fn create(
+    dir: PathBuf,
+    source: CreateSource,
+    state_event: Box<dyn StateEmitter>,
+  ) -> Result<Self> {
+    let template: Box<dyn QuestTemplate> = match source {
+      CreateSource::Remote { user, repo } => {
+        let upstream = GithubRepo::load(&user, &repo).await?;
+        Box::new(RepoTemplate(upstream))
+      }
+      CreateSource::Package(package) => Box::new(PackageTemplate(package)),
+    };
+
+    let InstanceOutputs {
+      origin,
+      origin_git,
+      config,
+    } = template.instantiate(&dir).await?;
+
+    Self::load_core(
+      dir.join(&config.repo),
+      config,
+      state_event,
+      template,
+      origin,
+      origin_git,
+    )
+    .await
+  }
+
+  pub async fn load(dir: PathBuf, state_event: Box<dyn StateEmitter>) -> Result<Self> {
+    let user = load_user().await?;
+    let origin_git = GitRepo::new(&dir);
+    let config = QuestConfig::load(&origin_git, "origin")?;
+    let origin = GithubRepo::load(&user, &config.repo).await?;
+    let template: Box<dyn QuestTemplate> = if origin_git.has_upstream()? {
+      let upstream = GithubRepo::load(&config.author, &config.repo).await?;
+      Box::new(RepoTemplate(upstream))
+    } else {
+      let contents = origin_git.show_bin("meta", "package.json.gz")?;
+      let package = QuestPackage::load_from_blob(&contents)?;
+      Box::new(PackageTemplate(package))
+    };
+
+    Self::load_core(dir, config, state_event, template, origin, origin_git).await
   }
 
   pub fn stages(&self) -> &[Stage] {
@@ -332,17 +322,9 @@ impl Quest {
   }
 
   pub async fn infer_state_update(&self) -> Result<()> {
-    // If the repo is not yet created, then there's nothing to fetch.
-    // This also prevents panics wrt trying to access issues/PRs on origin
-    if !self.origin_exists.load(Ordering::SeqCst) {
-      return Ok(());
-    }
-
     self.origin.fetch().await?;
     let state = self.state_descriptor().await?;
-    if let Some(app) = &self.app {
-      StateEvent(state).emit(app)?;
-    }
+    self.state_event.emit(state)?;
 
     Ok(())
   }
@@ -354,47 +336,18 @@ impl Quest {
     }
   }
 
-  fn clone_repo(&self) -> Result<()> {
-    let url = format!("git@github.com:{}/{}.git", self.user, self.config.repo);
-    self.origin_git.clone(&url)
-  }
-
-  pub async fn create_repo(&self) -> Result<()> {
-    // First instantiate the user's repo from the template repo on the server side
-    self.origin.copy_from(&self.upstream).await?;
-
-    // Then clone from server side to client side
-    self.clone_repo()?;
-
-    // Move into the repo
-    env::set_current_dir(&self.config.repo)?;
-
-    // Initialize the upstreams and fetch content
-    self.origin_git.setup_upstream(&self.upstream)?;
-
-    self.origin_exists.store(true, Ordering::SeqCst);
-
-    self.infer_state_update().await?;
-
-    Ok(())
-  }
-
-  async fn file_pr(&self, target_branch: &str, base_branch: &str) -> Result<PullRequest> {
+  async fn file_pr(&self, base_branch: &str, target_branch: &str) -> Result<PullRequest> {
     self.origin_git.checkout_main_and_pull()?;
 
-    let (branch_head, merge_type) = self
-      .origin_git
-      .create_branch_from(target_branch, base_branch)?;
+    let (branch_head, merge_type) =
+      self
+        .origin_git
+        .create_branch_from(&*self.template, base_branch, target_branch)?;
 
     let pr = self
-      .upstream
-      .pr(&PullSelector::Branch(target_branch.into()))
-      .unwrap()
-      .clone();
-    let new_pr = self
-      .origin
-      .copy_pr(&self.upstream, &pr, &branch_head, merge_type)
-      .await?;
+      .template
+      .pull_request(&PullSelector::Branch(target_branch.into()))?;
+    let new_pr = self.origin.copy_pr(&pr, &branch_head, merge_type).await?;
 
     tracing::debug!("Filed PR: {base_branch} -> {target_branch}");
 
@@ -403,11 +356,7 @@ impl Quest {
 
   async fn file_issue(&self, stage_index: usize) -> Result<Issue> {
     let stage = self.stage(stage_index);
-    let issue = self
-      .upstream
-      .issue(&stage.label)
-      .unwrap_or_else(|| panic!("Missing issue for stage {}", stage.label))
-      .clone();
+    let issue = self.template.issue(&stage.label)?;
     let new_issue = self.origin.copy_issue(&issue).await?;
     self.infer_state_update().await?;
     Ok(new_issue)
@@ -427,7 +376,7 @@ impl Quest {
 
     let pr = if !stage.no_starter() {
       let pr = self
-        .file_pr(&stage.branch_name(StagePart::Starter), &base_branch)
+        .file_pr(&base_branch, &stage.branch_name(StagePart::Starter))
         .await?;
       Some(pr)
     } else {
@@ -443,11 +392,19 @@ impl Quest {
 
   pub async fn file_solution(&self, stage_index: usize) -> Result<PullRequest> {
     let stage = self.stage(stage_index);
+    let base = if stage.no_starter() {
+      // TODO: repeats w/ file_feature
+      if stage_index > 0 {
+        let prev_stage = self.stage(stage_index - 1);
+        prev_stage.branch_name(StagePart::Solution)
+      } else {
+        "main".into()
+      }
+    } else {
+      stage.branch_name(StagePart::Starter)
+    };
     let pr = self
-      .file_pr(
-        &stage.branch_name(StagePart::Solution),
-        &stage.branch_name(StagePart::Starter),
-      )
+      .file_pr(&base, &stage.branch_name(StagePart::Solution))
       .await?;
 
     self.infer_state_update().await?;
@@ -468,21 +425,16 @@ impl Quest {
         let feature_pr_url = self
           .origin
           .pr(&PullSelector::Branch(stage.branch_name(StagePart::Starter)))
-          .map(|pr| pr.html_url.as_ref().unwrap().to_string());
+          .map(|pr| pr.data.html_url.as_ref().unwrap().to_string());
 
         let solution_pr_url = self
           .origin
           .pr(&PullSelector::Branch(
             stage.branch_name(StagePart::Solution),
           ))
-          .map(|pr| pr.html_url.as_ref().unwrap().to_string());
+          .map(|pr| pr.data.html_url.as_ref().unwrap().to_string());
 
-        let reference_solution_pr_url = self
-          .upstream
-          .pr(&PullSelector::Branch(
-            stage.branch_name(StagePart::Solution),
-          ))
-          .map(|pr| pr.html_url.as_ref().unwrap().to_string());
+        let reference_solution_pr_url = self.template.reference_solution_pr_url(stage);
 
         StageState {
           stage: stage.clone(),
@@ -519,9 +471,11 @@ mod test {
   use crate::github::{self, GithubToken};
   use env::current_dir;
   use std::{
-    fs,
+    env, fs,
+    path::Path,
     sync::{Arc, Once},
   };
+  use tracing_subscriber::{fmt, layer::SubscriberExt, prelude::*, EnvFilter};
 
   const TEST_ORG: &str = "cognitive-engineering-lab";
   const TEST_REPO: &str = "rqst-test";
@@ -547,6 +501,11 @@ mod test {
   fn setup() {
     static SETUP: Once = Once::new();
     SETUP.call_once(|| {
+      tracing_subscriber::registry()
+        .with(fmt::layer())
+        .with(EnvFilter::from_default_env())
+        .init();
+
       let token = github::get_github_token();
       match token {
         GithubToken::Found(token) => github::init_octocrab(&token).unwrap(),
@@ -555,96 +514,103 @@ mod test {
     });
   }
 
-  async fn load_test_quest() -> Result<Arc<Quest>> {
-    let config = QuestConfig::load_from_remote(TEST_ORG, TEST_REPO).await?;
-    assert_eq!(
-      config,
-      QuestConfig {
-        title: "Test".into(),
-        author: TEST_ORG.into(),
-        repo: TEST_REPO.into(),
-        stages: vec![
-          Stage {
-            label: "00-stage".into(),
-            name: "A".into(),
-            no_starter: Some(true)
-          },
-          Stage {
-            label: "01-stage".into(),
-            name: "B".into(),
-            no_starter: None
-          },
-          Stage {
-            label: "02-stage".into(),
-            name: "C".into(),
-            no_starter: None
-          }
-        ],
-        r#final: None
-      }
-    );
-
-    let dir = current_dir()?.join(TEST_REPO);
-    Ok(Arc::new(Quest::load(dir, config, None).await?))
+  async fn create_test_quest(source: CreateSource) -> Result<Arc<Quest>> {
+    let dir = current_dir()?;
+    let quest = Quest::create(dir, source, Box::new(NoopEmitter)).await?;
+    Ok(Arc::new(quest))
   }
 
   macro_rules! test_quest {
-    ($id:ident) => {
+    ($id:ident, $source:expr) => {
       setup();
 
-      let $id = load_test_quest().await?;
-
-      $id.create_repo().await?;
+      let $id = create_test_quest($source).await?;
       let _remote = DeleteRemoteRepo(Arc::clone(&$id));
-
-      $id.clone_repo()?;
       let _local = DeleteLocalRepo($id.dir.clone());
     };
+    ($id:ident) => {
+      test_quest!(
+        $id,
+        CreateSource::Remote {
+          user: TEST_ORG.into(),
+          repo: TEST_REPO.into(),
+        }
+      )
+    };
+  }
+
+  macro_rules! state_is {
+    ($quest:expr, $a:expr, $b:expr, $c:expr) => {{
+      let state = $quest.infer_state().await?;
+      match state {
+        QuestState::Ongoing {
+          stage,
+          part,
+          status,
+        } => assert_eq!((stage, part, status), ($a, $b, $c)),
+        QuestState::Completed => panic!("finished"),
+      };
+    }};
   }
 
   // TODO: some of this machinery should be its own tester binary
   #[tokio::test(flavor = "multi_thread")]
   #[ignore]
-  async fn standard_playthrough() -> Result<()> {
+  async fn remote_playthrough() -> Result<()> {
     test_quest!(quest);
 
-    macro_rules! state_is {
-      ($a:expr, $b:expr, $c:expr) => {
-        let state = quest.infer_state().await?;
-        match state {
-          QuestState::Ongoing {
-            stage,
-            part,
-            status,
-          } => assert_eq!((stage, part, status), ($a, $b, $c)),
-          QuestState::Completed => panic!("finished"),
-        };
-      };
-    }
-
-    state_is!(0, StagePart::Starter, StagePartStatus::Start);
+    state_is!(quest, 0, StagePart::Starter, StagePartStatus::Start);
 
     let issue = quest.file_issue(0).await?;
-    state_is!(0, StagePart::Solution, StagePartStatus::Start);
+    state_is!(quest, 0, StagePart::Solution, StagePartStatus::Start);
 
     quest.origin.close_issue(&issue).await?;
-    state_is!(1, StagePart::Starter, StagePartStatus::Start);
+    state_is!(quest, 1, StagePart::Starter, StagePartStatus::Start);
 
     let (pr, issue) = quest.file_feature_and_issue(1).await?;
     let pr = pr.unwrap();
-    state_is!(1, StagePart::Starter, StagePartStatus::Ongoing);
+    state_is!(quest, 1, StagePart::Starter, StagePartStatus::Ongoing);
 
     quest.origin.merge_pr(&pr).await?;
-    state_is!(1, StagePart::Solution, StagePartStatus::Start);
+    state_is!(quest, 1, StagePart::Solution, StagePartStatus::Start);
 
     let pr = quest.file_solution(1).await?;
-    state_is!(1, StagePart::Solution, StagePartStatus::Ongoing);
+    state_is!(quest, 1, StagePart::Solution, StagePartStatus::Ongoing);
 
     quest.origin.merge_pr(&pr).await?;
-    state_is!(1, StagePart::Solution, StagePartStatus::Ongoing);
+    state_is!(quest, 1, StagePart::Solution, StagePartStatus::Ongoing);
 
     quest.origin.close_issue(&issue).await?;
-    state_is!(2, StagePart::Starter, StagePartStatus::Start);
+    state_is!(quest, 2, StagePart::Starter, StagePartStatus::Start);
+
+    Ok(())
+  }
+
+  #[tokio::test(flavor = "multi_thread")]
+  #[ignore]
+  async fn local_playthrough() -> Result<()> {
+    let package = QuestPackage::load_from_file(Path::new("rqst-test.json.gz"))?;
+    test_quest!(quest, CreateSource::Package(package));
+
+    state_is!(quest, 0, StagePart::Starter, StagePartStatus::Start);
+
+    let issue = quest.file_issue(0).await?;
+    state_is!(quest, 0, StagePart::Solution, StagePartStatus::Start);
+
+    quest.origin.close_issue(&issue).await?;
+    state_is!(quest, 1, StagePart::Starter, StagePartStatus::Start);
+
+    let (pr, issue) = quest.file_feature_and_issue(1).await?;
+    let pr = pr.unwrap();
+    state_is!(quest, 1, StagePart::Starter, StagePartStatus::Ongoing);
+
+    quest.origin.merge_pr(&pr).await?;
+    state_is!(quest, 1, StagePart::Solution, StagePartStatus::Start);
+
+    // don't merge the solution PR, that doesn't exist
+
+    quest.origin.close_issue(&issue).await?;
+    state_is!(quest, 2, StagePart::Starter, StagePartStatus::Start);
 
     Ok(())
   }

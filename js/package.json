@@ -3,6 +3,9 @@
   "depot": {
     "depot-version": "0.2.18"
   },
+  "scripts": {
+    "build": "pnpm install && pnpm -r exec vite build"
+  },
   "pnpm": {
     "overrides": {
       "rollup": "npm:@rollup/wasm-node"

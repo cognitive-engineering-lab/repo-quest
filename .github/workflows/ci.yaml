@@ -1,11 +1,6 @@
 name: CI
 
-on:
-  push:
-    branches:
-      - "**"
-    tags-ignore:
-      - "v*"
+on: [push]
 
 jobs:
   Tests:
@@ -13,6 +8,9 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ./rs
       - name: Setup
         uses: ./.github/workflows/setup      
       - name: Backend tests
