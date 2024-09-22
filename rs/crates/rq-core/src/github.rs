@@ -1,6 +1,4 @@
-#![allow(dead_code)]
-
-use anyhow::{Context, Result};
+use anyhow::{ensure, Context, Result};
 use futures_util::future::try_join_all;
 use http::StatusCode;
 use octocrab::{
@@ -9,7 +7,7 @@ use octocrab::{
     issues::Issue,
     pulls::{self, PullRequest},
     repos::Branch,
-    IssueState,
+    IssueState, Label,
   },
   pulls::PullRequestHandler,
   repos::RepoHandler,
@@ -20,26 +18,82 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use specta::Type;
-use std::{fs, process::Command, sync::Arc, time::Duration};
+use std::{fs, path::Path, process::Command, sync::Arc, time::Duration};
 use tokio::{time::timeout, try_join};
 use tracing::warn;
 
-use crate::{git::MergeType, utils};
+use crate::{
+  git::{GitRepo, MergeType},
+  package::QuestPackage,
+  utils,
+};
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct FullPullRequest {
+  pub data: PullRequest,
+  pub comments: Vec<pulls::Comment>,
+}
 
 pub struct GithubRepo {
   user: String,
   name: String,
   gh: Arc<Octocrab>,
-  prs: Mutex<Option<Vec<PullRequest>>>,
+  prs: Mutex<Option<Vec<FullPullRequest>>>,
   issues: Mutex<Option<Vec<Issue>>>,
 }
 
+#[derive(Debug)]
 pub enum PullSelector {
   Branch(String),
   Label(String),
 }
 
+pub fn find_pr<'a>(
+  selector: &PullSelector,
+  prs: impl IntoIterator<Item = &'a FullPullRequest> + 'a,
+) -> Option<usize> {
+  prs.into_iter().position(|pr| match selector {
+    PullSelector::Branch(branch) => &pr.data.head.ref_field == branch,
+    PullSelector::Label(label) => pr
+      .data
+      .labels
+      .as_ref()
+      .map(|labels| labels.iter().any(|l| &l.name == label))
+      .unwrap_or(false),
+  })
+}
+
+pub fn find_issue<'a>(
+  label_name: &str,
+  issues: impl IntoIterator<Item = &'a Issue> + 'a,
+) -> Option<usize> {
+  issues
+    .into_iter()
+    .position(|issue| issue.labels.iter().any(|label| label.name == label_name))
+}
+
 const RESET_LABEL: &str = "reset";
+
+pub async fn load_user() -> Result<String> {
+  let user = octocrab::instance()
+    .current()
+    .user()
+    .await
+    .context("Failed to get current user")?;
+  Ok(user.login)
+}
+
+pub enum GitProtocol {
+  Ssh,
+  Https,
+}
+
+#[derive(PartialEq, Eq, Debug)]
+pub enum TestRepoResult {
+  HasContent,
+  NoContent,
+  NotFound,
+}
 
 impl GithubRepo {
   pub fn new(user: &str, name: &str) -> Self {
@@ -50,6 +104,12 @@ impl GithubRepo {
       prs: Mutex::new(None),
       issues: Mutex::new(None),
     }
+  }
+
+  pub async fn load(user: &str, name: &str) -> Result<Self> {
+    let repo = GithubRepo::new(user, name);
+    ensure!(repo.fetch().await?, "Not found");
+    Ok(repo)
   }
 
   /// Returns true if repo
@@ -75,100 +135,169 @@ impl GithubRepo {
     };
     let (prs, mut issues) = (pr_page.take_items(), issue_page.take_items());
 
+    let full_prs = try_join_all(prs.into_iter().map(|pr| async move {
+      let comment_pages = self
+        .pr_handler()
+        .list_comments(Some(pr.number))
+        .send()
+        .await?;
+      let comments = comment_pages.into_iter().collect::<Vec<_>>();
+      Ok::<_, anyhow::Error>(FullPullRequest { data: pr, comments })
+    }))
+    .await?;
+
     // Pull requests are considered issues, so filter them out
     issues.retain(|issue| issue.pull_request.is_none());
 
-    *self.prs.lock() = Some(prs);
+    *self.prs.lock() = Some(full_prs);
     *self.issues.lock() = Some(issues);
 
     Ok(true)
   }
 
-  pub fn remote(&self) -> String {
-    format!("git@github.com:{}/{}.git", self.user, self.name)
-  }
-
-  pub async fn has_content(&self) -> Result<bool> {
-    let result = self.repo_handler().list_commits().send().await;
-    match result {
-      Err(octocrab::Error::GitHub {
-        source: GitHubError {
-          status_code: StatusCode::NO_CONTENT,
-          ..
-        },
-        ..
-      }) => Ok(false),
-      Ok(_) => Ok(true),
-      Err(e) => Err(e.into()),
+  pub fn remote(&self, protocol: GitProtocol) -> String {
+    match protocol {
+      GitProtocol::Https => format!("https://github.com/{}/{}", self.user, self.name),
+      GitProtocol::Ssh => format!("git@github.com:{}/{}.git", self.user, self.name),
     }
   }
 
-  pub async fn copy_from(&self, base: &GithubRepo) -> Result<()> {
+  pub async fn test_repo(&self) -> Result<TestRepoResult> {
+    let result = self.repo_handler().list_commits().send().await;
+    match result {
+      Err(octocrab::Error::GitHub {
+        source:
+          GitHubError {
+            status_code: StatusCode::NO_CONTENT | StatusCode::CONFLICT,
+            ..
+          },
+        ..
+      }) => Ok(TestRepoResult::NoContent),
+      Err(octocrab::Error::GitHub {
+        source: GitHubError {
+          status_code: StatusCode::NOT_FOUND,
+          ..
+        },
+        ..
+      }) => Ok(TestRepoResult::NotFound),
+      Ok(_) => Ok(TestRepoResult::HasContent),
+      Err(e) => {
+        if let octocrab::Error::GitHub {
+          source: GitHubError { status_code, .. },
+          ..
+        } = &e
+        {
+          tracing::debug!("Error: {status_code:?}");
+        }
+
+        Err(e.into())
+      }
+    }
+  }
+
+  pub fn clone(&self, path: &Path) -> Result<GitRepo> {
+    let remote = self.remote(GitProtocol::Ssh);
+    let status = Command::new("git")
+      .args(["clone", &remote])
+      .current_dir(path)
+      .status()?;
+    ensure!(status.success(), "`git clone {remote}` failed");
+    let repo = GitRepo::new(&path.join(&self.name));
+    Ok(repo)
+  }
+
+  // There is some unknown delay between creating a repo from a template and its contents being added.
+  // We have to wait until that happens
+  async fn wait_for_content(&self, expected: TestRepoResult) -> Result<()> {
+    const RETRY_INTERVAL: u64 = 500;
+    const RETRY_TIMEOUT: u64 = 5000;
+
+    let strategy = tokio_retry::strategy::FixedInterval::from_millis(RETRY_INTERVAL);
+    let has_content = tokio_retry::Retry::spawn(strategy, || async {
+      match self.test_repo().await {
+        Ok(actual) if expected == actual => Ok(()),
+        result => {
+          tracing::debug!("wait status: {result:?}");
+          Err(result)
+        }
+      }
+    });
+    let _ = timeout(Duration::from_millis(RETRY_TIMEOUT), has_content)
+      .await
+      .context("Repo is still empty after timeout")?;
+
+    Ok(())
+  }
+
+  async fn create_labels(&self, labels: &[Label]) -> Result<()> {
+    let issues = self.issue_handler();
+    try_join_all(labels.iter().filter(|label| !label.default).map(|label| {
+      issues.create_label(
+        &label.name,
+        &label.color,
+        label.description.as_deref().unwrap_or(""),
+      )
+    }))
+    .await?;
+    Ok(())
+  }
+
+  async fn unsubscribe(&self) -> Result<()> {
+    let route = format!("/repos/{}/{}/subscription", self.user, self.name);
+    self
+      .gh
+      .put::<serde_json::Value, _, _>(
+        route,
+        Some(&json!({
+            "subscribed": false,
+            "ignored": true
+        })),
+      )
+      .await
+      .context("Failed to unsubscribe from repo")?;
+    Ok(())
+  }
+
+  pub async fn instantiate_from_package(package: &QuestPackage) -> Result<GithubRepo> {
+    let user = load_user().await?;
+    let params = json!({
+        "name": &package.config.repo,
+    });
+    octocrab::instance()
+      .post::<_, serde_json::Value>("/user/repos", Some(&params))
+      .await
+      .context("Failed to create repo")?;
+    let repo = GithubRepo::new(&user, &package.config.repo);
+    repo.wait_for_content(TestRepoResult::NoContent).await?;
+    repo.unsubscribe().await?;
+    repo.create_labels(&package.labels).await?;
+    Ok(repo)
+  }
+
+  pub async fn instantiate_from_repo(base: &GithubRepo) -> Result<GithubRepo> {
+    let user = load_user().await?;
+    let name = &base.name;
     base
       .repo_handler()
-      .generate(&self.name)
-      .owner(&self.user)
+      .generate(name)
+      .owner(&user)
       .private(true)
       .send()
       .await
       .with_context(|| format!("Failed to clone template repo {}/{}", base.user, base.name))?;
 
-    // There is some unknown delay between creating a repo from a template and its contents being added.
-    // We have to wait until that happens.
-    {
-      const RETRY_INTERVAL: u64 = 500;
-      const RETRY_TIMEOUT: u64 = 5000;
-
-      let strategy = tokio_retry::strategy::FixedInterval::from_millis(RETRY_INTERVAL);
-      let has_content = tokio_retry::Retry::spawn(strategy, || async {
-        match self.has_content().await {
-          Ok(true) => Ok(()),
-          _ => Err(()),
-        }
-      });
-      let _ = timeout(Duration::from_millis(RETRY_TIMEOUT), has_content)
-        .await
-        .context("Repo is still empty after timeout")?;
-    }
+    let repo = GithubRepo::new(&user, name);
+    repo.wait_for_content(TestRepoResult::HasContent).await?;
 
     // Unsubscribe from repo notifications to avoid annoying emails.
-    {
-      let route = format!("/repos/{}/{}/subscription", self.user, self.name);
-      let _response = self
-        .gh
-        .put::<serde_json::Value, _, _>(
-          route,
-          Some(&json!({
-              "subscribed": false,
-              "ignored": true
-          })),
-        )
-        .await
-        .context("Failed to unsubscribe from repo")?;
-    }
+    repo.unsubscribe().await?;
 
     // Copy all issue labels.
-    {
-      let mut page = base.issue_handler().list_labels_for_repo().send().await?;
-      let labels = page.take_items();
+    let mut page = base.issue_handler().list_labels_for_repo().send().await?;
+    let labels = page.take_items();
+    repo.create_labels(&labels).await?;
 
-      let issues = self.issue_handler();
-      try_join_all(
-        labels
-          .into_iter()
-          .filter(|label| !label.default)
-          .map(|label| {
-            issues.create_label(
-              label.name,
-              label.color,
-              label.description.unwrap_or_default(),
-            )
-          }),
-      )
-      .await?;
-    }
-
-    Ok(())
+    Ok(repo)
   }
 
   pub fn repo_handler(&self) -> RepoHandler {
@@ -185,22 +314,15 @@ impl GithubRepo {
     self.gh.pulls(&self.user, &self.name)
   }
 
-  pub fn prs(&self) -> MappedMutexGuard<'_, Vec<PullRequest>> {
+  pub fn prs(&self) -> MappedMutexGuard<'_, Vec<FullPullRequest>> {
     MutexGuard::map(self.prs.lock(), |opt| {
       opt.as_mut().expect("PRs not populated")
     })
   }
 
-  pub fn pr(&self, selector: &PullSelector) -> Option<MappedMutexGuard<'_, PullRequest>> {
+  pub fn pr(&self, selector: &PullSelector) -> Option<MappedMutexGuard<'_, FullPullRequest>> {
     let prs = self.prs();
-    let idx = prs.iter().position(|pr| match selector {
-      PullSelector::Branch(branch) => &pr.head.ref_field == branch,
-      PullSelector::Label(label) => pr
-        .labels
-        .as_ref()
-        .map(|labels| labels.iter().any(|l| &l.name == label))
-        .unwrap_or(false),
-    })?;
+    let idx = find_pr(selector, prs.iter())?;
     Some(MappedMutexGuard::map(prs, |prs| &mut prs[idx]))
   }
 
@@ -216,40 +338,49 @@ impl GithubRepo {
 
   pub fn issue(&self, label_name: &str) -> Option<MappedMutexGuard<'_, Issue>> {
     let issues = self.issues();
-    let idx = issues
-      .iter()
-      .position(|issue| issue.labels.iter().any(|label| label.name == label_name))?;
+    let idx = find_issue(label_name, issues.iter())?;
     Some(MappedMutexGuard::map(issues, |issues| &mut issues[idx]))
   }
 
   pub async fn copy_pr(
     &self,
-    base: &GithubRepo,
-    base_pr: &PullRequest,
+    pr: &FullPullRequest,
     head: &str,
     merge_type: MergeType,
   ) -> Result<PullRequest> {
     let pulls = self.pr_handler();
-    let mut body = base_pr
+    let mut body = pr
+      .data
       .body
       .as_ref()
       .expect("Author error: PR missing body")
       .clone();
 
-    let is_reset = matches!(merge_type, MergeType::HardReset);
-    if is_reset {
-      body.push_str(r#"
+    let is_reset = match merge_type {
+      MergeType::SolutionReset => {
+        body.push_str(r#"
 
 Note: due to a merge conflict, this PR is a hard reset to the reference solution, and may have overwritten your previous changes."#);
-    }
+        true
+      }
+
+      MergeType::StarterReset => {
+        body.push_str(r#"
+
+Note: due to a merge conflict, this PR is a hard reset to the starter code, and may have overwritten your previous changes."#);
+        true
+      }
+
+      MergeType::Success => false,
+    };
 
     let request = pulls
       .create(
-        base_pr
+        pr.data
           .title
           .as_ref()
           .expect("Author error: PR missing title"),
-        &base_pr.head.ref_field,
+        &pr.data.head.ref_field,
         "main", // don't copy base
       )
       .body(body);
@@ -257,7 +388,7 @@ Note: due to a merge conflict, this PR is a hard reset to the reference solution
 
     // TODO: lots of parallelism below we should exploit
 
-    let mut labels = match &base_pr.labels {
+    let mut labels = match &pr.data.labels {
       Some(labels) => labels
         .iter()
         .map(|label| label.name.clone())
@@ -272,15 +403,8 @@ Note: due to a merge conflict, this PR is a hard reset to the reference solution
       .add_labels(self_pr.number, &labels)
       .await?;
 
-    let comment_pages = base
-      .pr_handler()
-      .list_comments(Some(base_pr.number))
-      .send()
-      .await?;
-    let comments = comment_pages.into_iter().collect::<Vec<_>>();
-
-    for comment in comments {
-      self.copy_pr_comment(self_pr.number, &comment, head).await?;
+    for comment in &pr.comments {
+      self.copy_pr_comment(self_pr.number, comment, head).await?;
     }
 
     Ok(self_pr)
@@ -320,7 +444,7 @@ Note: due to a merge conflict, this PR is a hard reset to the reference solution
             warn!("No PR with label {label}");
             return None;
           };
-          pr.number
+          pr.data.number
         }
         "issue" => {
           let Some(issue) = self.issue(label) else {
@@ -336,7 +460,6 @@ Note: due to a merge conflict, this PR is a hard reset to the reference solution
     });
     utils::replace_many_ranges(&mut new_body, substitutions);
 
-    // todo!()
     new_body
   }
 

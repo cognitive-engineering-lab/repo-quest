@@ -4,7 +4,7 @@ identifier = "com.repo-quest.app"
 
 [build]
 before-dev-command = "cd ../../js && depot --no-fullscreen -p repo-quest build --watch"
-before-build-command = "cd ../../js && pnpm install && pnpm -r exec vite build"
+before-build-command = "cd ../../js && pnpm run build"
 dev-url = "http://localhost:5173"
 frontend-dist = "../../../js/packages/repo-quest/dist"
 

@@ -1,14 +1,16 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::env;
-
-use tauri::Manager;
-use tokio::runtime::Handle;
+use tracing_subscriber::{fmt, layer::SubscriberExt, prelude::*, EnvFilter};
 
 #[tokio::main]
 async fn main() {
-  tauri::async_runtime::set(Handle::current());
+  tracing_subscriber::registry()
+    .with(fmt::layer())
+    .with(EnvFilter::from_default_env())
+    .init();
+
+  tauri::async_runtime::set(tokio::runtime::Handle::current());
 
   let specta_builder = repo_quest::specta_builder();
   tauri::Builder::default()
@@ -18,6 +20,7 @@ async fn main() {
     .setup(move |app| {
       #[cfg(debug_assertions)]
       {
+        use tauri::Manager;
         let window = app.get_webview_window("main").unwrap();
         window.open_devtools();
       }

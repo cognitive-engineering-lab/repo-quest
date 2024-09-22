@@ -167,6 +167,7 @@ button, input[type=submit] {
 
   table {
     width: max-content;
+    line-height: 1.5em;
 
     td {
       padding-bottom: 0.5rem;
@@ -233,6 +234,6 @@ dialog {
   }
 }
 
-.dir-picker + code {
+.file-picker + code {
   margin-left: 0.5rem;
 }

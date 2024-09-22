@@ -2,6 +2,15 @@
 resolver = "2"
 members = ["crates/*"]
 
+[workspace.dependencies]
+tokio = "1.38.0"
+serde = "1.0.204"
+anyhow = "1.0.86"
+tracing = "0.1.40"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+specta = "=2.0.0-rc.20"
+serde_json = "1.0.120"
+
 [profile.release]
 strip = true
 lto = true

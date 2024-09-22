@@ -9,6 +9,7 @@ import ReactDOM from "react-dom/client";
 import {
   events,
   type QuestConfig,
+  type QuestLocation,
   type QuestState,
   type Result,
   type Stage,
@@ -191,9 +192,11 @@ let InitForm = () => {
   );
 };
 
+const QUESTS = ["cognitive-engineering-lab/rqst-async"];
+
 let NewQuest = () => {
   let [dir, setDir] = useState<string | undefined>(undefined);
-  let [quest, setQuest] = useState<string | undefined>(undefined);
+  let [quest, setQuest] = useState<QuestLocation | undefined>(undefined);
   let [submit, setSubmit] = useState(false);
   return !submit ? (
     <div className="new-quest">
@@ -206,35 +209,59 @@ let NewQuest = () => {
             <td>Quest:</td>
             <td>
               <select
-                onChange={e => setQuest(e.target.value)}
+                onChange={e =>
+                  setQuest({ type: "Remote", value: e.target.value })
+                }
                 defaultValue={""}
               >
                 <option disabled={true} value="">
                   Choose a quest
                 </option>
-                <option value="cognitive-engineering-lab/rqst-async">
-                  cognitive-engineering-lab/rqst-async
-                </option>
+                {QUESTS.map(quest => (
+                  <option
+                    key={quest}
+                    value="cognitive-engineering-lab/rqst-async"
+                  >
+                    {quest.split("/")[1]}
+                  </option>
+                ))}
               </select>
 
+              <br />
               <span className="separator">or</span>
 
               <input
                 type="text"
-                placeholder="Enter a GitHub repo"
+                placeholder="Enter a GitHub repo like foo/bar"
                 onChange={e => {
-                  if (e.target.checkValidity()) setQuest(e.target.value);
+                  if (e.target.checkValidity())
+                    setQuest({ type: "Remote", value: e.target.value });
                   else setQuest(undefined);
                 }}
                 pattern="[^\/]+\/.+"
               />
+
+              <br />
+              <span className="separator">or</span>
+
+              <button
+                className="file-picker"
+                type="button"
+                onClick={async () => {
+                  let file = await dialog.open();
+                  if (file !== null) setQuest({ type: "Local", value: file });
+                }}
+              >
+                Choose a local package file
+              </button>
+              {quest && quest.type === "Local" && <code>{quest.value}</code>}
             </td>
           </tr>
           <tr>
             <td>Directory:</td>
             <td>
               <button
-                className="dir-picker"
+                className="file-picker"
                 type="button"
                 onClick={async () => {
                   let dir = await dialog.open({ directory: true });
@@ -435,37 +462,43 @@ let StageView: React.FC<{
               </span>
             )
           ) : state.status === "Start" ? (
-            <details className="help">
-              <summary>Help</summary>
-              <div>
-                Try first learning from our reference solution and incorporating
-                it into your codebase. If that doesn't work, we can replace your
-                code with ours.
-              </div>
-              <div>
+            stage.reference_solution_pr_url ? (
+              <details className="help">
+                <summary>Help</summary>
                 <div>
-                  <Link href={stage.reference_solution_pr_url!}>
-                    View reference solution
-                  </Link>
+                  Try first learning from our reference solution and
+                  incorporating it into your codebase. If that doesn't work, we
+                  can replace your code with ours.
                 </div>
                 <div>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      loader.loadAwait(
-                        tryAwait(
-                          commands.fileSolution(index),
-                          "Filing solution PR",
-                          setMessage
+                  <div>
+                    <Link href={stage.reference_solution_pr_url}>
+                      View reference solution
+                    </Link>
+                  </div>
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        loader.loadAwait(
+                          tryAwait(
+                            commands.fileSolution(index),
+                            "Filing solution PR",
+                            setMessage
+                          )
                         )
-                      )
-                    }
-                  >
-                    File reference solution
-                  </button>
+                      }
+                    >
+                      File reference solution
+                    </button>
+                  </div>
                 </div>
-              </div>
-            </details>
+              </details>
+            ) : (
+              <span className="status">
+                Waiting for you to solve and close issue
+              </span>
+            )
           ) : (
             <span className="status">
               Waiting for you to merge solution PR and close issue

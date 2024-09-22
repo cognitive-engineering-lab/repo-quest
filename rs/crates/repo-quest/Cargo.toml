@@ -9,22 +9,15 @@ tauri-build = { version = "2.0.0-rc", features = ["config-toml"] }
 
 [dependencies]
 tauri = { version = "2.0.0-rc", features = ["config-toml"] }
-serde = { version = "1.0.204", features = ["derive"] }
-serde_json = "1.0.120"
-anyhow = "1.0.86"
-futures-util = "0.3.30"
-home = "0.5.9"
-http = "1.1.0"
-octocrab = "0.38.0"
-parking_lot = "0.12.3"
-regex = "1.10.5"
-tokio = { version = "1.38.0", features = ["full"] }
-tokio-retry = "0.3.0"
-toml = "0.8.15"
-tracing = "0.1.40"
 tauri-plugin-dialog = "2.0.0-rc"
 tauri-plugin-shell = "2.0.0-rc"
-specta = { version = "=2.0.0-rc.20", features = ["serde_json"] }
+tokio = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+specta = { workspace = true }
 specta-typescript = "0.0.7"
 tauri-specta = { version = "=2.0.0-rc.19", features = ["derive", "typescript"] }
-which = "6.0.3"
+rq-core = { path = "../rq-core" }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
