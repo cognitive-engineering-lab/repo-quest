@@ -11,7 +11,6 @@ use anyhow::{ensure, Context, Result};
 use crate::{
   github::{GitProtocol, GithubRepo},
   package::QuestPackage,
-  quest::QuestConfig,
   template::QuestTemplate,
 };
 
