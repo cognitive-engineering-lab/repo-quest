@@ -122,6 +122,7 @@ impl QuestTemplate for PackageTemplate {
       .iter()
       .map(|patch| patch.patch.as_str())
       .collect::<Vec<_>>();
+
     repo.apply_patch(&patches)
   }
 

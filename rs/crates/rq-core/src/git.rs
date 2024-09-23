@@ -242,6 +242,24 @@ impl GitRepo {
       fs::write(&abs_path, contents)
         .with_context(|| format!("Failed to write: {}", abs_path.display()))?;
     }
+
+    // HACK:Eventually we should either directly package a git repo in the file
+    // or include the permissions
+    #[cfg(unix)]
+    {
+      use std::os::unix::fs::PermissionsExt;
+      let hooks_dir = self.path.join(".githooks");
+      if hooks_dir.exists() {
+        let hooks = fs::read_dir(&hooks_dir)?;
+        for hook in hooks {
+          let hook = hook?;
+          let mut perms = hook.metadata()?.permissions();
+          perms.set_mode(perms.mode() | 0o111);
+          fs::set_permissions(hook.path(), perms)?;
+        }
+      }
+    }
+
     git!(self, "add .")?;
     git!(self, "commit -m 'Initial commit'")?;
     git!(self, "tag {INITIAL_TAG}")?;
@@ -258,6 +276,24 @@ impl GitRepo {
     git!(self, "commit -m 'Add meta'")?;
     git!(self, "push -u origin meta")?;
     git!(self, "checkout main")?;
+
+    Ok(())
+  }
+
+  pub fn install_hooks(&self) -> Result<()> {
+    let hooks_dir = self.path.join(".githooks");
+    if hooks_dir.exists() {
+      let post_checkout = hooks_dir.join("post-checkout");
+      if post_checkout.exists() {
+        let status = Command::new(post_checkout)
+          .current_dir(&self.path)
+          .status()
+          .context("post-checkout hook failed")?;
+        ensure!(status.success(), "post-checkout hook failed");
+      }
+
+      git!(self, "config --local core.hooksPath .githooks")?;
+    }
 
     Ok(())
   }

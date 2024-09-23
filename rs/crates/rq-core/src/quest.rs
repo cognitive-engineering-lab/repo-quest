@@ -32,11 +32,13 @@ impl StateEmitter for NoopEmitter {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
 pub struct QuestConfig {
   pub title: String,
   pub author: String,
   pub repo: String,
   pub stages: Vec<Stage>,
+  pub read_only: Option<Vec<PathBuf>>,
   pub r#final: Option<serde_json::Value>,
 }
 
@@ -140,6 +142,8 @@ impl Quest {
       origin_git,
       config,
     } = template.instantiate(&dir).await?;
+
+    origin_git.install_hooks()?;
 
     Self::load_core(
       dir.join(&config.repo),
