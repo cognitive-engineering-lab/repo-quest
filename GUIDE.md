@@ -39,9 +39,9 @@ RepoQuest has some sharp edges. Some are inherent to the quest concept, and some
 
 * Unlike a normal textbook, a quest is highly stateful. Once you go to a new chapter, you can't go back to the previous one, or undo changes (without deleting the repo and starting again).
 
-* A quest is setup such that you should write code in one set of files, and the starter code is provided in a different set of files. That way, the starter code should never cause a merge conflict with your changes. However, if you commit changes outside the "game area" (so to speak), you will probably cause a merge conflict.
+* A quest is setup such that you should write code in one place (file, block of text, etc.), and starter code is provided in a different place. That way, the starter code should never cause a merge conflict with your changes. However, if you commit changes outside the "game area" (so to speak), you will probably cause a merge conflict.
 
-  In these cases, RepoQuest's fallback behavior is to create a PR that hard resets your repo to the reference repo. This lets you proceed with the quest, but it replaces your running solution with the reference solution. These PRs will be tagged with a `reset` label.
+  In these cases, RepoQuest's fallback behavior is to create a PR that hard resets your repo to a known good state. This lets you proceed with the quest, but it replaces your running solution with the reference solution. These PRs will be tagged with a `reset` label.
 
   The goal of RepoQuest is to avoid hard resets at all costs (except when you explicitly ask for the reference solution). If you encounter a hard reset, please let us know!
 
