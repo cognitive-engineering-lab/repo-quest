@@ -16,7 +16,7 @@ Run `repo-quest` from the command line.
 
 ### Windows
 
-Not yet supported!
+Search for "RepoQuest" in your applications list and run it.
 
 ## Starting a Quest
 
@@ -29,7 +29,7 @@ Not yet supported!
 
 A quest is a series of programming challenges, or chapters. At each step, you will be given an issue describing the challenge and relevant background. You may also be given starter code that is part of the challenge.
 
-To start a chapter, click the "File issue" button. If a starter PR is filed, then review it and merge it. Then read the filed issue to understand your task. Then try to complete the task. Once you feel like you're done, then close the issue to start the next chapter.
+To start a chapter, click the "File issue" button. If a starter PR is filed, then review it and merge it. Then read the filed issue to understand your task. Then try to complete the task. Once you think you're done, then close the issue to start the next chapter.
 
 If you need help, you can review our reference solution for a given chapter. Click the "Help" button for a link. If you're still lost, you can replace your code with the reference solution by clicking "File reference solution" under "Help". This will create a solution PR that you can review and merge.
 

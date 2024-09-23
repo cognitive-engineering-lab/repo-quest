@@ -18,19 +18,16 @@ We have prebuilt binaries for MacOS (x86-64 and ARM64), Linux (x86-64), and Wind
    ```console
    xattr -cr /Applications/RepoQuest.app
    ```
-4. Launch RepoQuest, e.g. by opening Spotlight (Cmd+Space) and searching for "RepoQuest".
 
 #### Linux
 
 1. Download the relevant package file for your distro (`.deb` for Ubuntu, `.rpm` for Fedora, `.AppImage` otherwise).
 2. Install it through your package manager (e.g., `apt install ./the-file.deb`).
-3. Launch RepoQuest by running `repo-quest` from the command line.
 
 #### Windows
 
 1. Download the installer (either `.msi` or `.exe`) for your platform (arm64 for ARM chips, x64 otherwise).
 2. Run the installer.
-3. Launch RepoQuest, e.g. by searching for "RepoQuest" in your applications list.
 
 Note that Windows will aggressively prevent you from running the installer. For example, in Edge you will need to right click the download and select "Keep", then hit "Show More", then hit "Keep anyway". When you open the installer, Windows Defender will stop it from running &mdash; again, hit "More Info" and click "Run anyway".
 
@@ -57,11 +54,11 @@ Then install the generated bundle. (TODO: flesh this out)
 
 To setup RepoQuest, you first need to have Git installed on your computer with the `git` executable accessible on your PATH. You will need a Github account.
 
-### Option A: Github Token
+### Github Token
 
 You need to generate a Github access token that allows RepoQuest to perform automatically Github actions (e.g., filing an issue). You can do this in one of two ways:
 
-#### Option B: Generate a one-off token
+#### Option A: Generate a one-off token
 
 Go to <https://github.com/settings/tokens/new>. Select the **repo** scope. Click "Generate Token" at the bottom. Copy the token into the file `~/.rqst-token`. On MacOS, you can run:
 
@@ -71,7 +68,7 @@ pbpaste > ~/.rqst-token
 
 *Note:* these tokens will expire after a few months. You will have to refresh the token if you want to use RepoQuest after its expiration.
 
-#### Use the github CLI
+#### Option B: Use the github CLI
 
 Install the `gh` tool following these instructions: <https://github.com/cli/cli#installation>
 
