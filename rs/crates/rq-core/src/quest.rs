@@ -7,7 +7,7 @@ use crate::{
   stage::{Stage, StagePart, StagePartStatus},
   template::{InstanceOutputs, PackageTemplate, QuestTemplate, RepoTemplate},
 };
-use anyhow::Result;
+use anyhow::{Context, Result};
 use http::StatusCode;
 use octocrab::{
   models::{issues::Issue, pulls::PullRequest, IssueState},
@@ -54,7 +54,8 @@ pub struct StageState {
 impl QuestConfig {
   pub fn load(repo: &GitRepo, remote: &str) -> Result<Self> {
     let contents = repo.show(&format!("{remote}/meta"), "rqst.toml")?;
-    let config = toml::de::from_str::<QuestConfig>(&contents)?;
+    let config = toml::de::from_str::<QuestConfig>(&contents)
+      .context("Failed to parse quest configuration")?;
     Ok(config)
   }
 }
@@ -159,14 +160,22 @@ impl Quest {
   pub async fn load(dir: PathBuf, state_event: Box<dyn StateEmitter>) -> Result<Self> {
     let user = load_user().await?;
     let origin_git = GitRepo::new(&dir);
-    let config = QuestConfig::load(&origin_git, "origin")?;
-    let origin = GithubRepo::load(&user, &config.repo).await?;
-    let template: Box<dyn QuestTemplate> = if origin_git.has_upstream()? {
-      let upstream = GithubRepo::load(&config.author, &config.repo).await?;
+    let config = QuestConfig::load(&origin_git, "origin").context("Failed to load quest config")?;
+    let origin = GithubRepo::load(&user, &config.repo)
+      .await
+      .context("Failed to load GitHub repo")?;
+    let has_upstream = origin_git
+      .has_upstream()
+      .context("Failed to test for upstream")?;
+    let template: Box<dyn QuestTemplate> = if has_upstream {
+      let upstream = GithubRepo::load(&config.author, &config.repo)
+        .await
+        .context("Failed to load upstream GitHub repo")?;
       Box::new(RepoTemplate(upstream))
     } else {
       let contents = origin_git.show_bin("meta", "package.json.gz")?;
-      let package = QuestPackage::load_from_blob(&contents)?;
+      let package =
+        QuestPackage::load_from_blob(&contents).context("Failed to load quest package")?;
       Box::new(PackageTemplate(package))
     };
 
@@ -341,17 +350,25 @@ impl Quest {
   }
 
   async fn file_pr(&self, base_branch: &str, target_branch: &str) -> Result<PullRequest> {
-    self.origin_git.checkout_main_and_pull()?;
+    self
+      .origin_git
+      .checkout_main_and_pull()
+      .context("Failed to checkout main and pull")?;
 
-    let (branch_head, merge_type) =
-      self
-        .origin_git
-        .create_branch_from(&*self.template, base_branch, target_branch)?;
+    let (branch_head, merge_type) = self
+      .origin_git
+      .create_branch_from(&*self.template, base_branch, target_branch)
+      .with_context(|| format!("Failed to create new branch: {base_branch} -> {target_branch}"))?;
 
     let pr = self
       .template
-      .pull_request(&PullSelector::Branch(target_branch.into()))?;
-    let new_pr = self.origin.copy_pr(&pr, &branch_head, merge_type).await?;
+      .pull_request(&PullSelector::Branch(target_branch.into()))
+      .with_context(|| format!("Failed to fetch pull request for {target_branch}"))?;
+    let new_pr = self
+      .origin
+      .copy_pr(&pr, &branch_head, merge_type)
+      .await
+      .context("Failed to copy PR to repo")?;
 
     tracing::debug!("Filed PR: {base_branch} -> {target_branch}");
 
@@ -360,8 +377,15 @@ impl Quest {
 
   async fn file_issue(&self, stage_index: usize) -> Result<Issue> {
     let stage = self.stage(stage_index);
-    let issue = self.template.issue(&stage.label)?;
-    let new_issue = self.origin.copy_issue(&issue).await?;
+    let issue = self
+      .template
+      .issue(&stage.label)
+      .with_context(|| format!("Failed to get issue for stage: {}", stage.label))?;
+    let new_issue = self
+      .origin
+      .copy_issue(&issue)
+      .await
+      .context("Failed to copy issue to repo")?;
     self.infer_state_update().await?;
     Ok(new_issue)
   }
@@ -381,7 +405,8 @@ impl Quest {
     let pr = if !stage.no_starter() {
       let pr = self
         .file_pr(&base_branch, &stage.branch_name(StagePart::Starter))
-        .await?;
+        .await
+        .context("Failed to file starter PR")?;
       Some(pr)
     } else {
       None
@@ -390,7 +415,10 @@ impl Quest {
     // Need to refresh our state for issues that refer to the filed PR
     self.infer_state_update().await?;
 
-    let issue = self.file_issue(stage_index).await?;
+    let issue = self
+      .file_issue(stage_index)
+      .await
+      .context("Failed to file issue")?;
     Ok((pr, issue))
   }
 
@@ -409,7 +437,8 @@ impl Quest {
     };
     let pr = self
       .file_pr(&base, &stage.branch_name(StagePart::Solution))
-      .await?;
+      .await
+      .context("Failed to file solution PR")?;
 
     self.infer_state_update().await?;
 
@@ -451,18 +480,25 @@ impl Quest {
       .collect()
   }
 
-  pub async fn hard_reset(&self, stage_index: usize) -> Result<()> {
+  pub async fn skip_to_stage(&self, stage_index: usize) -> Result<()> {
     let prev_stage = self.stage(stage_index - 1);
     let branch = format!("{UPSTREAM}/{}", prev_stage.branch_name(StagePart::Solution));
-    self.origin_git.reset(&branch)?;
-    let issue = self.file_issue(stage_index - 1).await?;
+    self
+      .origin_git
+      .reset(&branch)
+      .with_context(|| format!("Failed to reset to branch: {branch}"))?;
+    let issue = self
+      .file_issue(stage_index - 1)
+      .await
+      .context("Failed to file issue for preceding stage")?;
     self
       .origin
       .issue_handler()
       .update(issue.number)
       .state(IssueState::Closed)
       .send()
-      .await?;
+      .await
+      .with_context(|| format!("Failed to close issue: {}", issue.number))?;
 
     self.infer_state_update().await?;
     Ok(())
@@ -641,10 +677,10 @@ mod test {
 
     state_is!(0, StagePart::Starter, StagePartStatus::Start);
 
-    quest.hard_reset(1).await?;
+    quest.skip_to_stage(1).await?;
     state_is!(1, StagePart::Starter, StagePartStatus::Start);
 
-    quest.hard_reset(2).await?;
+    quest.skip_to_stage(2).await?;
     state_is!(2, StagePart::Starter, StagePartStatus::Start);
 
     Ok(())

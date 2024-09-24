@@ -140,7 +140,8 @@ impl GithubRepo {
         .pr_handler()
         .list_comments(Some(pr.number))
         .send()
-        .await?;
+        .await
+        .with_context(|| format!("Failed to fetch comments for PR {}", pr.number))?;
       let comments = comment_pages.into_iter().collect::<Vec<_>>();
       Ok::<_, anyhow::Error>(FullPullRequest { data: pr, comments })
     }))
@@ -197,11 +198,15 @@ impl GithubRepo {
 
   pub fn clone(&self, path: &Path) -> Result<GitRepo> {
     let remote = self.remote(GitProtocol::Ssh);
-    let status = Command::new("git")
+    let output = Command::new("git")
       .args(["clone", &remote])
       .current_dir(path)
-      .status()?;
-    ensure!(status.success(), "`git clone {remote}` failed");
+      .output()?;
+    ensure!(
+      output.status.success(),
+      "`git clone {remote}` failed, stderr:\n{}",
+      String::from_utf8(output.stderr)?
+    );
     let repo = GitRepo::new(&path.join(&self.name));
     Ok(repo)
   }
@@ -238,7 +243,8 @@ impl GithubRepo {
         label.description.as_deref().unwrap_or(""),
       )
     }))
-    .await?;
+    .await
+    .context("Failed to create labels")?;
     Ok(())
   }
 
@@ -259,7 +265,7 @@ impl GithubRepo {
   }
 
   pub async fn instantiate_from_package(package: &QuestPackage) -> Result<GithubRepo> {
-    let user = load_user().await?;
+    let user = load_user().await.context("Failed to load user")?;
     let params = json!({
         "name": &package.config.repo,
     });
@@ -268,9 +274,18 @@ impl GithubRepo {
       .await
       .context("Failed to create repo")?;
     let repo = GithubRepo::new(&user, &package.config.repo);
-    repo.wait_for_content(TestRepoResult::NoContent).await?;
-    repo.unsubscribe().await?;
-    repo.create_labels(&package.labels).await?;
+    repo
+      .wait_for_content(TestRepoResult::NoContent)
+      .await
+      .context("Github repo was not properly initialized")?;
+    repo
+      .unsubscribe()
+      .await
+      .context("Failed to unsubscribe from repo")?;
+    repo
+      .create_labels(&package.labels)
+      .await
+      .context("Failed to transfer package labels to repo")?;
     Ok(repo)
   }
 
@@ -287,15 +302,29 @@ impl GithubRepo {
       .with_context(|| format!("Failed to clone template repo {}/{}", base.user, base.name))?;
 
     let repo = GithubRepo::new(&user, name);
-    repo.wait_for_content(TestRepoResult::HasContent).await?;
+    repo
+      .wait_for_content(TestRepoResult::HasContent)
+      .await
+      .context("Github repo was not properly initialized")?;
 
     // Unsubscribe from repo notifications to avoid annoying emails.
-    repo.unsubscribe().await?;
+    repo
+      .unsubscribe()
+      .await
+      .context("Failed to unsubscribe from repo")?;
 
     // Copy all issue labels.
-    let mut page = base.issue_handler().list_labels_for_repo().send().await?;
+    let mut page = base
+      .issue_handler()
+      .list_labels_for_repo()
+      .send()
+      .await
+      .context("Failed to fetch labels from upstream repo")?;
     let labels = page.take_items();
-    repo.create_labels(&labels).await?;
+    repo
+      .create_labels(&labels)
+      .await
+      .context("Failed to transfer upstream labels to repo")?;
 
     Ok(repo)
   }
@@ -305,7 +334,12 @@ impl GithubRepo {
   }
 
   pub async fn branches(&self) -> Result<Vec<Branch>> {
-    let pages = self.repo_handler().list_branches().send().await?;
+    let pages = self
+      .repo_handler()
+      .list_branches()
+      .send()
+      .await
+      .context("Failed to fetch branches")?;
     let branches = pages.into_iter().collect::<Vec<_>>();
     Ok(branches)
   }
@@ -384,7 +418,7 @@ Note: due to a merge conflict, this PR is a hard reset to the starter code, and 
         "main", // don't copy base
       )
       .body(body);
-    let self_pr = request.send().await?;
+    let self_pr = request.send().await.context("Failed to create new PR")?;
 
     // TODO: lots of parallelism below we should exploit
 
@@ -401,10 +435,14 @@ Note: due to a merge conflict, this PR is a hard reset to the starter code, and 
     self
       .issue_handler()
       .add_labels(self_pr.number, &labels)
-      .await?;
+      .await
+      .context("Failed to add labels to PR")?;
 
     for comment in &pr.comments {
-      self.copy_pr_comment(self_pr.number, comment, head).await?;
+      self
+        .copy_pr_comment(self_pr.number, comment, head)
+        .await
+        .context("Failed to add comment to PR")?;
     }
 
     Ok(self_pr)
@@ -478,7 +516,8 @@ Note: due to a merge conflict, this PR is a hard reset to the starter code, and 
           .collect::<Vec<_>>(),
       )
       .send()
-      .await?;
+      .await
+      .with_context(|| format!("Failed to create issue: {}", issue.title))?;
     Ok(issue)
   }
 
@@ -488,17 +527,27 @@ Note: due to a merge conflict, this PR is a hard reset to the starter code, and 
       .update(issue.number)
       .state(IssueState::Closed)
       .send()
-      .await?;
+      .await
+      .with_context(|| format!("Failed to close issue: {}", issue.number))?;
     Ok(())
   }
 
   pub async fn merge_pr(&self, pr: &PullRequest) -> Result<()> {
-    self.pr_handler().merge(pr.number).send().await?;
+    self
+      .pr_handler()
+      .merge(pr.number)
+      .send()
+      .await
+      .with_context(|| format!("Failed to merge PR: {}", pr.number))?;
     Ok(())
   }
 
   pub async fn delete(&self) -> Result<()> {
-    self.repo_handler().delete().await?;
+    self
+      .repo_handler()
+      .delete()
+      .await
+      .context("Failed to delete repo")?;
     Ok(())
   }
 }
@@ -561,7 +610,8 @@ pub fn get_github_token() -> GithubToken {
 pub fn init_octocrab(token: &str) -> Result<()> {
   let crab_inst = Octocrab::builder()
     .personal_token(token.to_string())
-    .build()?;
+    .build()
+    .context("Failed to build Github connector")?;
   octocrab::initialise(crab_inst);
   Ok(())
 }

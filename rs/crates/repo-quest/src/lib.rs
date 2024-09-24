@@ -133,7 +133,7 @@ async fn refresh_state(quest: State<'_, Arc<Quest>>) -> Result<(), String> {
 #[specta::specta]
 async fn hard_reset(quest: State<'_, Arc<Quest>>, stage: u32) -> Result<(), String> {
   let stage = usize::try_from(stage).unwrap();
-  fmt_err(quest.hard_reset(stage).await)?;
+  fmt_err(quest.skip_to_stage(stage).await)?;
   Ok(())
 }
 
