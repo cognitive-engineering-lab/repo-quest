@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
 use octocrab::models::issues::Issue;
 use std::path::Path;
@@ -36,10 +36,15 @@ pub struct RepoTemplate(pub GithubRepo);
 #[async_trait]
 impl QuestTemplate for RepoTemplate {
   async fn instantiate(&self, path: &Path) -> Result<InstanceOutputs> {
-    let origin = GithubRepo::instantiate_from_repo(&self.0).await?;
-    let origin_git = origin.clone(path)?;
-    origin_git.setup_upstream(&self.0)?;
-    let config = QuestConfig::load(&origin_git, "upstream")?;
+    let origin = GithubRepo::instantiate_from_repo(&self.0)
+      .await
+      .context("Failed to instantiate Github repo from template")?;
+    let origin_git = origin.clone(path).context("Failed to clone Github repo")?;
+    origin_git
+      .setup_upstream(&self.0)
+      .context("Failed to setup upstream")?;
+    let config = QuestConfig::load(&origin_git, "upstream")
+      .context("Failed to load quest config from upstream")?;
     Ok(InstanceOutputs {
       origin,
       origin_git,
@@ -84,9 +89,13 @@ pub struct PackageTemplate(pub QuestPackage);
 #[async_trait]
 impl QuestTemplate for PackageTemplate {
   async fn instantiate(&self, path: &Path) -> Result<InstanceOutputs> {
-    let origin = GithubRepo::instantiate_from_package(&self.0).await?;
-    let origin_git = origin.clone(path)?;
-    origin_git.write_initial_files(&self.0)?;
+    let origin = GithubRepo::instantiate_from_package(&self.0)
+      .await
+      .context("Failed to instantiate repo from package")?;
+    let origin_git = origin.clone(path).context("Failed to clone repo")?;
+    origin_git
+      .write_initial_files(&self.0)
+      .context("Failed to write starter code to new repo")?;
     let config = self.0.config.clone();
     Ok(InstanceOutputs {
       origin,

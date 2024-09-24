@@ -31,17 +31,19 @@ macro_rules! git {
   ($self:expr, $($arg:tt)*) => {{
     let arg = format!($($arg)*);
     $self.git(|cmd| {
-      tracing::debug!($($arg)*);
+      tracing::debug!("git: {arg}");
       cmd.args(shlex::split(&arg).unwrap());
-    }).with_context(|| arg)
+    }).with_context(|| format!("git failed: {arg}"))
   }}
 }
 
 macro_rules! git_output {
   ($self:expr, $($arg:tt)*) => {{
+    let arg = format!($($arg)*);
     $self.git_output(|cmd| {
+      tracing::debug!("git: {arg}");
       cmd.args(shlex::split(&format!($($arg)*)).unwrap());
-    })
+    }).with_context(|| format!("git failed: {arg}"))
   }}
 }
 
@@ -87,9 +89,8 @@ impl GitRepo {
 
   pub fn setup_upstream(&self, upstream: &GithubRepo) -> Result<()> {
     let remote = upstream.remote(GitProtocol::Https);
-    git!(self, "remote add {UPSTREAM} {remote}",)
-      .with_context(|| format!("Failed to add upstream {remote}",))?;
-    git!(self, "fetch {UPSTREAM}").context("Failed to fetch upstream")?;
+    git!(self, "remote add {UPSTREAM} {remote}")?;
+    git!(self, "fetch {UPSTREAM}")?;
     Ok(())
   }
 
@@ -152,13 +153,11 @@ impl GitRepo {
         git!(self, "cherry-pick --abort").context("Failed to abort cherry-pick")?;
 
         let upstream_target = format!("{UPSTREAM}/{target_branch}");
-        git!(self, "reset --hard {upstream_target}")
-          .with_context(|| format!("Failed to hard reset to {upstream_target}"))?;
+        git!(self, "reset --hard {upstream_target}")?;
 
         git!(self, "reset --soft main").context("Failed to soft reset to main")?;
 
-        git!(self, "commit -m 'Override with reference solution'")
-          .context("Failed to commit reference solution")?;
+        git!(self, "commit -m 'Override with reference solution'")?;
 
         MergeType::SolutionReset
       }
@@ -171,23 +170,22 @@ impl GitRepo {
     base_branch: &str,
     target_branch: &str,
   ) -> Result<(String, MergeType)> {
-    git!(self, "checkout -b {target_branch}")
-      .with_context(|| format!("Failed to checkout branch {target_branch}"))?;
+    git!(self, "checkout -b {target_branch}")?;
 
     let merge_type = template.apply_patch(self, base_branch, target_branch)?;
 
-    git!(self, "push -u origin {target_branch}")
-      .with_context(|| format!("Failed to push branch {target_branch}"))?;
+    git!(self, "push -u origin {target_branch}")?;
 
     let head = self.head_commit()?;
 
-    git!(self, "checkout main").context("Failed to checkout main")?;
+    git!(self, "checkout main")?;
+
     Ok((head, merge_type))
   }
 
   pub fn checkout_main_and_pull(&self) -> Result<()> {
-    git!(self, "checkout main").context("Failed to checkout main")?;
-    git!(self, "pull").context("Failed to pull main")?;
+    git!(self, "checkout main")?;
+    git!(self, "pull")?;
     Ok(())
   }
 
@@ -204,12 +202,10 @@ impl GitRepo {
 
   pub fn diff(&self, base: &str, head: &str) -> Result<String> {
     git_output!(self, "diff {base}..{head}")
-      .with_context(|| format!("Failed to `git diff {base}..{head}"))
   }
 
   pub fn show(&self, branch: &str, file: &str) -> Result<String> {
     git_output!(self, "show {branch}:{file}")
-      .with_context(|| format!("Failed to `git show {branch}:{file}"))
   }
 
   pub fn show_bin(&self, branch: &str, file: &str) -> Result<Vec<u8>> {
@@ -250,12 +246,18 @@ impl GitRepo {
       use std::os::unix::fs::PermissionsExt;
       let hooks_dir = self.path.join(".githooks");
       if hooks_dir.exists() {
-        let hooks = fs::read_dir(&hooks_dir)?;
+        let hooks = fs::read_dir(&hooks_dir)
+          .with_context(|| format!("Failed to read hooks directory: {}", hooks_dir.display()))?;
         for hook in hooks {
-          let hook = hook?;
-          let mut perms = hook.metadata()?.permissions();
+          let hook = hook.context("Failed to read hooks directory entry")?;
+          let mut perms = hook
+            .metadata()
+            .with_context(|| format!("Failed to read hook metadata: {}", hook.path().display()))?
+            .permissions();
           perms.set_mode(perms.mode() | 0o111);
-          fs::set_permissions(hook.path(), perms)?;
+          fs::set_permissions(hook.path(), perms).with_context(|| {
+            format!("Failed to set hook permissions: {}", hook.path().display())
+          })?;
         }
       }
     }
@@ -267,10 +269,16 @@ impl GitRepo {
 
     git!(self, "checkout -b meta")?;
 
-    let config_str = toml::to_string_pretty(&package.config)?;
-    fs::write(self.path.join("rqst.toml"), config_str)?;
+    let config_str =
+      toml::to_string_pretty(&package.config).context("Failed to parse package config")?;
+    let toml_path = self.path.join("rqst.toml");
+    fs::write(&toml_path, config_str)
+      .with_context(|| format!("Failed to write TOML to: {}", toml_path.display()))?;
 
-    package.save(&self.path.join("package.json.gz"))?;
+    let pkg_path = self.path.join("package.json.gz");
+    package
+      .save(&pkg_path)
+      .with_context(|| format!("Failed to write package to: {}", pkg_path.display()))?;
 
     git!(self, "add .")?;
     git!(self, "commit -m 'Add meta'")?;
