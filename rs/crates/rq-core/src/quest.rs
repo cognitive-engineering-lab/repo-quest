@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::PathBuf, time::Duration};
+use std::{borrow::Cow, collections::HashMap, path::PathBuf, time::Duration};
 
 use crate::{
   git::{GitRepo, UPSTREAM},
@@ -52,8 +52,12 @@ pub struct StageState {
 }
 
 impl QuestConfig {
-  pub fn load(repo: &GitRepo, remote: &str) -> Result<Self> {
-    let contents = repo.show(&format!("{remote}/meta"), "rqst.toml")?;
+  pub fn load(repo: &GitRepo, remote: Option<&str>) -> Result<Self> {
+    let branch = match remote {
+      Some(remote) => Cow::Owned(format!("{remote}/meta")),
+      None => Cow::Borrowed("meta"),
+    };
+    let contents = repo.show(&branch, "rqst.toml")?;
     let config = toml::de::from_str::<QuestConfig>(&contents)
       .context("Failed to parse quest configuration")?;
     Ok(config)
@@ -87,6 +91,7 @@ pub struct StateDescriptor {
   dir: PathBuf,
   stages: Vec<StageState>,
   state: QuestState,
+  can_skip: bool,
 }
 
 pub enum CreateSource {
@@ -160,7 +165,7 @@ impl Quest {
   pub async fn load(dir: PathBuf, state_event: Box<dyn StateEmitter>) -> Result<Self> {
     let user = load_user().await?;
     let origin_git = GitRepo::new(&dir);
-    let config = QuestConfig::load(&origin_git, "origin").context("Failed to load quest config")?;
+    let config = QuestConfig::load(&origin_git, None).context("Failed to load quest config")?;
     let origin = GithubRepo::load(&user, &config.repo)
       .await
       .context("Failed to load GitHub repo")?;
@@ -331,6 +336,7 @@ impl Quest {
       dir: self.dir.clone(),
       stages: self.stage_states(),
       state,
+      can_skip: self.template.can_skip(),
     })
   }
 
@@ -509,10 +515,12 @@ impl Quest {
 mod test {
   use super::*;
   use crate::github::{self, GithubToken};
+  use anyhow::ensure;
   use env::current_dir;
   use std::{
     env, fs,
     path::Path,
+    process::Command,
     sync::{Arc, Once},
   };
   use tracing_subscriber::{fmt, layer::SubscriberExt, prelude::*, EnvFilter};
@@ -629,7 +637,33 @@ mod test {
   #[tokio::test(flavor = "multi_thread")]
   #[ignore]
   async fn local_playthrough() -> Result<()> {
-    let package = QuestPackage::load_from_file(Path::new("rqst-test.json.gz"))?;
+    let status = Command::new("git")
+      .args([
+        "clone",
+        "--mirror",
+        &format!("https://github.com/{TEST_ORG}/{TEST_REPO}"),
+        TEST_REPO,
+      ])
+      .status()?;
+    ensure!(status.success(), "clone failed");
+
+    let repo_path = env::current_dir().unwrap().join(TEST_REPO);
+    let status = Command::new("cargo")
+      .args([
+        "run",
+        "-p",
+        "rq-cli",
+        "--",
+        "pack",
+        &repo_path.display().to_string(),
+      ])
+      .status()?;
+    ensure!(status.success(), "pack failed");
+
+    fs::remove_dir_all(repo_path)?;
+
+    let package_path = PathBuf::from(format!("{TEST_REPO}.json.gz"));
+    let package = QuestPackage::load_from_file(&package_path)?;
     test_quest!(quest, CreateSource::Package(package));
 
     state_is!(quest, 0, StagePart::Starter, StagePartStatus::Start);
@@ -651,6 +685,8 @@ mod test {
 
     quest.origin.close_issue(&issue).await?;
     state_is!(quest, 2, StagePart::Starter, StagePartStatus::Start);
+
+    fs::remove_file(package_path)?;
 
     Ok(())
   }

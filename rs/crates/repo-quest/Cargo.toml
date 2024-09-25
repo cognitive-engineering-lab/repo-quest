@@ -8,7 +8,7 @@ default-run = "repo-quest"
 tauri-build = { version = "2.0.0-rc", features = ["config-toml"] }
 
 [dependencies]
-tauri = { version = "2.0.0-rc", features = ["config-toml"] }
+tauri = { version = "2.0.0-rc", features = ["config-toml", "devtools"] }
 tauri-plugin-dialog = "2.0.0-rc"
 tauri-plugin-shell = "2.0.0-rc"
 tokio = { workspace = true }

@@ -3,12 +3,13 @@ use std::{
   fs,
   io::Write,
   path::{Path, PathBuf},
-  process::{Command, Stdio},
+  process::Stdio,
 };
 
 use anyhow::{ensure, Context, Result};
 
 use crate::{
+  command::command,
   github::{GitProtocol, GithubRepo},
   package::QuestPackage,
   template::QuestTemplate,
@@ -30,20 +31,16 @@ pub enum MergeType {
 macro_rules! git {
   ($self:expr, $($arg:tt)*) => {{
     let arg = format!($($arg)*);
-    $self.git(|cmd| {
-      tracing::debug!("git: {arg}");
-      cmd.args(shlex::split(&arg).unwrap());
-    }).with_context(|| format!("git failed: {arg}"))
+    tracing::debug!("git: {arg}");
+    $self.git(&arg).with_context(|| format!("git failed: {arg}"))
   }}
 }
 
 macro_rules! git_output {
   ($self:expr, $($arg:tt)*) => {{
     let arg = format!($($arg)*);
-    $self.git_output(|cmd| {
-      tracing::debug!("git: {arg}");
-      cmd.args(shlex::split(&format!($($arg)*)).unwrap());
-    }).with_context(|| format!("git failed: {arg}"))
+    tracing::debug!("git: {arg}");
+    $self.git_output(&arg).with_context(|| format!("git failed: {arg}"))
   }}
 }
 
@@ -54,10 +51,18 @@ impl GitRepo {
     }
   }
 
-  fn git_core(&self, f: impl FnOnce(&mut Command), capture: bool) -> Result<Option<String>> {
-    let mut cmd = Command::new("git");
-    cmd.current_dir(&self.path);
-    f(&mut cmd);
+  pub fn clone(path: &Path, url: &str) -> Result<Self> {
+    let output = command(&format!("git clone {url}"), path.parent().unwrap()).output()?;
+    ensure!(
+      output.status.success(),
+      "`git clone {url}` failed, stderr:\n{}",
+      String::from_utf8(output.stderr)?
+    );
+    Ok(GitRepo::new(path))
+  }
+
+  fn git_core(&self, args: &str, capture: bool) -> Result<Option<String>> {
+    let mut cmd = command(&format!("git {args}"), &self.path);
     cmd.stderr(Stdio::piped());
     if capture {
       cmd.stdout(Stdio::piped());
@@ -79,12 +84,12 @@ impl GitRepo {
     Ok(stdout)
   }
 
-  fn git(&self, f: impl FnOnce(&mut Command)) -> Result<()> {
-    self.git_core(f, false).map(|_| ())
+  fn git(&self, args: &str) -> Result<()> {
+    self.git_core(args, false).map(|_| ())
   }
 
-  fn git_output(&self, f: impl FnOnce(&mut Command)) -> Result<String> {
-    self.git_core(f, true).map(|s| s.unwrap())
+  fn git_output(&self, args: &str) -> Result<String> {
+    self.git_core(args, true).map(|s| s.unwrap())
   }
 
   pub fn setup_upstream(&self, upstream: &GithubRepo) -> Result<()> {
@@ -95,9 +100,7 @@ impl GitRepo {
   }
 
   pub fn has_upstream(&self) -> Result<bool> {
-    let status = Command::new("git")
-      .args(["remote", "get-url", UPSTREAM])
-      .current_dir(&self.path)
+    let status = command(&format!("git remote get-url {UPSTREAM}"), &self.path)
       .status()
       .context("`git remote` failed")?;
     Ok(status.success())
@@ -105,17 +108,20 @@ impl GitRepo {
 
   fn apply(&self, patch: &str) -> Result<()> {
     tracing::trace!("Applying patch:\n{patch}");
-    let mut cmd = Command::new("git");
-    cmd
-      .args(["apply", "-"])
-      .current_dir(&self.path)
-      .stdin(Stdio::piped());
-    let mut child = cmd.spawn()?;
+    let mut child = command("git apply -", &self.path)
+      .stdin(Stdio::piped())
+      .stderr(Stdio::piped())
+      .spawn()?;
     let mut stdin = child.stdin.take().unwrap();
     stdin.write_all(patch.as_bytes())?;
     drop(stdin);
-    let status = child.wait()?;
-    ensure!(status.success(), "git apply failed");
+    let output = child.wait_with_output()?;
+    ensure!(
+      output.status.success(),
+      "git apply failed with stderr:\n{}",
+      String::from_utf8(output.stderr)?
+    );
+    tracing::trace!("wtf: {}", String::from_utf8(output.stderr)?);
     Ok(())
   }
 
@@ -209,10 +215,14 @@ impl GitRepo {
   }
 
   pub fn show_bin(&self, branch: &str, file: &str) -> Result<Vec<u8>> {
-    let output = Command::new("git")
-      .args(["show", &format!("{branch}:{file}")])
+    let output = command(&format!("git show {branch}:{file}"), &self.path)
       .output()
       .with_context(|| format!("Failed to `git show {branch}:{file}"))?;
+    ensure!(
+      output.status.success(),
+      "git show failed with stderr:\n{}",
+      String::from_utf8(output.stderr)?
+    );
     Ok(output.stdout)
   }
 
@@ -293,8 +303,7 @@ impl GitRepo {
     if hooks_dir.exists() {
       let post_checkout = hooks_dir.join("post-checkout");
       if post_checkout.exists() {
-        let status = Command::new(post_checkout)
-          .current_dir(&self.path)
+        let status = command(&post_checkout.display().to_string(), &self.path)
           .status()
           .context("post-checkout hook failed")?;
         ensure!(status.success(), "post-checkout hook failed");

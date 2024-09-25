@@ -44,7 +44,7 @@ fn version() -> Version {
 impl QuestPackage {
   pub async fn build(path: &Path) -> Result<Self> {
     let git_repo = GitRepo::new(path);
-    let config = QuestConfig::load(&git_repo, "origin")?;
+    let config = QuestConfig::load(&git_repo, None)?;
     let gh_repo = GithubRepo::load(&config.author, &config.repo).await?;
 
     let initial = git_repo.read_initial_files()?;
@@ -91,7 +91,8 @@ impl QuestPackage {
 
   fn deserialize<T: Read>(t: T) -> Result<Self> {
     let mut decoder = GzDecoder::new(t);
-    let mut package: QuestPackage = serde_json::from_reader(&mut decoder)?;
+    let mut package: QuestPackage =
+      serde_json::from_reader(&mut decoder).context("Failed to parse JSON")?;
     package.patch_map = package
       .patches
       .iter()

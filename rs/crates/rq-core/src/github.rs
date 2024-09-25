@@ -18,11 +18,12 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use specta::Type;
-use std::{fs, path::Path, process::Command, sync::Arc, time::Duration};
+use std::{env, fs, path::Path, sync::Arc, time::Duration};
 use tokio::{time::timeout, try_join};
 use tracing::warn;
 
 use crate::{
+  command::command,
   git::{GitRepo, MergeType},
   package::QuestPackage,
   utils,
@@ -79,7 +80,7 @@ pub async fn load_user() -> Result<String> {
     .current()
     .user()
     .await
-    .context("Failed to get current user")?;
+    .context("Failed to query Github connector for current user")?;
   Ok(user.login)
 }
 
@@ -198,17 +199,7 @@ impl GithubRepo {
 
   pub fn clone(&self, path: &Path) -> Result<GitRepo> {
     let remote = self.remote(GitProtocol::Ssh);
-    let output = Command::new("git")
-      .args(["clone", &remote])
-      .current_dir(path)
-      .output()?;
-    ensure!(
-      output.status.success(),
-      "`git clone {remote}` failed, stderr:\n{}",
-      String::from_utf8(output.stderr)?
-    );
-    let repo = GitRepo::new(&path.join(&self.name));
-    Ok(repo)
+    GitRepo::clone(&path.join(&self.name), &remote)
   }
 
   // There is some unknown delay between creating a repo from a template and its contents being added.
@@ -584,19 +575,14 @@ fn read_github_token_from_fs() -> GithubToken {
 }
 
 fn generate_github_token_from_cli() -> GithubToken {
-  let gh_path_res = which::which("gh");
-  match gh_path_res {
-    Ok(gh_path) => {
-      let token_output = token_try!(Command::new(gh_path)
-        .args(["auth", "token"])
-        .output()
-        .context("Failed to run `gh auth token`"));
+  let res = command("gh auth token", &env::current_dir().unwrap()).output();
+  match res {
+    Ok(token_output) if token_output.status.success() => {
       let token = token_try!(String::from_utf8(token_output.stdout));
       let token_clean = token.trim_end().to_string();
       GithubToken::Found(token_clean)
     }
-    Err(which::Error::CannotFindBinaryPath) => GithubToken::NotFound,
-    Err(err) => GithubToken::Error(format!("{err:?}")),
+    _ => GithubToken::NotFound,
   }
 }
 
