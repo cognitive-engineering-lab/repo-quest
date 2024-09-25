@@ -4,7 +4,9 @@ use cfg_if::cfg_if;
 
 #[cfg(unix)]
 fn get_user_env() -> HashMap<String, String> {
-  let shell = env!("SHELL");
+  use std::env;
+
+  let shell = env::var("SHELL").unwrap_or_else(|_| String::from("sh"));
   let output = Command::new(shell)
     .args(["-c", "env"])
     .output()
