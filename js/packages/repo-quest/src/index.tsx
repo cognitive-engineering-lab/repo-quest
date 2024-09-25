@@ -392,33 +392,35 @@ let QuestView: React.FC<{
             </button>
           </div>
 
-          <div>
-            <select
-              defaultValue={""}
-              onChange={async e => {
-                if (e.target.value === "") return;
-                let confirmed = await dialog.confirm(
-                  "This will irrevocably overwrite any changes you've made. Are you sure?"
-                );
-                let stage = Number.parseInt(e.target.value);
-                e.target.value = "";
-                if (confirmed)
-                  await loader.loadAwait(commands.hardReset(stage));
-              }}
-            >
-              <option disabled={true} value="">
-                Skip to chapter...
-              </option>
-              {quest.stages
-                .map<[Stage, number]>((stage, i) => [stage, i])
-                .filter(([_stage, i]) => i > cur_stage)
-                .map(([stage, i]) => (
-                  <option key={stage.label} value={i}>
-                    Chapter {i}: {stage.name}
-                  </option>
-                ))}
-            </select>
-          </div>
+          {initialState.can_skip && (
+            <div>
+              <select
+                defaultValue={""}
+                onChange={async e => {
+                  if (e.target.value === "") return;
+                  let confirmed = await dialog.confirm(
+                    "This will irrevocably overwrite any changes you've made. Are you sure?"
+                  );
+                  let stage = Number.parseInt(e.target.value);
+                  e.target.value = "";
+                  if (confirmed)
+                    await loader.loadAwait(commands.skipToStage(stage));
+                }}
+              >
+                <option disabled={true} value="">
+                  Skip to chapter...
+                </option>
+                {quest.stages
+                  .map<[Stage, number]>((stage, i) => [stage, i])
+                  .filter(([_stage, i]) => i > cur_stage)
+                  .map(([stage, i]) => (
+                    <option key={stage.label} value={i}>
+                      Chapter {i}: {stage.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -557,3 +559,6 @@ let App = () => {
 };
 
 ReactDOM.createRoot(document.getElementById("root")!).render(<App />);
+
+/* @ts-ignore */
+window.devDump = async () => console.log(await commands.devDump());

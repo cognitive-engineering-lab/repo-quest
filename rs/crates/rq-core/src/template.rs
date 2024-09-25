@@ -29,6 +29,7 @@ pub trait QuestTemplate: Send + Sync + 'static {
     target_branch: &str,
   ) -> Result<MergeType>;
   fn reference_solution_pr_url(&self, stage: &Stage) -> Option<String>;
+  fn can_skip(&self) -> bool;
 }
 
 pub struct RepoTemplate(pub GithubRepo);
@@ -43,7 +44,7 @@ impl QuestTemplate for RepoTemplate {
     origin_git
       .setup_upstream(&self.0)
       .context("Failed to setup upstream")?;
-    let config = QuestConfig::load(&origin_git, "upstream")
+    let config = QuestConfig::load(&origin_git, Some("upstream"))
       .context("Failed to load quest config from upstream")?;
     Ok(InstanceOutputs {
       origin,
@@ -81,6 +82,10 @@ impl QuestTemplate for RepoTemplate {
         stage.branch_name(StagePart::Solution),
       ))
       .map(|pr| pr.data.html_url.as_ref().unwrap().to_string())
+  }
+
+  fn can_skip(&self) -> bool {
+    true
   }
 }
 
@@ -137,5 +142,9 @@ impl QuestTemplate for PackageTemplate {
 
   fn reference_solution_pr_url(&self, _stage: &Stage) -> Option<String> {
     None
+  }
+
+  fn can_skip(&self) -> bool {
+    false
   }
 }

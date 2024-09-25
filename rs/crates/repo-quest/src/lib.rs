@@ -1,7 +1,7 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::{env, path::PathBuf, sync::Arc};
+use std::{collections::HashMap, env, path::PathBuf, sync::Arc};
 
 use rq_core::{
   github::{self, GithubToken},
@@ -131,10 +131,24 @@ async fn refresh_state(quest: State<'_, Arc<Quest>>) -> Result<(), String> {
 
 #[tauri::command]
 #[specta::specta]
-async fn hard_reset(quest: State<'_, Arc<Quest>>, stage: u32) -> Result<(), String> {
+async fn skip_to_stage(quest: State<'_, Arc<Quest>>, stage: u32) -> Result<(), String> {
   let stage = usize::try_from(stage).unwrap();
   fmt_err(quest.skip_to_stage(stage).await)?;
   Ok(())
+}
+
+#[derive(Serialize, Deserialize, Type)]
+struct DevDump {
+  env: HashMap<String, String>,
+  token: GithubToken,
+}
+
+#[tauri::command]
+#[specta::specta]
+fn dev_dump() -> DevDump {
+  let env = env::vars().collect::<HashMap<_, _>>();
+  let token = github::get_github_token();
+  DevDump { env, token }
 }
 
 pub fn specta_builder() -> tauri_specta::Builder {
@@ -148,7 +162,8 @@ pub fn specta_builder() -> tauri_specta::Builder {
       file_feature_and_issue,
       file_solution,
       refresh_state,
-      hard_reset
+      skip_to_stage,
+      dev_dump
     ])
     .events(collect_events![StateEvent])
 }
