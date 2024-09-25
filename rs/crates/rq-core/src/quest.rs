@@ -662,8 +662,8 @@ mod test {
 
     fs::remove_dir_all(repo_path)?;
 
-    let package_path = Path::new(&format!("{TEST_REPO}.json.gz"));
-    let package = QuestPackage::load_from_file(package_path)?;
+    let package_path = PathBuf::from(format!("{TEST_REPO}.json.gz"));
+    let package = QuestPackage::load_from_file(&package_path)?;
     test_quest!(quest, CreateSource::Package(package));
 
     state_is!(quest, 0, StagePart::Starter, StagePartStatus::Start);
