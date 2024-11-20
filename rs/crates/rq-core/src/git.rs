@@ -99,11 +99,11 @@ impl GitRepo {
     Ok(())
   }
 
-  pub fn has_upstream(&self) -> Result<bool> {
+  pub fn upstream(&self) -> Result<Option<&'static str>> {
     let status = command(&format!("git remote get-url {UPSTREAM}"), &self.path)
       .status()
       .context("`git remote` failed")?;
-    Ok(status.success())
+    Ok(status.success().then_some(UPSTREAM))
   }
 
   fn apply(&self, patch: &str) -> Result<()> {

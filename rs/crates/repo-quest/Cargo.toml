@@ -5,18 +5,18 @@ edition = "2021"
 default-run = "repo-quest"
 
 [build-dependencies]
-tauri-build = { version = "2.0.0-rc", features = ["config-toml"] }
+tauri-build = { version = "2.0.3", features = ["config-toml"] }
 
 [dependencies]
-tauri = { version = "2.0.0-rc", features = ["config-toml", "devtools"] }
-tauri-plugin-dialog = "2.0.0-rc"
-tauri-plugin-shell = "2.0.0-rc"
+tauri = { version = "2.1.1", features = ["config-toml", "devtools"] }
+tauri-plugin-dialog = "2.0.3"
+tauri-plugin-shell = "2.0.2"
 tokio = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 specta = { workspace = true }
 specta-typescript = "0.0.7"
-tauri-specta = { version = "=2.0.0-rc.19", features = ["derive", "typescript"] }
+tauri-specta = { version = "=2.0.0-rc.20", features = ["derive", "typescript"] }
 rq-core = { path = "../rq-core" }
 anyhow = { workspace = true }
 tracing = { workspace = true }

@@ -165,14 +165,14 @@ impl Quest {
   pub async fn load(dir: PathBuf, state_event: Box<dyn StateEmitter>) -> Result<Self> {
     let user = load_user().await?;
     let origin_git = GitRepo::new(&dir);
-    let config = QuestConfig::load(&origin_git, None).context("Failed to load quest config")?;
+    let upstream = origin_git
+      .upstream()
+      .context("Failed to test for upstream")?;
+    let config = QuestConfig::load(&origin_git, upstream).context("Failed to load quest config")?;
     let origin = GithubRepo::load(&user, &config.repo)
       .await
       .context("Failed to load GitHub repo")?;
-    let has_upstream = origin_git
-      .has_upstream()
-      .context("Failed to test for upstream")?;
-    let template: Box<dyn QuestTemplate> = if has_upstream {
+    let template: Box<dyn QuestTemplate> = if upstream.is_some() {
       let upstream = GithubRepo::load(&config.author, &config.repo)
         .await
         .context("Failed to load upstream GitHub repo")?;
