@@ -2,7 +2,7 @@ use std::{borrow::Cow, collections::HashMap, path::PathBuf, time::Duration};
 
 use crate::{
   git::{GitRepo, UPSTREAM},
-  github::{load_user, GithubRepo, PullSelector},
+  github::{self, load_user, GithubRepo, PullSelector},
   package::QuestPackage,
   stage::{Stage, StagePart, StagePartStatus},
   template::{InstanceOutputs, PackageTemplate, QuestTemplate, RepoTemplate},
@@ -135,6 +135,8 @@ impl Quest {
     source: CreateSource,
     state_event: Box<dyn StateEmitter>,
   ) -> Result<Self> {
+    github::check_ssh()?;
+
     let template: Box<dyn QuestTemplate> = match source {
       CreateSource::Remote { user, repo } => {
         let upstream = GithubRepo::load(&user, &repo).await?;

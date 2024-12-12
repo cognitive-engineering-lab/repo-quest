@@ -1,4 +1,4 @@
-use anyhow::{ensure, Context, Result};
+use anyhow::{bail, ensure, Context, Result};
 use futures_util::future::try_join_all;
 use http::StatusCode;
 use octocrab::{
@@ -82,6 +82,19 @@ pub async fn load_user() -> Result<String> {
     .await
     .context("Failed to query Github connector for current user")?;
   Ok(user.login)
+}
+
+pub fn check_ssh() -> Result<()> {
+  let output = command("ssh -T git@github.com", Path::new("/")).output()?;
+  if !output.status.success() {
+    let stderr = String::from_utf8(output.stderr)?;
+    if stderr.trim() == "git@github.com: Permission denied (publickey)." {
+      bail!("Your machine is not setup for a secure connection to Github. Please follow the instructions here: https://docs.github.com/en/authentication/troubleshooting-ssh/error-permission-denied-publickey");
+    } else {
+      bail!("Failed to establish a secure connection to Github with error:\n{stderr}")
+    }
+  }
+  Ok(())
 }
 
 pub enum GitProtocol {
