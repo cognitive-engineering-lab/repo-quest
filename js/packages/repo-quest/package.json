@@ -18,6 +18,7 @@
     "@wcrichto/quiz": "^0.3.8",
     "jsdom": "^25.0.0",
     "lodash": "^4.17.21",
+    "marked": "^15.0.3",
     "mobx": "^6.13.1",
     "mobx-react": "^9.1.1",
     "normalize.css": "^8.0.1",

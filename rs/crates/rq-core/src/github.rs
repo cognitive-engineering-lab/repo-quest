@@ -84,17 +84,21 @@ pub async fn load_user() -> Result<String> {
   Ok(user.login)
 }
 
+/// Checks that the user's SSH keys are configured such that `git clone git@github.com:...` can be run.
 pub fn check_ssh() -> Result<()> {
   let output = command("ssh -T git@github.com", Path::new("/")).output()?;
-  if !output.status.success() {
-    let stderr = String::from_utf8(output.stderr)?;
-    if stderr.trim() == "git@github.com: Permission denied (publickey)." {
-      bail!("Your machine is not setup for a secure connection to Github. Please follow the instructions here: https://docs.github.com/en/authentication/troubleshooting-ssh/error-permission-denied-publickey");
-    } else {
-      bail!("Failed to establish a secure connection to Github with error:\n{stderr}")
+  match output.status.code() {
+    // `ssh` exits with status 1 for "success" here, and status 255 for failure
+    Some(1) => Ok(()),
+    _ => {
+      let stderr = String::from_utf8(output.stderr)?;
+      if stderr.trim() == "git@github.com: Permission denied (publickey)." {
+        bail!("Your machine is not setup for a secure connection to Github. Please follow the instructions here: https://docs.github.com/en/authentication/troubleshooting-ssh/error-permission-denied-publickey");
+      } else {
+        bail!("Failed to establish a secure connection to Github with error:\n{stderr}")
+      }
     }
   }
-  Ok(())
 }
 
 pub enum GitProtocol {

@@ -1,11 +1,14 @@
 import * as dialog from "@tauri-apps/plugin-dialog";
 import { type Quiz, QuizView } from "@wcrichto/quiz";
 import _ from "lodash";
+import { marked } from "marked";
 import { action, makeAutoObservable } from "mobx";
 import { observer } from "mobx-react";
-import React, { useContext, useEffect, useState } from "react";
+import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import ReactDOM from "react-dom/client";
+
+import guideMd from "../../../../GUIDE.md?raw";
 import {
   events,
   type QuestConfig,
@@ -17,6 +20,16 @@ import {
   type StateDescriptor,
   commands
 } from "./bindings/backend";
+
+let useWindowListener = <K extends keyof WindowEventMap>(
+  event: K,
+  listener: (this: Window, ev: WindowEventMap[K]) => void
+) => {
+  useEffect(() => {
+    window.addEventListener(event, listener);
+    return () => window.removeEventListener(event, listener);
+  }, []);
+};
 
 let Link: React.FC<React.AnchorHTMLAttributes<HTMLAnchorElement>> = props => (
   <a target="_blank" {...props} />
@@ -345,28 +358,33 @@ let QuestView: React.FC<{
     <div className="columns">
       <div>
         {state !== undefined && (
-          <ol className="stages" start={0}>
-            {_.range(cur_stage + 1).map(i => (
-              <StageView
-                key={i}
-                index={i}
-                stage={state.stages[i]}
-                state={state.state}
-              />
-            ))}
-            {state.state.type === "Completed" && quest.final && (
-              <li>
-                <div>
-                  <span className="stage-title">Quiz</span>
-                </div>
-                <div>
-                  <button type="button" onClick={() => setShowQuiz(true)}>
-                    Start
-                  </button>
-                </div>
-              </li>
-            )}
-          </ol>
+          <>
+            <div className="quest-dir">
+              <strong>Quest directory:</strong> <code>{state.dir}</code>
+            </div>
+            <ol className="stages" start={0}>
+              {_.range(cur_stage + 1).map(i => (
+                <StageView
+                  key={i}
+                  index={i}
+                  stage={state.stages[i]}
+                  state={state.state}
+                />
+              ))}
+              {state.state.type === "Completed" && quest.final && (
+                <li>
+                  <div>
+                    <span className="stage-title">Quiz</span>
+                  </div>
+                  <div>
+                    <button type="button" onClick={() => setShowQuiz(true)}>
+                      Start
+                    </button>
+                  </div>
+                </li>
+              )}
+            </ol>
+          </>
         )}
       </div>
       <div className="meta">
@@ -377,7 +395,7 @@ let QuestView: React.FC<{
               type="button"
               onClick={() => loader.loadAwait(commands.refreshState())}
             >
-              Refresh state
+              Refresh UI state
             </button>
           </div>
 
@@ -523,6 +541,46 @@ let StageView: React.FC<{
   );
 };
 
+let Guide = () => {
+  let content = useMemo(() => marked(guideMd, { async: false }), []);
+  let [open, setOpen] = useState(false);
+  let ref = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    if (open) ref.current!.showModal();
+    else ref.current!.close();
+  }, [open]);
+
+  useWindowListener("keydown", ev => {
+    if (ev.key === "Escape") setOpen(false);
+  });
+
+  return (
+    <>
+      <button
+        className="guide-button"
+        type="button"
+        onClick={() => setOpen(!open)}
+      >
+        RepoQuest Guide
+      </button>
+      <dialog ref={ref}>
+        <button
+          type="button"
+          className="close-dialog"
+          onClick={() => setOpen(false)}
+        >
+          Close
+        </button>
+        <div
+          /* biome-ignore lint/security/noDangerouslySetInnerHtml: we control GUIDE.md */
+          dangerouslySetInnerHTML={{ __html: content }}
+        />
+      </dialog>
+    </>
+  );
+};
+
 let App = () => {
   let [title, setTitle] = useState<string | undefined>(undefined);
   let [errorMessage, setErrorMessage] = useState<ErrorMessage | undefined>(
@@ -536,6 +594,7 @@ let App = () => {
           <loader.View />
           <div id="app">
             <h1>RepoQuest{title !== undefined && `: ${title}`}</h1>
+            <Guide />
             {errorMessage !== undefined ? (
               <div className="error">
                 <div className="action">

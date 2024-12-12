@@ -48,6 +48,10 @@ h1 {
   margin-bottom: 1rem;
 }
 
+.quest-dir {
+  margin-bottom: 1rem;
+}
+
 .stages {
   margin: 0;
 
@@ -224,7 +228,7 @@ button, input[type=submit] {
 
 dialog {
   z-index: 1000;
-  max-width: 400px;
+  max-width: 600px;
   box-shadow: 4px 4px 8px #aaa;
 
   form {
@@ -232,8 +236,20 @@ dialog {
     display: flex;
     gap: 0.5rem;
   }
+
+  .close-dialog {
+    position: absolute;    
+    top: 1rem;
+    right: 1rem;
+  }
 }
 
 .file-picker + code {
   margin-left: 0.5rem;
+}
+
+.guide-button {
+  position: absolute;
+  top: 2rem;
+  right: 1rem;
 }

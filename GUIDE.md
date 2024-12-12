@@ -1,29 +1,16 @@
 # RepoQuest Guide
 
-First, follow the [Installation] and [Setup] instructions in the RepoQuest README.
-
-## Launching RepoQuest
-
-Next, you need to launch the RepoQuest app. This depends on which OS you're using.
-
-### MacOS
-
-You can launch the app via the finder (Cmd+Space) by searching for "RepoQuest". Or you can add `/Applications/RepoQuest.app/Contents/MacOS` to your `PATH` and run `repo-quest` from the command line.
-
-### Linux
-
-Run `repo-quest` from the command line.
-
-### Windows
-
-Search for "RepoQuest" in your applications list and run it.
+This is a brief guide to how to use RepoQuest.
 
 ## Starting a Quest
 
 1. Select "Start a new quest".
 2. Select your desired quest.
 3. Select a directory. RepoQuest will clone the quest repository as a subdirectory of your selected directory.
-4. Click "Create".
+4. Click "Create" and wait a few seconds.
+5. Open the "Quest directory" in your code editor.
+6. Click "File Issue" on the first stage.
+7. Click the "Issue" link and follow the directions.
 
 ## Doing a Quest
 

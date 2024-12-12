@@ -79,3 +79,19 @@ gh auth login
 ```
 
 Try running `gh auth token`. If that succeeds, then you're good.
+
+### Launching RepoQuest
+
+Next, you need to launch the RepoQuest app. This depends on which OS you're using.
+
+#### MacOS
+
+You can launch the app via the finder (Cmd+Space) by searching for "RepoQuest". Or you can add `/Applications/RepoQuest.app/Contents/MacOS` to your `PATH` and run `repo-quest` from the command line.
+
+#### Linux
+
+Run `repo-quest` from the command line.
+
+#### Windows
+
+Search for "RepoQuest" in your applications list and run it.
