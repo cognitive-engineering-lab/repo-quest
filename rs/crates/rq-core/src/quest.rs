@@ -522,7 +522,6 @@ mod test {
   use env::current_dir;
   use std::{
     env, fs,
-    path::Path,
     process::Command,
     sync::{Arc, Once},
   };

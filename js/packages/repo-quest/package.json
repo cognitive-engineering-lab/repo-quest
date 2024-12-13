@@ -1,6 +1,6 @@
 {
   "name": "repo-quest",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "type": "module",
   "depot": {
     "platform": "browser",
