@@ -184,9 +184,9 @@ button, input[type=submit] {
         border: 1px solid #ccc;
         font-size: 80%;
         width: 300px;
-        
+
         &:invalid {
-          box-shadow: 0 0 4px red;          
+          box-shadow: 0 0 4px red;
         }
       }
     }
@@ -230,6 +230,7 @@ dialog {
   z-index: 1000;
   max-width: 600px;
   box-shadow: 4px 4px 8px #aaa;
+  line-height: 1.3;
 
   form {
     margin-top: 1rem;
@@ -238,9 +239,13 @@ dialog {
   }
 
   .close-dialog {
-    position: absolute;    
+    position: absolute;
     top: 1rem;
     right: 1rem;
+  }
+
+  ol li, ul li {
+    margin-bottom: 0.5rem;
   }
 }
 

@@ -9,18 +9,23 @@ This is a brief guide to how to use RepoQuest.
 3. Select a directory. RepoQuest will clone the quest repository as a subdirectory of your selected directory.
 4. Click "Create" and wait a few seconds.
 5. Open the "Quest directory" in your code editor.
-6. Click "File Issue" on the first stage.
-7. Click the "Issue" link and follow the directions.
+6. Follow the directions below to do the first chapter of the quest.
 
 ## Doing a Quest
 
-A quest is a series of programming challenges, or chapters. At each step, you will be given an issue describing the challenge and relevant background. You may also be given starter code that is part of the challenge.
+1. Click "File Issue" to start the chapter.
+2. Click the "Issue" link and read the issue.
+3. If the chapter has a "Starter PR", click that link. Read and merge the PR. **Make sure to pull the changes!**
+4. Follow the instructions in the issue to complete the chapter.
+5. Commit and push your local changes.
+6. Once you're done, close the issue.
+7. After a few seconds (or click "Refresh UI state"), then the next chapter should appear.
 
-To start a chapter, click the "File issue" button. If a starter PR is filed, then review it and merge it. Then read the filed issue to understand your task. Then try to complete the task. Once you think you're done, then close the issue to start the next chapter.
+## If You Get Stuck
 
-If you need help, you can review our reference solution for a given chapter. Click the "Help" button for a link. If you're still lost, you can replace your code with the reference solution by clicking "File reference solution" under "Help". This will create a solution PR that you can review and merge.
+If you need help, you can review our reference solution for a given chapter. Click the "Help" button next to the chapter title. If you're still lost, you can replace your code with the reference solution by clicking "File reference solution". This will create a solution PR that you can review and merge.
 
-### ⚠️ Pitfalls 🕳️
+## ⚠️ Pitfalls 🕳️
 
 RepoQuest has some sharp edges. Some are inherent to the quest concept, and some are just because RepoQuest is under development. Below are some pitfalls to know.
 
@@ -33,6 +38,3 @@ RepoQuest has some sharp edges. Some are inherent to the quest concept, and some
   The goal of RepoQuest is to avoid hard resets at all costs (except when you explicitly ask for the reference solution). If you encounter a hard reset, please let us know!
 
 * The RepoQuest UI infrequently polls Github for the state of your repo. If you perform an action within Github (lke merging a PR) and the UI doesn't seem to update, try clicking the "Refresh" button in the control panel.
-
-[Installation]: https://github.com/cognitive-engineering-lab/repo-quest?tab=readme-ov-file#installation
-[Setup]: https://github.com/cognitive-engineering-lab/repo-quest?tab=readme-ov-file#setup

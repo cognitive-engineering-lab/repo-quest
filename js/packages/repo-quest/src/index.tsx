@@ -2,7 +2,7 @@ import * as dialog from "@tauri-apps/plugin-dialog";
 import { type Quiz, QuizView } from "@wcrichto/quiz";
 import _ from "lodash";
 import { marked } from "marked";
-import { action, makeAutoObservable } from "mobx";
+import { makeAutoObservable, runInAction } from "mobx";
 import { observer } from "mobx-react";
 import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -59,15 +59,19 @@ class Loader {
       : null
   );
 
-  loadAwait = action(async <T,>(promise: Promise<T>) => {
-    this.loading = true;
+  loadAwait = async <T,>(promise: Promise<T>) => {
+    runInAction(() => {
+      this.loading = true;
+    });
     try {
       let value = await promise;
       return value;
     } finally {
-      this.loading = false;
+      runInAction(() => {
+        this.loading = false;
+      });
     }
-  });
+  };
 }
 
 function Await<T>(props: AwaitProps<T>) {
@@ -333,7 +337,7 @@ let QuestView: React.FC<{
   quest: QuestConfig;
   initialState: StateDescriptor;
 }> = ({ quest, initialState }) => {
-  console.log(quest);
+  console.debug(quest);
 
   let loader = useContext(Loader.context)!;
   let [state, setState] = useState<StateDescriptor | undefined>(initialState);

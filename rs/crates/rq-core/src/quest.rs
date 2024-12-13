@@ -360,8 +360,9 @@ impl Quest {
   async fn file_pr(&self, base_branch: &str, target_branch: &str) -> Result<PullRequest> {
     self
       .origin_git
-      .checkout_main_and_pull()
-      .context("Failed to checkout main and pull")?;
+      .checkout_main()
+      .context("Failed to checkout main")?;
+    self.origin_git.pull().context("Failed to pull")?;
 
     let (branch_head, merge_type) = self
       .origin_git

@@ -189,10 +189,12 @@ impl GitRepo {
     Ok((head, merge_type))
   }
 
-  pub fn checkout_main_and_pull(&self) -> Result<()> {
-    git!(self, "checkout main")?;
-    git!(self, "pull")?;
-    Ok(())
+  pub fn pull(&self) -> Result<()> {
+    git!(self, "pull")
+  }
+
+  pub fn checkout_main(&self) -> Result<()> {
+    git!(self, "checkout main")
   }
 
   pub fn head_commit(&self) -> Result<String> {
