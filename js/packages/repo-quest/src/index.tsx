@@ -366,6 +366,12 @@ let QuestView: React.FC<{
             <div className="quest-dir">
               <strong>Quest directory:</strong> <code>{state.dir}</code>
             </div>
+            {state.behind_origin && (
+              <div className="behind-origin-warning">
+                Your local repo is not up-to-date with the Github repo, run{" "}
+                <code>git pull</code>!
+              </div>
+            )}
             <ol className="stages" start={0}>
               {_.range(cur_stage + 1).map(i => (
                 <StageView

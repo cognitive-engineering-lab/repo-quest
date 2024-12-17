@@ -95,8 +95,12 @@ impl GitRepo {
   pub fn setup_upstream(&self, upstream: &GithubRepo) -> Result<()> {
     let remote = upstream.remote(GitProtocol::Https);
     git!(self, "remote add {UPSTREAM} {remote}")?;
-    git!(self, "fetch {UPSTREAM}")?;
+    self.fetch(UPSTREAM)?;
     Ok(())
+  }
+
+  pub fn fetch(&self, remote: &str) -> Result<()> {
+    git!(self, "fetch {remote}")
   }
 
   pub fn upstream(&self) -> Result<Option<&'static str>> {
@@ -238,6 +242,15 @@ impl GitRepo {
         Ok((path, contents))
       })
       .collect()
+  }
+
+  pub fn is_behind_origin(&self) -> Result<bool> {
+    let out = git_output!(self, "rev-list --count main..origin/main")?;
+    let count = out
+      .trim()
+      .parse::<i32>()
+      .with_context(|| format!("rev-list returned non-numeric output:\n{out}"))?;
+    Ok(count > 0)
   }
 
   pub fn write_initial_files(&self, package: &QuestPackage) -> Result<()> {

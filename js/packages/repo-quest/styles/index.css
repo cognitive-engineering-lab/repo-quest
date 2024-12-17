@@ -258,3 +258,10 @@ dialog {
   top: 2rem;
   right: 1rem;
 }
+
+.behind-origin-warning {
+  font-weight: bold;
+  padding: 0.5rem;
+  margin: 1rem 0;
+  background-color: rgb(255, 251, 167);
+}

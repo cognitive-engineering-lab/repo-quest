@@ -92,6 +92,7 @@ pub struct StateDescriptor {
   stages: Vec<StageState>,
   state: QuestState,
   can_skip: bool,
+  behind_origin: bool,
 }
 
 pub enum CreateSource {
@@ -334,15 +335,18 @@ impl Quest {
 
   pub async fn state_descriptor(&self) -> Result<StateDescriptor> {
     let state = self.infer_state().await?;
+    let behind_origin = self.origin_git.is_behind_origin()?;
     Ok(StateDescriptor {
       dir: self.dir.clone(),
       stages: self.stage_states(),
       state,
       can_skip: self.template.can_skip(),
+      behind_origin,
     })
   }
 
   pub async fn infer_state_update(&self) -> Result<()> {
+    self.origin_git.fetch("origin")?;
     self.origin.fetch().await?;
     let state = self.state_descriptor().await?;
     self.state_event.emit(state)?;

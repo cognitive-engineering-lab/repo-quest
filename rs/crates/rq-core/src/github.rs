@@ -276,6 +276,7 @@ impl GithubRepo {
     let user = load_user().await.context("Failed to load user")?;
     let params = json!({
         "name": &package.config.repo,
+        "private": true,
     });
     octocrab::instance()
       .post::<_, serde_json::Value>("/user/repos", Some(&params))
@@ -304,7 +305,8 @@ impl GithubRepo {
       .repo_handler()
       .generate(name)
       .owner(&user)
-      .private(true)
+      // TODO: make this configurable? Right now we don't want privacy so we can see learner progress
+      // .private(true)
       .send()
       .await
       .with_context(|| format!("Failed to clone template repo {}/{}", base.user, base.name))?;
