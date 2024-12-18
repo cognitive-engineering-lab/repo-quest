@@ -57,9 +57,17 @@ impl QuestConfig {
       Some(remote) => Cow::Owned(format!("{remote}/meta")),
       None => Cow::Borrowed("meta"),
     };
-    let contents = repo.show(&branch, "rqst.toml")?;
-    let config = toml::de::from_str::<QuestConfig>(&contents)
-      .context("Failed to parse quest configuration")?;
+    let config_str = repo.read_file(&branch, "rqst.toml")?;
+    let mut config = toml::de::from_str::<QuestConfig>(&config_str)
+      .context("Failed to parse quest configuration rqst.toml")?;
+
+    if repo.contains_file(&branch, "final.toml")? {
+      let quiz_str = repo.read_file(&branch, "final.toml")?;
+      let quiz =
+        toml::de::from_str::<serde_json::Value>(&quiz_str).context("Failed to parse final.toml")?;
+      config.r#final = Some(quiz);
+    }
+
     Ok(config)
   }
 }

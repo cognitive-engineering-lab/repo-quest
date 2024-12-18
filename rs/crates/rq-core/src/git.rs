@@ -6,7 +6,7 @@ use std::{
   process::Stdio,
 };
 
-use anyhow::{ensure, Context, Result};
+use anyhow::{anyhow, ensure, Context, Result};
 
 use crate::{
   command::command,
@@ -61,35 +61,29 @@ impl GitRepo {
     Ok(GitRepo::new(path))
   }
 
-  fn git_core(&self, args: &str, capture: bool) -> Result<Option<String>> {
+  fn git_core(&self, args: &str) -> Result<std::result::Result<String, String>> {
     let mut cmd = command(&format!("git {args}"), &self.path);
+    cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
-    if capture {
-      cmd.stdout(Stdio::piped());
-    }
 
     let output = cmd.output()?;
-    ensure!(
-      output.status.success(),
-      "git failed with stderr:\n{}",
-      String::from_utf8(output.stderr)?
-    );
+    if !output.status.success() {
+      return Ok(Err(String::from_utf8(output.stderr)?));
+    }
 
-    let stdout = if capture {
-      Some(String::from_utf8(output.stdout)?)
-    } else {
-      None
-    };
-
-    Ok(stdout)
+    let stdout = String::from_utf8(output.stdout)?;
+    Ok(Ok(stdout))
   }
 
   fn git(&self, args: &str) -> Result<()> {
-    self.git_core(args, false).map(|_| ())
+    self.git_output(args)?;
+    Ok(())
   }
 
   fn git_output(&self, args: &str) -> Result<String> {
-    self.git_core(args, true).map(|s| s.unwrap())
+    self
+      .git_core(args)?
+      .map_err(|stderr| anyhow!("git failed with stderr:\n{stderr}"))
   }
 
   pub fn setup_upstream(&self, upstream: &GithubRepo) -> Result<()> {
@@ -216,14 +210,21 @@ impl GitRepo {
     git_output!(self, "diff {base}..{head}")
   }
 
-  pub fn show(&self, branch: &str, file: &str) -> Result<String> {
-    git_output!(self, "show {branch}:{file}")
+  pub fn contains_file(&self, branch: &str, file: &str) -> Result<bool> {
+    let status = command(&format!("git cat-file -e {branch}:{file}"), &self.path)
+      .status()
+      .with_context(|| format!("Failed to `git cat-file -e {branch}:{file}`"))?;
+    Ok(status.success())
+  }
+
+  pub fn read_file(&self, branch: &str, file: &str) -> Result<String> {
+    git_output!(self, "cat-file -p {branch}:{file}")
   }
 
   pub fn show_bin(&self, branch: &str, file: &str) -> Result<Vec<u8>> {
-    let output = command(&format!("git show {branch}:{file}"), &self.path)
+    let output = command(&format!("git cat-file -p {branch}:{file}"), &self.path)
       .output()
-      .with_context(|| format!("Failed to `git show {branch}:{file}"))?;
+      .with_context(|| format!("Failed to `git cat-file -p {branch}:{file}"))?;
     ensure!(
       output.status.success(),
       "git show failed with stderr:\n{}",
@@ -238,7 +239,7 @@ impl GitRepo {
     files
       .map(|file| {
         let path = PathBuf::from(file);
-        let contents = self.show("main", file)?;
+        let contents = self.read_file("main", file)?;
         Ok((path, contents))
       })
       .collect()

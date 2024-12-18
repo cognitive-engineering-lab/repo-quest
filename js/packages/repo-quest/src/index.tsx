@@ -7,6 +7,7 @@ import { observer } from "mobx-react";
 import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import ReactDOM from "react-dom/client";
+import * as uuid from "uuid";
 
 import guideMd from "../../../../GUIDE.md?raw";
 import {
@@ -20,6 +21,48 @@ import {
   type StateDescriptor,
   commands
 } from "./bindings/backend";
+
+declare global {
+  var VERSION: string;
+  var COMMIT_HASH: string;
+  var TELEMETRY_URL: string;
+}
+
+function getSessionId() {
+  const SESSION_STORAGE_KEY = "__repo_quest_telemetry_session";
+  if (localStorage.getItem(SESSION_STORAGE_KEY) === null) {
+    localStorage.setItem(SESSION_STORAGE_KEY, uuid.v4());
+  }
+  return localStorage.getItem(SESSION_STORAGE_KEY)!;
+}
+
+class Telemetry {
+  private sessionId: string;
+
+  constructor() {
+    this.sessionId = getSessionId();
+  }
+
+  // biome-ignore lint/suspicious/noExplicitAny: payload can be anything
+  log(_endpoint: string, payload: any) {
+    let log = {
+      sessionId: this.sessionId,
+      commitHash: COMMIT_HASH,
+      version: VERSION,
+      timestamp: new Date().getTime(),
+      payload
+    };
+
+    let fullUrl = `${TELEMETRY_URL}/rq_answers`;
+    fetch(fullUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(log)
+    });
+  }
+}
 
 let useWindowListener = <K extends keyof WindowEventMap>(
   event: K,
@@ -318,18 +361,28 @@ let NewQuest = () => {
   );
 };
 
-let QuizPage: React.FC<{ quest: QuestConfig }> = ({ quest }) => {
+let QuizPage: React.FC<{ quest: QuestConfig; goBack: () => void }> = ({
+  quest,
+  goBack
+}) => {
   let quiz = quest.final as
     /* biome-ignore lint/suspicious/noExplicitAny: backend guarantees that this satisfies Quiz */
     any as Quiz;
   return (
-    <QuizView
-      name={quest.title}
-      quiz={quiz}
-      cacheAnswers={true}
-      autoStart={true}
-      allowRetry={true}
-    />
+    <div>
+      <div>
+        <button type="button" onClick={goBack}>
+          Back to main page
+        </button>
+      </div>
+      <QuizView
+        name={quest.title}
+        quiz={quiz}
+        // cacheAnswers={true}
+        autoStart={true}
+        allowRetry={true}
+      />
+    </div>
   );
 };
 
@@ -337,8 +390,6 @@ let QuestView: React.FC<{
   quest: QuestConfig;
   initialState: StateDescriptor;
 }> = ({ quest, initialState }) => {
-  console.debug(quest);
-
   let loader = useContext(Loader.context)!;
   let [state, setState] = useState<StateDescriptor | undefined>(initialState);
   let [showQuiz, setShowQuiz] = useState(false);
@@ -346,8 +397,13 @@ let QuestView: React.FC<{
   useEffect(() => setTitle(quest.title), [quest.title]);
 
   useEffect(() => {
-    events.stateEvent.listen(e => setState(e.payload));
+    console.debug("QuestConfig", quest);
+    events.stateEvent.listen(e => {
+      if (!_.isEqual(e.payload, state)) setState(e.payload);
+    });
   }, []);
+
+  console.debug("State", state);
 
   let cur_stage =
     state && state.state.type === "Ongoing"
@@ -355,7 +411,7 @@ let QuestView: React.FC<{
       : quest.stages.length - 1;
 
   if (showQuiz) {
-    return <QuizPage quest={quest} />;
+    return <QuizPage quest={quest} goBack={() => setShowQuiz(false)} />;
   }
 
   return (
@@ -365,6 +421,12 @@ let QuestView: React.FC<{
           <>
             <div className="quest-dir">
               <strong>Quest directory:</strong> <code>{state.dir}</code>
+              <button
+                type="button"
+                onClick={() => navigator.clipboard.writeText(state!.dir)}
+              >
+                📋
+              </button>
             </div>
             {state.behind_origin && (
               <div className="behind-origin-warning">
@@ -382,9 +444,13 @@ let QuestView: React.FC<{
                 />
               ))}
               {state.state.type === "Completed" && quest.final && (
-                <li>
+                <li className="quiz-bullet">
                   <div>
-                    <span className="stage-title">Quiz</span>
+                    <span className="stage-title">Quiz</span>{" "}
+                  </div>
+                  <div>
+                    Check your conceptual understanding of the material by
+                    taking this quiz.
                   </div>
                   <div>
                     <button type="button" onClick={() => setShowQuiz(true)}>
@@ -406,17 +472,6 @@ let QuestView: React.FC<{
               onClick={() => loader.loadAwait(commands.refreshState())}
             >
               Refresh UI state
-            </button>
-          </div>
-
-          <div>
-            <button
-              type="button"
-              onClick={() => {
-                if (state) navigator.clipboard.writeText(state.dir);
-              }}
-            >
-              Copy directory to 📋
             </button>
           </div>
 
@@ -597,6 +652,7 @@ let App = () => {
     undefined
   );
   let [loader] = useState(() => new Loader());
+
   return (
     <Loader.context.Provider value={loader}>
       <ErrorContext.Provider value={setErrorMessage}>
@@ -621,11 +677,14 @@ let App = () => {
               <GithubLoader />
             )}
           </div>
+          <div id="version-watermark">v{VERSION}</div>
         </TitleContext.Provider>
       </ErrorContext.Provider>
     </Loader.context.Provider>
   );
 };
+
+window.telemetry = new Telemetry();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(<App />);
 

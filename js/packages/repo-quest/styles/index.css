@@ -1,5 +1,6 @@
 @import "normalize.css/normalize.css";
 @import "@wcrichto/quiz/lib.scss";
+@import "highlight.js/styles/default.css";
 @import url('https://fonts.googleapis.com/css2?family=Open+Sans:ital,wght@0,300..800;1,300..800&family=Source+Code+Pro:ital,wght@0,200..900;1,200..900&display=swap');
 
 :root {
@@ -50,6 +51,10 @@ h1 {
 
 .quest-dir {
   margin-bottom: 1rem;
+
+  button {
+    margin-left: 0.5rem;
+  }
 }
 
 .stages {
@@ -57,6 +62,10 @@ h1 {
 
   li {
     margin-bottom: 1rem;
+
+    &.quiz-bullet {
+      list-style-type: none;
+    }
   }
 }
 
@@ -255,7 +264,7 @@ dialog {
 
 .guide-button {
   position: absolute;
-  top: 2rem;
+  top: 1.5rem;
   right: 1rem;
 }
 
@@ -264,4 +273,21 @@ dialog {
   padding: 0.5rem;
   margin: 1rem 0;
   background-color: rgb(255, 251, 167);
+}
+
+#version-watermark {
+  position: fixed;
+  bottom: 0.5rem;
+  right: 0.5rem;
+  color: #ccc;
+  font-size: 60%;
+  font-family: var(--code-font);
+}
+
+.mdbook-quiz .answer .answer-row > div {
+  .correct, .incorrect {
+    &::before {
+      font-size: 1rem !important;
+    }
+  }
 }
