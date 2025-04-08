@@ -3,4 +3,4 @@ skip_core_tasks = true
 default_to_workspace = false
 
 [tasks.init-bindings]
-script = "cd rs/crates/repo-quest && cargo run -p repo-quest --bin export-bindings"
+script = "cd rs/crates/rq-gui && cargo run -p repo-quest-gui --bin export-bindings"

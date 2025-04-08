@@ -9,7 +9,8 @@ serde_json = { workspace = true }
 futures-util = "0.3.30"
 home = "0.5.9"
 http = "1.2.0"
-octocrab = "0.42.0"
+octocrab = "0.44.0"
+idna_adapter = "=1.1.0" # https://github.com/servo/rust-url/issues/993
 parking_lot = "0.12.3"
 regex = "1.11.1"
 tokio = { workspace = true, features = ["macros"] }
