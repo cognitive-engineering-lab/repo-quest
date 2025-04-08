@@ -20,10 +20,10 @@ jobs:
             os: macos-latest
           - target: aarch64-apple-darwin
             os: macos-latest
-          - target: x86_64-pc-windows-msvc
-            os: windows-latest
-          - target: aarch64-pc-windows-msvc
-            os: windows-latest
+          # - target: x86_64-pc-windows-msvc
+          #   os: windows-latest
+          # - target: aarch64-pc-windows-msvc
+          #   os: windows-latest
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -107,6 +107,4 @@ jobs:
           files: |
             x86_64-unknown-linux-gnu/x86_64-unknown-linux-gnu.tar.gz
             x86_64-apple-darwin/x86_64-apple-darwin.tar.gz
-            aarch64-apple-darwin/aarch64-apple-darwin.tar.gz
-            x86_64-pc-windows-msvc/x86_64-pc-windows-msvc.tar.gz
-            aarch64-pc-windows-msvc/aarch64-pc-windows-msvc.tar.gz
+            aarch64-apple-darwin/aarch64-apple-darwin.tar.gz                        
