@@ -12,7 +12,7 @@ async fn main() {
 
   tauri::async_runtime::set(tokio::runtime::Handle::current());
 
-  let specta_builder = repo_quest::specta_builder();
+  let specta_builder = repo_quest_gui::specta_builder();
   tauri::Builder::default()
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_shell::init())

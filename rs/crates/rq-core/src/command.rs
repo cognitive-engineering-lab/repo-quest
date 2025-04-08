@@ -14,9 +14,9 @@ fn get_user_env() -> HashMap<String, String> {
   let stdout = String::from_utf8(output.stdout).expect("Env vars not utf8");
   stdout
     .lines()
-    .map(|line| {
-      let (key, value) = line.split_once("=").expect("Failed to parse env k/v");
-      (key.to_string(), value.to_string())
+    .filter_map(|line| {
+      let (key, value) = line.split_once("=")?;
+      Some((key.to_string(), value.to_string()))
     })
     .collect()
 }

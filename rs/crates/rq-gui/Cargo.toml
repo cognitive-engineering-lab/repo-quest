@@ -1,8 +1,9 @@
 [package]
-name = "repo-quest"
+name = "repo-quest-gui"
 version = "0.1.10"
 edition = "2024"
-default-run = "repo-quest"
+default-run = "repo-quest-gui"
+publish = false
 
 [build-dependencies]
 tauri-build = { version = "2.1.1", features = ["config-toml"] }

@@ -41,8 +41,11 @@ jobs:
         with:          
           targets: ${{ matrix.target }}
 
-      - uses: tauri-apps/tauri-action@v0
-        with:          
-          args: --target ${{ matrix.target }}
-          projectPath: rs/crates/repo-quest
-          tauriScript: cargo tauri
+      - name: Build CLI for target
+        run: cargo build -p repo-quest --target ${{ matrix.target }}
+
+      # - uses: tauri-apps/tauri-action@v0
+      #   with:          
+      #     args: --target ${{ matrix.target }}
+      #     projectPath: rs/crates/repo-quest
+      #     tauriScript: cargo tauri

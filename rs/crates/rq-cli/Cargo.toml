@@ -1,5 +1,5 @@
 [package]
-name = "rq-cli"
+name = "repo-quest"
 version = "0.1.10"
 edition = "2024"
 
@@ -9,8 +9,8 @@ rq-core = { path = "../rq-core" }
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 serde_json = { workspace = true }
 inquire = "0.7.5"
+crossterm = "0.25.0" # should match inquire
 strum = { version = "0.27.1", features = ["derive"] }
-crossterm = "0.28.1"
 fuzzy-matcher = "0.3.7"
 eyre = { workspace = true }
 color-eyre = { workspace = true }

@@ -588,7 +588,7 @@ mod test {
 
   async fn create_test_quest(source: CreateSource) -> Result<Arc<Quest>> {
     let dir = current_dir()?;
-    let quest = Quest::create(dir, source, Box::new(NoopEmitter)).await?;
+    let quest = Quest::create(&dir, source, Box::new(NoopEmitter)).await?;
     Ok(Arc::new(quest))
   }
 
