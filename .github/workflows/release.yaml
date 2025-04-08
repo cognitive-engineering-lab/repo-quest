@@ -40,17 +40,20 @@ jobs:
 
       - name: Compile binary
         run: cargo build -p repo-quest --locked --release --target ${{ matrix.target }}
+        working-directory: rs
 
       - name: Tar artifacts
         run: |
           cd target/${{ matrix.target }}/release
           tar -czf ${{ matrix.target }}.tar.gz repo-quest
+        working-directory: rs
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}
           path: target/${{ matrix.target }}/release/${{ matrix.target }}.tar.gz
+        working-directory: rs
 
       # - uses: tauri-apps/tauri-action@v0
       #   env:
@@ -80,6 +83,7 @@ jobs:
 
       - name: Publish crates
         run: cargo ws publish --from-git --yes
+        working-directory: rs
 
       - name: Add a tag for the merged commit
         uses: christophebedard/tag-version-commit@v1

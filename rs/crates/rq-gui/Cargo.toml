@@ -1,6 +1,6 @@
 [package]
 name = "repo-quest-gui"
-version = "0.1.10"
+version = "0.2.0"
 edition = "2024"
 default-run = "repo-quest-gui"
 publish = false
@@ -18,7 +18,7 @@ serde_json = { workspace = true }
 specta = { workspace = true }
 specta-typescript = "0.0.7"
 tauri-specta = { version = "=2.0.0-rc.20", features = ["derive", "typescript"] }
-rq-core = { path = "../rq-core" }
+rq-core = { version = "0.2.0", path = "../rq-core" }
 eyre = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }

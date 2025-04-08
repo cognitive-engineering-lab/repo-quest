@@ -1,7 +1,10 @@
 [package]
 name = "rq-core"
-version = "0.1.10"
+version = "0.2.0"
 edition = "2024"
+description = "RepoQuest core functionality."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/cognitive-engineering-lab/repo-quest"
 
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
