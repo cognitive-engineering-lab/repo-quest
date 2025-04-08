@@ -43,6 +43,7 @@ jobs:
 
       - name: Build CLI for target
         run: cargo build -p repo-quest --target ${{ matrix.target }}
+        working-directory: rs
 
       # - uses: tauri-apps/tauri-action@v0
       #   with:
