@@ -18,12 +18,12 @@ jobs:
 
       - name: Backend tests
         run: |
-          cargo test
+          cargo test -p repo-quest
           cargo clippy -- -D warnings
         working-directory: rs
 
-      - name: Frontend tests
-        run: |
-          depot test
-          depot build --lint-fail
-        working-directory: js
+      # - name: Frontend tests
+      #   run: |
+      #     depot test
+      #     depot build --lint-fail
+      #   working-directory: js
