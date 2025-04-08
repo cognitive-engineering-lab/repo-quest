@@ -11,8 +11,8 @@ use rq_core::{
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use tauri::{AppHandle, Manager, State};
-use tauri_specta::collect_events;
 use tauri_specta::Event;
+use tauri_specta::collect_events;
 
 struct TauriEmitter(AppHandle);
 
@@ -20,13 +20,13 @@ struct TauriEmitter(AppHandle);
 pub struct StateEvent(StateDescriptor);
 
 impl StateEmitter for TauriEmitter {
-  fn emit(&self, state: StateDescriptor) -> anyhow::Result<()> {
+  fn emit(&self, state: StateDescriptor) -> eyre::Result<()> {
     Ok(StateEvent(state).emit(&self.0)?)
   }
 }
 
 #[inline]
-fn fmt_err<T>(r: anyhow::Result<T>) -> Result<T, String> {
+fn fmt_err<T>(r: eyre::Result<T>) -> Result<T, String> {
   r.map_err(|e| format!("{e:?}"))
 }
 
@@ -66,7 +66,7 @@ async fn load_quest(
   dir: PathBuf,
   app: AppHandle,
 ) -> Result<(QuestConfig, StateDescriptor), String> {
-  let quest = fmt_err(Quest::load(dir, Box::new(TauriEmitter(app.clone()))).await)?;
+  let quest = fmt_err(Quest::load(&dir, Box::new(TauriEmitter(app.clone()))).await)?;
   let quest = manage_quest(quest, &app);
   let state = fmt_err(quest.state_descriptor().await)?;
   Ok((quest.config.clone(), state))
@@ -101,7 +101,7 @@ async fn new_quest(
       CreateSource::Package(package)
     }
   };
-  let quest = fmt_err(Quest::create(dir, source, Box::new(TauriEmitter(app.clone()))).await)?;
+  let quest = fmt_err(Quest::create(&dir, source, Box::new(TauriEmitter(app.clone()))).await)?;
   let quest = manage_quest(quest, &app);
   let state = fmt_err(quest.state_descriptor().await)?;
   Ok((quest.config.clone(), state))

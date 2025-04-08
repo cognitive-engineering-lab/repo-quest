@@ -1,11 +1,16 @@
 [package]
 name = "rq-cli"
 version = "0.1.10"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 clap = { version = "4.5.17", features = ["derive"] }
 rq-core = { path = "../rq-core" }
 tokio = { workspace = true, features = ["rt-multi-thread"] }
-anyhow = { workspace = true }
 serde_json = { workspace = true }
+inquire = "0.7.5"
+strum = { version = "0.27.1", features = ["derive"] }
+crossterm = "0.28.1"
+fuzzy-matcher = "0.3.7"
+eyre = { workspace = true }
+color-eyre = { workspace = true }

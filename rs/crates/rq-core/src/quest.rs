@@ -1,18 +1,23 @@
-use std::{borrow::Cow, collections::HashMap, path::PathBuf, time::Duration};
+use std::{
+  borrow::Cow,
+  collections::HashMap,
+  path::{Path, PathBuf},
+  time::Duration,
+};
 
 use crate::{
   git::{GitRepo, UPSTREAM},
-  github::{self, load_user, GithubRepo, PullSelector},
+  github::{self, GithubRepo, PullSelector, load_user},
   package::QuestPackage,
   stage::{Stage, StagePart, StagePartStatus},
   template::{InstanceOutputs, PackageTemplate, QuestTemplate, RepoTemplate},
 };
-use anyhow::{Context, Result};
+use eyre::{Context, Result};
 use http::StatusCode;
 use octocrab::{
-  models::{issues::Issue, pulls::PullRequest, IssueState},
-  params::{issues, pulls, Direction},
   GitHubError,
+  models::{IssueState, issues::Issue, pulls::PullRequest},
+  params::{Direction, issues, pulls},
 };
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -44,11 +49,11 @@ pub struct QuestConfig {
 
 #[derive(Serialize, Deserialize, Type, Clone)]
 pub struct StageState {
-  stage: Stage,
-  issue_url: Option<String>,
-  feature_pr_url: Option<String>,
-  solution_pr_url: Option<String>,
-  reference_solution_pr_url: Option<String>,
+  pub stage: Stage,
+  pub issue_url: Option<String>,
+  pub feature_pr_url: Option<String>,
+  pub solution_pr_url: Option<String>,
+  pub reference_solution_pr_url: Option<String>,
 }
 
 impl QuestConfig {
@@ -88,19 +93,19 @@ pub struct Quest {
   origin: GithubRepo,
   origin_git: GitRepo,
   stage_index: HashMap<String, usize>,
-  dir: PathBuf,
   state_event: Box<dyn StateEmitter>,
 
+  pub dir: PathBuf,
   pub config: QuestConfig,
 }
 
 #[derive(Serialize, Deserialize, Clone, Type)]
 pub struct StateDescriptor {
-  dir: PathBuf,
-  stages: Vec<StageState>,
-  state: QuestState,
-  can_skip: bool,
-  behind_origin: bool,
+  pub dir: PathBuf,
+  pub stages: Vec<StageState>,
+  pub state: QuestState,
+  pub can_skip: bool,
+  pub behind_origin: bool,
 }
 
 pub enum CreateSource {
@@ -110,7 +115,7 @@ pub enum CreateSource {
 
 impl Quest {
   async fn load_core(
-    dir: PathBuf,
+    dir: &Path,
     config: QuestConfig,
     state_event: Box<dyn StateEmitter>,
     template: Box<dyn QuestTemplate>,
@@ -125,7 +130,7 @@ impl Quest {
       .collect::<HashMap<_, _>>();
 
     let q = Quest {
-      dir,
+      dir: dir.to_path_buf(),
       config,
       template,
       origin,
@@ -140,7 +145,7 @@ impl Quest {
   }
 
   pub async fn create(
-    dir: PathBuf,
+    dir: &Path,
     source: CreateSource,
     state_event: Box<dyn StateEmitter>,
   ) -> Result<Self> {
@@ -158,12 +163,12 @@ impl Quest {
       origin,
       origin_git,
       config,
-    } = template.instantiate(&dir).await?;
+    } = template.instantiate(dir).await?;
 
     origin_git.install_hooks()?;
 
     Self::load_core(
-      dir.join(&config.repo),
+      &dir.join(&config.repo),
       config,
       state_event,
       template,
@@ -173,27 +178,32 @@ impl Quest {
     .await
   }
 
-  pub async fn load(dir: PathBuf, state_event: Box<dyn StateEmitter>) -> Result<Self> {
+  pub async fn load(dir: &Path, state_event: Box<dyn StateEmitter>) -> Result<Self> {
     let user = load_user().await?;
-    let origin_git = GitRepo::new(&dir);
+    let origin_git = GitRepo::new(dir);
     let upstream = origin_git
       .upstream()
       .context("Failed to test for upstream")?;
     let config = QuestConfig::load(&origin_git, upstream).context("Failed to load quest config")?;
-    let origin = GithubRepo::load(&user, &config.repo)
-      .await
-      .context("Failed to load GitHub repo")?;
-    let template: Box<dyn QuestTemplate> = if upstream.is_some() {
-      let upstream = GithubRepo::load(&config.author, &config.repo)
+    let origin_fut = async {
+      GithubRepo::load(&user, &config.repo)
         .await
-        .context("Failed to load upstream GitHub repo")?;
-      Box::new(RepoTemplate(upstream))
-    } else {
-      let contents = origin_git.show_bin("meta", "package.json.gz")?;
-      let package =
-        QuestPackage::load_from_blob(&contents).context("Failed to load quest package")?;
-      Box::new(PackageTemplate(package))
+        .context("Failed to load GitHub repo")
     };
+    let template_fut = async {
+      if upstream.is_some() {
+        let upstream = GithubRepo::load(&config.author, &config.repo)
+          .await
+          .context("Failed to load upstream GitHub repo")?;
+        Ok(Box::new(RepoTemplate(upstream)) as Box<dyn QuestTemplate>)
+      } else {
+        let contents = origin_git.show_bin("meta", "package.json.gz")?;
+        let package =
+          QuestPackage::load_from_blob(&contents).context("Failed to load quest package")?;
+        Ok(Box::new(PackageTemplate(package)) as Box<dyn QuestTemplate>)
+      }
+    };
+    let (origin, template) = try_join!(origin_fut, template_fut)?;
 
     Self::load_core(dir, config, state_event, template, origin, origin_git).await
   }
@@ -247,7 +257,7 @@ impl Quest {
           stage: 0,
           part: StagePart::Starter,
           status: StagePartStatus::Start,
-        })
+        });
       }
       Err(e) => return Err(e.into()),
     };
@@ -354,7 +364,6 @@ impl Quest {
   }
 
   pub async fn infer_state_update(&self) -> Result<()> {
-    self.origin_git.fetch("origin")?;
     self.origin.fetch().await?;
     let state = self.state_descriptor().await?;
     self.state_event.emit(state)?;
@@ -385,9 +394,10 @@ impl Quest {
       .template
       .pull_request(&PullSelector::Branch(target_branch.into()))
       .with_context(|| format!("Failed to fetch pull request for {target_branch}"))?;
+    let comments = self.template.pull_request_comments(&pr).await?;
     let new_pr = self
       .origin
-      .copy_pr(&pr, &branch_head, merge_type)
+      .copy_pr(&pr, &comments, &branch_head, merge_type)
       .await
       .context("Failed to copy PR to repo")?;
 
@@ -479,14 +489,14 @@ impl Quest {
         let feature_pr_url = self
           .origin
           .pr(&PullSelector::Branch(stage.branch_name(StagePart::Starter)))
-          .map(|pr| pr.data.html_url.as_ref().unwrap().to_string());
+          .map(|pr| pr.html_url.as_ref().unwrap().to_string());
 
         let solution_pr_url = self
           .origin
           .pr(&PullSelector::Branch(
             stage.branch_name(StagePart::Solution),
           ))
-          .map(|pr| pr.data.html_url.as_ref().unwrap().to_string());
+          .map(|pr| pr.html_url.as_ref().unwrap().to_string());
 
         let reference_solution_pr_url = self.template.reference_solution_pr_url(stage);
 
@@ -530,14 +540,14 @@ impl Quest {
 mod test {
   use super::*;
   use crate::github::{self, GithubToken};
-  use anyhow::ensure;
   use env::current_dir;
+  use eyre::ensure;
   use std::{
     env, fs,
     process::Command,
     sync::{Arc, Once},
   };
-  use tracing_subscriber::{fmt, layer::SubscriberExt, prelude::*, EnvFilter};
+  use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, prelude::*};
 
   const TEST_ORG: &str = "cognitive-engineering-lab";
   const TEST_REPO: &str = "rqst-test";
