@@ -92,7 +92,7 @@ pub fn check_ssh() -> Result<()> {
     Some(1) => Ok(()),
     _ => {
       let stderr = String::from_utf8(output.stderr)?;
-      if stderr.trim() == "git@github.com: Permission denied (publickey)." {
+      if stderr.contains("git@github.com: Permission denied (publickey).") {
         bail!("Your machine is not setup for a secure connection to Github. Please follow the instructions here: https://docs.github.com/en/authentication/troubleshooting-ssh/error-permission-denied-publickey");
       } else {
         bail!("Failed to establish a secure connection to Github with error:\n{stderr}")
