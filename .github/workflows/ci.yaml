@@ -19,7 +19,7 @@ jobs:
       - name: Backend tests
         run: |
           cargo test -p repo-quest
-          cargo clippy -- -D warnings
+          cargo clippy -p repo-quest -- -D warnings
         working-directory: rs
 
       # - name: Frontend tests
