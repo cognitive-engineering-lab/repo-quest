@@ -1,11 +1,14 @@
-use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
-use octocrab::models::issues::Issue;
+use eyre::{Context, Result, eyre};
+use octocrab::models::{
+  issues::Issue,
+  pulls::{self, PullRequest},
+};
 use std::path::Path;
 
 use crate::{
   git::{GitRepo, MergeType},
-  github::{find_issue, find_pr, FullPullRequest, GithubRepo, PullSelector},
+  github::{GithubRepo, PullSelector, find_issue, find_pr},
   package::QuestPackage,
   quest::QuestConfig,
   stage::{Stage, StagePart},
@@ -20,7 +23,8 @@ pub struct InstanceOutputs {
 #[async_trait]
 pub trait QuestTemplate: Send + Sync + 'static {
   async fn instantiate(&self, path: &Path) -> Result<InstanceOutputs>;
-  fn pull_request(&self, selector: &PullSelector) -> Result<FullPullRequest>;
+  fn pull_request(&self, selector: &PullSelector) -> Result<PullRequest>;
+  async fn pull_request_comments(&self, selector: &PullRequest) -> Result<Vec<pulls::Comment>>;
   fn issue(&self, label: &str) -> Result<Issue>;
   fn apply_patch(
     &self,
@@ -53,16 +57,20 @@ impl QuestTemplate for RepoTemplate {
     })
   }
 
-  fn pull_request(&self, selector: &PullSelector) -> Result<FullPullRequest> {
-    let pr = self.0.pr(selector).ok_or(anyhow!("Missing PR"))?;
-    Ok((*pr).clone())
+  fn pull_request(&self, selector: &PullSelector) -> Result<PullRequest> {
+    let pr = self.0.pr(selector).ok_or(eyre!("Missing PR"))?;
+    Ok(pr.clone())
+  }
+
+  async fn pull_request_comments(&self, pr: &PullRequest) -> Result<Vec<pulls::Comment>> {
+    self.0.pr_comments(pr).await
   }
 
   fn issue(&self, label: &str) -> Result<Issue> {
     let issue = self
       .0
       .issue(label)
-      .ok_or_else(|| anyhow!("Missing issue for label: {label}"))?;
+      .ok_or_else(|| eyre!("Missing issue for label: {label}"))?;
     Ok((*issue).clone())
   }
 
@@ -81,7 +89,7 @@ impl QuestTemplate for RepoTemplate {
       .pr(&PullSelector::Branch(
         stage.branch_name(StagePart::Solution),
       ))
-      .map(|pr| pr.data.html_url.as_ref().unwrap().to_string())
+      .map(|pr| pr.html_url.as_ref().unwrap().to_string())
   }
 
   fn can_skip(&self) -> bool {
@@ -109,15 +117,25 @@ impl QuestTemplate for PackageTemplate {
     })
   }
 
-  fn pull_request(&self, selector: &PullSelector) -> Result<FullPullRequest> {
-    let index = find_pr(selector, &self.0.prs)
-      .ok_or_else(|| anyhow!("Missing PR for selector: {selector:?}"))?;
-    Ok(self.0.prs[index].clone())
+  fn pull_request(&self, selector: &PullSelector) -> Result<PullRequest> {
+    let index = find_pr(selector, self.0.prs.iter().map(|pr| &pr.data))
+      .ok_or_else(|| eyre!("Missing PR for selector: {selector:?}"))?;
+    Ok(self.0.prs[index].data.clone())
+  }
+
+  async fn pull_request_comments(&self, pr: &PullRequest) -> Result<Vec<pulls::Comment>> {
+    let full_pr = self
+      .0
+      .prs
+      .iter()
+      .find(|full_pr| full_pr.data.number == pr.number)
+      .ok_or_else(|| eyre!("Missing comments for PR #{}", pr.number))?;
+    Ok(full_pr.comments.clone())
   }
 
   fn issue(&self, label: &str) -> Result<Issue> {
-    let index = find_issue(label, &self.0.issues)
-      .ok_or_else(|| anyhow!("Missing issue for label: {label}"))?;
+    let index =
+      find_issue(label, &self.0.issues).ok_or_else(|| eyre!("Missing issue for label: {label}"))?;
     Ok(self.0.issues[index].clone())
   }
 
@@ -130,7 +148,7 @@ impl QuestTemplate for PackageTemplate {
     let patch_index = self
       .0
       .patch(&(base_branch.to_string(), target_branch.to_string()))
-      .ok_or_else(|| anyhow!("Missing patch in package: {base_branch}..{target_branch}"))?;
+      .ok_or_else(|| eyre!("Missing patch in package: {base_branch}..{target_branch}"))?;
 
     let patches = self.0.patches[..=patch_index]
       .iter()

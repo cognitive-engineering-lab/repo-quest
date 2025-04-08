@@ -6,7 +6,7 @@ use std::{
   process::Stdio,
 };
 
-use anyhow::{anyhow, ensure, Context, Result};
+use eyre::{Context, Result, ensure, eyre};
 
 use crate::{
   command::command,
@@ -51,6 +51,14 @@ impl GitRepo {
     }
   }
 
+  pub fn exists(&self) -> bool {
+    let output = git_output!(self, "rev-parse --is-inside-work-tree");
+    match output {
+      Ok(stdout) => stdout.trim() == "true",
+      Err(_) => false,
+    }
+  }
+
   pub fn clone(path: &Path, url: &str) -> Result<Self> {
     let output = command(&format!("git clone {url}"), path.parent().unwrap()).output()?;
     ensure!(
@@ -83,7 +91,7 @@ impl GitRepo {
   fn git_output(&self, args: &str) -> Result<String> {
     self
       .git_core(args)?
-      .map_err(|stderr| anyhow!("git failed with stderr:\n{stderr}"))
+      .map_err(|stderr| eyre!("git failed with stderr:\n{stderr}"))
   }
 
   pub fn setup_upstream(&self, upstream: &GithubRepo) -> Result<()> {
@@ -99,6 +107,7 @@ impl GitRepo {
 
   pub fn upstream(&self) -> Result<Option<&'static str>> {
     let status = command(&format!("git remote get-url {UPSTREAM}"), &self.path)
+      .stdout(Stdio::null())
       .status()
       .context("`git remote` failed")?;
     Ok(status.success().then_some(UPSTREAM))

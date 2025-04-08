@@ -12,22 +12,13 @@ runs:
       uses: davidB/rust-cargo-make@v1
       with:
         version: '0.37.16'
-    - name: Install Node
-      uses: actions/setup-node@v4
-      with:
-        node-version: 20.15.0
-    - name: Install pnpm
-      uses: pnpm/action-setup@v4
-      with:
-        version: 9.13.2
     - name: Install Depot
-      run: curl https://raw.githubusercontent.com/cognitive-engineering-lab/depot/main/scripts/install.sh | sh
-      shell: bash
+      uses: cognitive-engineering-lab/depot/actions/install@main
     - name: Install Tauri CLI
       uses: baptiste0928/cargo-install@v3
       with:
         crate: tauri-cli
-        version: "^2.1.0"      
+        version: "^2.1.0"
     - name: Init TS bindings
       run: cargo make init-bindings
       shell: bash

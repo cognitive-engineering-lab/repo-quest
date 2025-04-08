@@ -5,17 +5,23 @@ use std::{
   path::{Path, PathBuf},
 };
 
-use crate::{
-  git::GitRepo,
-  github::{FullPullRequest, GithubRepo},
-  quest::QuestConfig,
-  stage::StagePart,
+use crate::{git::GitRepo, github::GithubRepo, quest::QuestConfig, stage::StagePart};
+use eyre::{Context, Result};
+use flate2::{Compression, read::GzDecoder, write::GzEncoder};
+use futures_util::future::try_join_all;
+use octocrab::models::{
+  Label,
+  issues::Issue,
+  pulls::{self, PullRequest},
 };
-use anyhow::{Context, Result};
-use flate2::{read::GzDecoder, write::GzEncoder, Compression};
-use octocrab::models::{issues::Issue, Label};
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct FullPullRequest {
+  pub data: PullRequest,
+  pub comments: Vec<pulls::Comment>,
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct Patch {
@@ -49,7 +55,14 @@ impl QuestPackage {
 
     let initial = git_repo.read_initial_files()?;
     let issues = gh_repo.issues().clone();
-    let prs = gh_repo.prs().clone();
+    let prs = try_join_all(gh_repo.prs().iter().map(async |pr| {
+      let comments = gh_repo.pr_comments(pr).await?;
+      Ok::<_, eyre::Error>(FullPullRequest {
+        data: pr.clone(),
+        comments,
+      })
+    }))
+    .await?;
     let labels = gh_repo
       .issue_handler()
       .list_labels_for_repo()

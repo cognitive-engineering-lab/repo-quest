@@ -1,17 +1,17 @@
-use anyhow::{bail, ensure, Context, Result};
+use eyre::{Context, Result, bail, ensure};
 use futures_util::future::try_join_all;
 use http::StatusCode;
 use octocrab::{
+  GitHubError, Octocrab,
   issues::IssueHandler,
   models::{
-    issues::Issue,
-    pulls::{self, PullRequest},
-    repos::Branch,
     IssueState, Label,
+    issues::Issue,
+    pulls::{self, Comment, PullRequest},
+    repos::Branch,
   },
   pulls::PullRequestHandler,
   repos::RepoHandler,
-  GitHubError, Octocrab,
 };
 use parking_lot::{MappedMutexGuard, Mutex, MutexGuard};
 use regex::Regex;
@@ -29,17 +29,11 @@ use crate::{
   utils,
 };
 
-#[derive(Clone, Serialize, Deserialize)]
-pub struct FullPullRequest {
-  pub data: PullRequest,
-  pub comments: Vec<pulls::Comment>,
-}
-
 pub struct GithubRepo {
   user: String,
   name: String,
   gh: Arc<Octocrab>,
-  prs: Mutex<Option<Vec<FullPullRequest>>>,
+  prs: Mutex<Option<Vec<PullRequest>>>,
   issues: Mutex<Option<Vec<Issue>>>,
 }
 
@@ -51,12 +45,11 @@ pub enum PullSelector {
 
 pub fn find_pr<'a>(
   selector: &PullSelector,
-  prs: impl IntoIterator<Item = &'a FullPullRequest> + 'a,
+  prs: impl IntoIterator<Item = &'a PullRequest> + 'a,
 ) -> Option<usize> {
   prs.into_iter().position(|pr| match selector {
-    PullSelector::Branch(branch) => &pr.data.head.ref_field == branch,
+    PullSelector::Branch(branch) => &pr.head.ref_field == branch,
     PullSelector::Label(label) => pr
-      .data
       .labels
       .as_ref()
       .map(|labels| labels.iter().any(|l| &l.name == label))
@@ -93,7 +86,9 @@ pub fn check_ssh() -> Result<()> {
     _ => {
       let stderr = String::from_utf8(output.stderr)?;
       if stderr.contains("git@github.com: Permission denied (publickey).") {
-        bail!("Your machine is not setup for a secure connection to Github. Please follow the instructions here: https://docs.github.com/en/authentication/troubleshooting-ssh/error-permission-denied-publickey");
+        bail!(
+          "Your machine is not setup for a secure connection to Github. Please follow the instructions here: https://docs.github.com/en/authentication/troubleshooting-ssh/error-permission-denied-publickey"
+        );
       } else {
         bail!("Failed to establish a secure connection to Github with error:\n{stderr}")
       }
@@ -142,33 +137,25 @@ impl GithubRepo {
     );
     let (mut pr_page, mut issue_page) = match res {
       Ok(pages) => pages,
-      Err(octocrab::Error::GitHub {
-        source: GitHubError {
-          status_code: StatusCode::NOT_FOUND,
-          ..
-        },
-        ..
-      }) => return Ok(false),
+      Err(octocrab::Error::GitHub { source, .. })
+        if matches!(
+          &*source,
+          GitHubError {
+            status_code: StatusCode::NOT_FOUND,
+            ..
+          },
+        ) =>
+      {
+        return Ok(false);
+      }
       Err(e) => return Err(e.into()),
     };
     let (prs, mut issues) = (pr_page.take_items(), issue_page.take_items());
 
-    let full_prs = try_join_all(prs.into_iter().map(|pr| async move {
-      let comment_pages = self
-        .pr_handler()
-        .list_comments(Some(pr.number))
-        .send()
-        .await
-        .with_context(|| format!("Failed to fetch comments for PR {}", pr.number))?;
-      let comments = comment_pages.into_iter().collect::<Vec<_>>();
-      Ok::<_, anyhow::Error>(FullPullRequest { data: pr, comments })
-    }))
-    .await?;
-
     // Pull requests are considered issues, so filter them out
     issues.retain(|issue| issue.pull_request.is_none());
 
-    *self.prs.lock() = Some(full_prs);
+    *self.prs.lock() = Some(prs);
     *self.issues.lock() = Some(issues);
 
     Ok(true)
@@ -184,29 +171,32 @@ impl GithubRepo {
   pub async fn test_repo(&self) -> Result<TestRepoResult> {
     let result = self.repo_handler().list_commits().send().await;
     match result {
-      Err(octocrab::Error::GitHub {
-        source:
+      Err(octocrab::Error::GitHub { source, .. })
+        if matches!(
+          &*source,
           GitHubError {
             status_code: StatusCode::NO_CONTENT | StatusCode::CONFLICT,
             ..
-          },
-        ..
-      }) => Ok(TestRepoResult::NoContent),
-      Err(octocrab::Error::GitHub {
-        source: GitHubError {
-          status_code: StatusCode::NOT_FOUND,
-          ..
-        },
-        ..
-      }) => Ok(TestRepoResult::NotFound),
+          }
+        ) =>
+      {
+        Ok(TestRepoResult::NoContent)
+      }
+      Err(octocrab::Error::GitHub { source, .. })
+        if matches!(
+          &*source,
+          GitHubError {
+            status_code: StatusCode::NOT_FOUND,
+            ..
+          }
+        ) =>
+      {
+        Ok(TestRepoResult::NotFound)
+      }
       Ok(_) => Ok(TestRepoResult::HasContent),
       Err(e) => {
-        if let octocrab::Error::GitHub {
-          source: GitHubError { status_code, .. },
-          ..
-        } = &e
-        {
-          tracing::debug!("Error: {status_code:?}");
+        if let octocrab::Error::GitHub { source, .. } = &e {
+          tracing::debug!("Error: {:?}", source.status_code);
         }
 
         Err(e.into())
@@ -358,16 +348,27 @@ impl GithubRepo {
     self.gh.pulls(&self.user, &self.name)
   }
 
-  pub fn prs(&self) -> MappedMutexGuard<'_, Vec<FullPullRequest>> {
+  pub fn prs(&self) -> MappedMutexGuard<'_, Vec<PullRequest>> {
     MutexGuard::map(self.prs.lock(), |opt| {
       opt.as_mut().expect("PRs not populated")
     })
   }
 
-  pub fn pr(&self, selector: &PullSelector) -> Option<MappedMutexGuard<'_, FullPullRequest>> {
+  pub fn pr(&self, selector: &PullSelector) -> Option<MappedMutexGuard<'_, PullRequest>> {
     let prs = self.prs();
     let idx = find_pr(selector, prs.iter())?;
     Some(MappedMutexGuard::map(prs, |prs| &mut prs[idx]))
+  }
+
+  pub async fn pr_comments(&self, pr: &PullRequest) -> Result<Vec<pulls::Comment>> {
+    let comment_pages = self
+      .pr_handler()
+      .list_comments(Some(pr.number))
+      .send()
+      .await
+      .with_context(|| format!("Failed to fetch comments for PR {}", pr.number))?;
+    let comments = comment_pages.into_iter().collect::<Vec<_>>();
+    Ok(comments)
   }
 
   pub fn issue_handler(&self) -> IssueHandler {
@@ -388,13 +389,13 @@ impl GithubRepo {
 
   pub async fn copy_pr(
     &self,
-    pr: &FullPullRequest,
+    pr: &PullRequest,
+    comments: &[Comment],
     head: &str,
     merge_type: MergeType,
   ) -> Result<PullRequest> {
     let pulls = self.pr_handler();
     let mut body = pr
-      .data
       .body
       .as_ref()
       .expect("Author error: PR missing body")
@@ -420,11 +421,8 @@ Note: due to a merge conflict, this PR is a hard reset to the starter code, and 
 
     let request = pulls
       .create(
-        pr.data
-          .title
-          .as_ref()
-          .expect("Author error: PR missing title"),
-        &pr.data.head.ref_field,
+        pr.title.as_ref().expect("Author error: PR missing title"),
+        &pr.head.ref_field,
         "main", // don't copy base
       )
       .body(body);
@@ -432,7 +430,7 @@ Note: due to a merge conflict, this PR is a hard reset to the starter code, and 
 
     // TODO: lots of parallelism below we should exploit
 
-    let mut labels = match &pr.data.labels {
+    let mut labels = match &pr.labels {
       Some(labels) => labels
         .iter()
         .map(|label| label.name.clone())
@@ -448,7 +446,7 @@ Note: due to a merge conflict, this PR is a hard reset to the starter code, and 
       .await
       .context("Failed to add labels to PR")?;
 
-    for comment in &pr.comments {
+    for comment in comments {
       self
         .copy_pr_comment(self_pr.number, comment, head)
         .await
@@ -492,7 +490,7 @@ Note: due to a merge conflict, this PR is a hard reset to the starter code, and 
             warn!("No PR with label {label}");
             return None;
           };
-          pr.data.number
+          pr.number
         }
         "issue" => {
           let Some(issue) = self.issue(label) else {

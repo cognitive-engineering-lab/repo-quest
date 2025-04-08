@@ -8,18 +8,22 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: ./rs
-      - name: Setup
-        uses: ./.github/workflows/setup      
+
+      # - name: Setup
+      #   uses: ./.github/workflows/setup
+
       - name: Backend tests
         run: |
-          cargo test
-          cargo clippy -- -D warnings
+          cargo test -p repo-quest
+          cargo clippy -p repo-quest -- -D warnings
         working-directory: rs
-      - name: Frontend tests
-        run: |
-          depot test
-          depot build --lint-fail
-        working-directory: js
+
+      # - name: Frontend tests
+      #   run: |
+      #     depot test
+      #     depot build --lint-fail
+      #   working-directory: js

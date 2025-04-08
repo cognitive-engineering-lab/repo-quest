@@ -1,7 +1,7 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use tracing_subscriber::{fmt, layer::SubscriberExt, prelude::*, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, prelude::*};
 
 #[tokio::main]
 async fn main() {
@@ -12,12 +12,13 @@ async fn main() {
 
   tauri::async_runtime::set(tokio::runtime::Handle::current());
 
-  let specta_builder = repo_quest::specta_builder();
+  let specta_builder = repo_quest_gui::specta_builder();
   tauri::Builder::default()
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_shell::init())
     .invoke_handler(specta_builder.invoke_handler())
     .setup(move |app| {
+      // Open the devtools on debug builds
       #[cfg(debug_assertions)]
       {
         use tauri::Manager;

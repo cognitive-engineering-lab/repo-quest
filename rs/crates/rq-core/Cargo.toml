@@ -1,7 +1,7 @@
 [package]
 name = "rq-core"
 version = "0.1.10"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
@@ -9,14 +9,15 @@ serde_json = { workspace = true }
 futures-util = "0.3.30"
 home = "0.5.9"
 http = "1.2.0"
-octocrab = "0.42.0"
+octocrab = "0.44.0"
+idna_adapter = "=1.1.0" # https://github.com/servo/rust-url/issues/993
 parking_lot = "0.12.3"
 regex = "1.11.1"
 tokio = { workspace = true, features = ["macros"] }
 tokio-retry = "0.3.0"
 toml = "0.8.15"
 specta = { workspace = true, features = ["serde_json", "derive"] }
-anyhow = { workspace = true }
+eyre = { workspace = true }
 tracing = { workspace = true }
 flate2 = "1.0.35"
 async-trait = "0.1.82"
