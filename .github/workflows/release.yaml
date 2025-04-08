@@ -52,8 +52,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}
-          path: target/${{ matrix.target }}/release/${{ matrix.target }}.tar.gz
-        working-directory: rs
+          path: rs/target/${{ matrix.target }}/release/${{ matrix.target }}.tar.gz        
 
       # - uses: tauri-apps/tauri-action@v0
       #   env:
