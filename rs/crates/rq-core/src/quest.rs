@@ -246,13 +246,15 @@ impl Quest {
 
     let (mut pr_page, mut issue_page) = match try_join!(pr_page_future, issue_page_future) {
       Ok(result) => result,
-      Err(octocrab::Error::GitHub {
-        source: GitHubError {
-          status_code: StatusCode::NOT_FOUND,
-          ..
-        },
-        ..
-      }) => {
+      Err(octocrab::Error::GitHub { source, .. })
+        if matches!(
+          &*source,
+          GitHubError {
+            status_code: StatusCode::NOT_FOUND,
+            ..
+          }
+        ) =>
+      {
         return Ok(QuestState::Ongoing {
           stage: 0,
           part: StagePart::Starter,

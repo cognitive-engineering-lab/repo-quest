@@ -137,13 +137,17 @@ impl GithubRepo {
     );
     let (mut pr_page, mut issue_page) = match res {
       Ok(pages) => pages,
-      Err(octocrab::Error::GitHub {
-        source: GitHubError {
-          status_code: StatusCode::NOT_FOUND,
-          ..
-        },
-        ..
-      }) => return Ok(false),
+      Err(octocrab::Error::GitHub { source, .. })
+        if matches!(
+          &*source,
+          GitHubError {
+            status_code: StatusCode::NOT_FOUND,
+            ..
+          },
+        ) =>
+      {
+        return Ok(false);
+      }
       Err(e) => return Err(e.into()),
     };
     let (prs, mut issues) = (pr_page.take_items(), issue_page.take_items());
@@ -167,29 +171,32 @@ impl GithubRepo {
   pub async fn test_repo(&self) -> Result<TestRepoResult> {
     let result = self.repo_handler().list_commits().send().await;
     match result {
-      Err(octocrab::Error::GitHub {
-        source:
+      Err(octocrab::Error::GitHub { source, .. })
+        if matches!(
+          &*source,
           GitHubError {
             status_code: StatusCode::NO_CONTENT | StatusCode::CONFLICT,
             ..
-          },
-        ..
-      }) => Ok(TestRepoResult::NoContent),
-      Err(octocrab::Error::GitHub {
-        source: GitHubError {
-          status_code: StatusCode::NOT_FOUND,
-          ..
-        },
-        ..
-      }) => Ok(TestRepoResult::NotFound),
+          }
+        ) =>
+      {
+        Ok(TestRepoResult::NoContent)
+      }
+      Err(octocrab::Error::GitHub { source, .. })
+        if matches!(
+          &*source,
+          GitHubError {
+            status_code: StatusCode::NOT_FOUND,
+            ..
+          }
+        ) =>
+      {
+        Ok(TestRepoResult::NotFound)
+      }
       Ok(_) => Ok(TestRepoResult::HasContent),
       Err(e) => {
-        if let octocrab::Error::GitHub {
-          source: GitHubError { status_code, .. },
-          ..
-        } = &e
-        {
-          tracing::debug!("Error: {status_code:?}");
+        if let octocrab::Error::GitHub { source, .. } = &e {
+          tracing::debug!("Error: {:?}", source.status_code);
         }
 
         Err(e.into())

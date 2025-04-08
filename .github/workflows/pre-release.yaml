@@ -33,19 +33,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup
-        uses: ./.github/workflows/setup
+      # - name: Setup
+      #   uses: ./.github/workflows/setup
 
       - name: Install Rust toolchain for target
         uses: dtolnay/rust-toolchain@stable
-        with:          
+        with:
           targets: ${{ matrix.target }}
 
       - name: Build CLI for target
         run: cargo build -p repo-quest --target ${{ matrix.target }}
 
       # - uses: tauri-apps/tauri-action@v0
-      #   with:          
+      #   with:
       #     args: --target ${{ matrix.target }}
       #     projectPath: rs/crates/repo-quest
       #     tauriScript: cargo tauri
