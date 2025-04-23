@@ -91,11 +91,12 @@ async fn new_quest_ui(cwd: &Path) -> Result<()> {
   let quest = spinner("Creating quest...", quest_fut).await?;
 
   println!(
-    "\nQuest created in directory: {}\n\nYou should open that directory in your preferred code editor, then start the quest by following the directions below.",
-    quest.dir.display()
+    "\nQuest created in directory: {}\n\nYou should open that directory in your preferred code editor, then start the quest by running:\n\n$ cd {}\n$ repo-quest",
+    quest.dir.display(),
+    quest.dir.file_name().unwrap().to_string_lossy()
   );
 
-  run_quest_ui(quest).await
+  Ok(())
 }
 
 async fn run_quest_ui(quest: Quest) -> Result<()> {
@@ -145,7 +146,11 @@ async fn run_quest_ui(quest: Quest) -> Result<()> {
                 println!("Issue: {}", issue.html_url);
                 if let Some(pr) = pr {
                   println!("Pull request: {}", pr.html_url.unwrap());
+                  println!("Read the issue and pull request. Merge the PR, then start coding.")
+                } else {
+                  println!("Read the issue and then start coding.")
                 }
+                println!("If you finish or if you need help, re-run repo-quest in this directory.")
               }
               Some("Exit") | None => return Ok(()),
               _ => unreachable!(),
