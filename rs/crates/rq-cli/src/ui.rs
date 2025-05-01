@@ -99,6 +99,8 @@ async fn new_quest_ui(cwd: &Path) -> Result<()> {
   Ok(())
 }
 
+const FEEDBACK_FORM: &str = "https://forms.gle/R3W4h6DLo272Zy1L9";
+
 async fn run_quest_ui(quest: Quest) -> Result<()> {
   let desc = spinner("...", quest.state_descriptor()).await?;
 
@@ -209,24 +211,29 @@ async fn run_quest_ui(quest: Quest) -> Result<()> {
         },
       }
     }
-    QuestState::Completed => todo!(),
+    QuestState::Completed => {
+      let num_things = if quest.config.final_url.is_some() {
+        "Two things"
+      } else {
+        "One thing"
+      };
+      println!("You have completed the quest! {num_things} before you leave.");
+      println!(
+        "- If you have any feedback about your experience, please tell us here: {FEEDBACK_FORM}"
+      );
+      if let Some(final_url) = &quest.config.final_url {
+        println!("- Please take this quiz which reviews the material in this quest: {final_url}");
+        println!(
+          "  Taking the quiz helps us evaluate the efficacy of RepoQuest and this quest in particular!"
+        )
+      }
+    }
   }
 
   Ok(())
 }
 
-pub async fn ui_main() -> Result<()> {
-  println!(
-    "{}",
-    format!("Welcome to RepoQuest v{}!", env!("CARGO_PKG_VERSION")).bold()
-  );
-
-  let token = github::get_github_token();
-  match token {
-    GithubToken::Found(token) => github::init_octocrab(&token)?,
-    other => bail!("Failed to get github token: {other:?}"),
-  }
-
+pub async fn ui_main() -> Result<()> {  
   let cwd = current_dir()?;
   let in_repo = GitRepo::new(&cwd).exists();
 
