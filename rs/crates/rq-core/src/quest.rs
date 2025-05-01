@@ -45,7 +45,7 @@ pub struct QuestConfig {
   pub stages: Vec<Stage>,
   pub read_only: Option<Vec<PathBuf>>,
   pub r#final: Option<serde_json::Value>,
-  pub final_url: Option<String>
+  pub final_url: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Type, Clone)]

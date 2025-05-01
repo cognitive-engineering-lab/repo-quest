@@ -1,6 +1,5 @@
 use std::{
   env::current_dir,
-  iter::Skip,
   path::{Path, PathBuf},
 };
 
