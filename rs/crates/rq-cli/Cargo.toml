@@ -1,6 +1,6 @@
 [package]
 name = "repo-quest"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 description = "Interactive programming tutorials over Github."
 license = "MIT OR Apache-2.0"
@@ -8,7 +8,7 @@ repository = "https://github.com/cognitive-engineering-lab/repo-quest"
 
 [dependencies]
 clap = { version = "4.5.17", features = ["derive"] }
-rq-core = { version = "0.2.0", path = "../rq-core" }
+rq-core = { version = "0.2.1", path = "../rq-core" }
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 serde_json = { workspace = true }
 inquire = "0.7.5"

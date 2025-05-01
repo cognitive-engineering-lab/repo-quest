@@ -1,14 +1,13 @@
 use std::{env::current_dir, path::Path};
 
 use crossterm::style::Stylize;
-use eyre::{Result, bail};
+use eyre::Result;
 use inquire::{
   CustomUserError,
   validator::{ErrorMessage, Validation},
 };
 use rq_core::{
   git::GitRepo,
-  github::{self, GithubToken},
   package::QuestPackage,
   quest::{CreateSource, NoopEmitter, Quest, QuestState},
   stage::{StagePart, StagePartStatus},
@@ -233,7 +232,7 @@ async fn run_quest_ui(quest: Quest) -> Result<()> {
   Ok(())
 }
 
-pub async fn ui_main() -> Result<()> {  
+pub async fn ui_main() -> Result<()> {
   let cwd = current_dir()?;
   let in_repo = GitRepo::new(&cwd).exists();
 
