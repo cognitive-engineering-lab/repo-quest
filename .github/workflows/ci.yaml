@@ -10,20 +10,9 @@ jobs:
         uses: actions/checkout@v4
 
       - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: ./rs
 
-      # - name: Setup
-      #   uses: ./.github/workflows/setup
+      - name: Tests
+        run: cargo test
 
-      - name: Backend tests
-        run: |
-          cargo test -p repo-quest
-          cargo clippy -p repo-quest -- -D warnings
-        working-directory: rs
-
-      # - name: Frontend tests
-      #   run: |
-      #     depot test
-      #     depot build --lint-fail
-      #   working-directory: js
+      - name: Lints
+        run: cargo fmt --check && cargo clippy -- -D warnings

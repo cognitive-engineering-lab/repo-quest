@@ -30,9 +30,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # - name: Setup
-      #   uses: ./.github/workflows/setup
-
       - name: Install Rust toolchain for target
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -40,30 +37,17 @@ jobs:
 
       - name: Compile binary
         run: cargo build -p repo-quest --locked --release --target ${{ matrix.target }}
-        working-directory: rs
 
       - name: Tar artifacts
         run: |
           cd target/${{ matrix.target }}/release
           tar -czf ${{ matrix.target }}.tar.gz repo-quest
-        working-directory: rs
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}
-          path: rs/target/${{ matrix.target }}/release/${{ matrix.target }}.tar.gz        
-
-      # - uses: tauri-apps/tauri-action@v0
-      #   env:
-      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      #   with:
-      #     args: --target ${{ matrix.target }}
-      #     projectPath: rs/crates/repo-quest
-      #     tauriScript: cargo tauri
-      #     tagName: v__VERSION__
-      #     releaseName: 'RepoQuest v__VERSION__'
-      #     appName: RepoQuest
+          path: target/${{ matrix.target }}/release/${{ matrix.target }}.tar.gz
 
   publish-crates:
     needs: build-artifacts
@@ -82,7 +66,6 @@ jobs:
 
       - name: Publish crates
         run: cargo ws publish --from-git --yes
-        working-directory: rs
 
       - name: Add a tag for the merged commit
         uses: christophebedard/tag-version-commit@v1
@@ -107,4 +90,4 @@ jobs:
           files: |
             x86_64-unknown-linux-gnu/x86_64-unknown-linux-gnu.tar.gz
             x86_64-apple-darwin/x86_64-apple-darwin.tar.gz
-            aarch64-apple-darwin/aarch64-apple-darwin.tar.gz                        
+            aarch64-apple-darwin/aarch64-apple-darwin.tar.gz
