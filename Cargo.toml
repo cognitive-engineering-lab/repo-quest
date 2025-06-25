@@ -1,0 +1,41 @@
+[package]
+name = "repo-quest"
+version = "0.2.1"
+edition = "2024"
+description = "Interactive programming tutorials via Github."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/cognitive-engineering-lab/repo-quest"
+authors = ["Will Crichton <crichton.will@gmail.com>"]
+
+[dependencies]
+async-trait = "0.1.82" 
+cfg-if = "1.0.0" 
+clap = {version = "4.5.17", features = ["derive"]} 
+color-eyre = "0.6.3" 
+crossterm = "0.25.0" # should match inquire
+eyre = "0.6.12" 
+flate2 = "1.0.35" 
+futures-util = "0.3.30" 
+fuzzy-matcher = "0.3.7" 
+http = "1.2.0" 
+idna_adapter = "=1.1.0" # https://github.com/servo/rust-url/issues/993
+inquire = "0.7.5" 
+octocrab = "0.44.0" 
+parking_lot = "0.12.3" 
+regex = "1.11.1" 
+semver = {version = "1.0.23", features = ["serde"]} 
+serde = {version = "1.0.204", features = ["derive"]} 
+serde_json = "1.0.120" 
+shell-escape = "0.1.5"
+shlex = "1.3.0" 
+strum = {version = "0.27.1", features = ["derive"]} 
+tokio = {version = "1.44.0", features = ["rt-multi-thread", "macros"]} # should match octocrab 
+tokio-retry = "0.3.0" 
+toml = "0.8.15" 
+tracing = "0.1.40" 
+tracing-subscriber = {version = "0.3.18", features = ["env-filter"]}
+tracing-tree = "0.4.0"
+
+[profile.release]
+lto = true
+strip = true
