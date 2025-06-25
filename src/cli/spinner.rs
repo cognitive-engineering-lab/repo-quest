@@ -1,3 +1,5 @@
+//! Copied from https://github.com/FGRibreau/spinners
+
 use std::{io::stdout, time::Duration};
 
 use crossterm::{cursor, execute, style, terminal};

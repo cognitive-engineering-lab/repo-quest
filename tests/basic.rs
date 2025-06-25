@@ -2,7 +2,7 @@ use env::current_dir;
 use eyre::{Result, ensure};
 use repo_quest::{
   package::QuestPackage,
-  quest::{CreateSource, Quest, QuestState},
+  quest::{CreateSource, Quest, QuestState, QuestStrictness, QuestUserPrefs},
 };
 use std::{
   env, fs,
@@ -41,7 +41,14 @@ fn setup() {
 
 async fn create_test_quest(source: CreateSource) -> Result<Arc<Quest>> {
   let dir = current_dir()?;
-  let quest = Quest::create(&dir, source).await?;
+  let quest = Quest::create(
+    &dir,
+    source,
+    QuestUserPrefs {
+      strictness: QuestStrictness::Relaxed,
+    },
+  )
+  .await?;
   Ok(Arc::new(quest))
 }
 

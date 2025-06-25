@@ -1,7 +1,7 @@
 use eyre::Result;
 use std::env::current_dir;
 
-use repo_quest::quest::{CreateSource, Quest};
+use repo_quest::quest::{CreateSource, Quest, QuestStrictness, QuestUserPrefs};
 
 #[tokio::test(flavor = "multi_thread")]
 #[ignore]
@@ -13,7 +13,14 @@ async fn async_quest() -> Result<()> {
     repo: "rqst-async".into(),
   };
   let dir = current_dir()?;
-  let quest = Quest::create(&dir, source).await?;
+  let quest = Quest::create(
+    &dir,
+    source,
+    QuestUserPrefs {
+      strictness: QuestStrictness::Relaxed,
+    },
+  )
+  .await?;
   // quest.start_stage(0).await?;
   quest.skip_to_stage(1).await?;
 

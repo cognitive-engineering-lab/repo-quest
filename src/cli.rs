@@ -6,9 +6,10 @@ use std::{
 use crate::{
   git::GitRepo,
   package::QuestPackage,
-  quest::{CreateSource, Quest, QuestState},
+  quest::{CreateSource, Quest, QuestState, QuestStrictness, QuestUserPrefs},
 };
 use clap::{Parser, Subcommand};
+use color_eyre::owo_colors::OwoColorize;
 use crossterm::style::Stylize;
 use eyre::Result;
 use inquire::{
@@ -92,14 +93,28 @@ async fn new_quest_ui(cwd: &Path) -> Result<()> {
     }
   };
 
-  let quest_fut = Quest::create(cwd, source);
+  println!(
+    "\nFinally, choose whether you want to play this quest in relaxed mode (lints disabled) or strict mode (lints enabled in CI and local githooks)."
+  );
+  let strictness: QuestStrictness = inquire::Select::new(
+    "Mode:",
+    vec![QuestStrictness::Relaxed, QuestStrictness::Strict],
+  )
+  .prompt()?;
+  let prefs = QuestUserPrefs { strictness };
+
+  let quest_fut = Quest::create(cwd, source, prefs);
   let quest = spinner("Creating quest...", quest_fut).await?;
 
   println!(
-    "\nQuest created in directory: {}\n\nYou should open that directory in your preferred code editor, then start the quest by running:\n\n$ cd {}\n$ repo-quest",
-    quest.dir.display(),
-    quest.dir.file_name().unwrap().to_string_lossy()
+    "\nQuest created in directory: {}\n\nYou should open that directory in your preferred code editor, then start the quest by running:\n\n",
+    quest.dir.display().bold(),
   );
+  println!(
+    "$ {}",
+    format!("cd {}", quest.dir.file_name().unwrap().to_string_lossy()).bold()
+  );
+  println!("$ {}", "repo-quest".bold());
 
   Ok(())
 }
@@ -132,9 +147,11 @@ async fn run_quest_ui(quest: Quest) -> Result<()> {
         )
         .bold()
       );
+
       if !started {
         let action =
           inquire::Select::new("Action:", vec!["Start chapter", "Exit"]).prompt_skippable()?;
+
         match action {
           Some("Start chapter") => {
             let (pr, issue) = spinner("Filing...", quest.start_stage(stage_index as usize)).await?;
@@ -150,7 +167,9 @@ async fn run_quest_ui(quest: Quest) -> Result<()> {
             );
             println!("If you finish or if you need help, re-run repo-quest in this directory.")
           }
+
           Some("Exit") | None => return Ok(()),
+
           _ => unreachable!(),
         }
       } else {
@@ -161,6 +180,7 @@ async fn run_quest_ui(quest: Quest) -> Result<()> {
               "Status:".bold(),
               state.pr_url.as_ref().unwrap()
             );
+
             let action = inquire::Select::new(
               "Action:",
               vec![
@@ -170,8 +190,10 @@ async fn run_quest_ui(quest: Quest) -> Result<()> {
               ],
             )
             .prompt_skippable()?;
+
             match action {
               Some("View reference solution") => println!("Open this link: {url}"),
+
               Some("Add reference solution to PR") => {
                 spinner("Adding...", quest.add_solution(stage_index as usize)).await?;
                 println!(
@@ -179,10 +201,13 @@ async fn run_quest_ui(quest: Quest) -> Result<()> {
                   state.pr_url.as_ref().unwrap()
                 )
               }
+
               Some("Exit") | None => return Ok(()),
+
               _ => unreachable!(),
             }
           }
+
           None => println!(
             "{} Waiting for you to complete the PR and merge it: {}\nOr get help by selecting an action below.",
             "Status:".bold(),
@@ -191,6 +216,7 @@ async fn run_quest_ui(quest: Quest) -> Result<()> {
         }
       }
     }
+
     QuestState::Completed => {
       let num_things = if quest.config.final_url.is_some() {
         "Two things"

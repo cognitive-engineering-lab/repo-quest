@@ -569,6 +569,20 @@ impl GithubRepo {
       .context("Failed to delete repo")?;
     Ok(())
   }
+
+  pub async fn set_var(&self, key: &str, val: &str) -> Result<()> {
+    let route = format!("/repos/{}/{}/actions/variables", self.user, self.name);
+    let var_json = json!({
+      "name": key,
+      "value": val
+    });
+    let _response = self
+      .gh
+      .post::<_, serde_json::Value>(route, Some(&var_json))
+      .await
+      .with_context(|| format!("Failed to set variable: {key}={val}"))?;
+    Ok(())
+  }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
