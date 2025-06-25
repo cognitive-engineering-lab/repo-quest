@@ -1,6 +1,6 @@
 [package]
 name = "repo-quest"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2024"
 description = "Interactive programming tutorials via Github."
 license = "MIT OR Apache-2.0"
@@ -29,6 +29,7 @@ serde_json = "1.0.120"
 shell-escape = "0.1.5"
 shlex = "1.3.0" 
 strum = {version = "0.27.1", features = ["derive"]} 
+terminal-colorsaurus = "0.4.8"
 tokio = {version = "1.44.0", features = ["rt-multi-thread", "macros"]} # should match octocrab 
 tokio-retry = "0.3.0" 
 toml = "0.8.15" 
