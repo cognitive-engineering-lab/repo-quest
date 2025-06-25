@@ -33,6 +33,24 @@ pub struct QuestConfig {
   pub read_only: Option<Vec<PathBuf>>,
   pub r#final: Option<serde_json::Value>,
   pub final_url: Option<String>,
+  pub rq_version: String,
+}
+
+#[derive(Debug, strum::Display)]
+pub enum QuestStrictness {
+  Relaxed,
+  Strict,
+}
+
+impl QuestStrictness {
+  pub fn is_strict(&self) -> bool {
+    matches!(self, QuestStrictness::Strict)
+  }
+}
+
+#[derive(Debug)]
+pub struct QuestUserPrefs {
+  pub strictness: QuestStrictness,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -124,7 +142,7 @@ impl Quest {
   }
 
   #[tracing::instrument(skip(source))]
-  pub async fn create(dir: &Path, source: CreateSource) -> Result<Self> {
+  pub async fn create(dir: &Path, source: CreateSource, prefs: QuestUserPrefs) -> Result<Self> {
     github::check_ssh()?;
 
     let template: Box<dyn QuestSource> = match source {
@@ -141,7 +159,12 @@ impl Quest {
       config,
     } = template.instantiate(dir).await?;
 
-    origin_git.install_hooks()?;
+    if prefs.strictness.is_strict() {
+      origin_git.install_hooks()?;
+      origin
+        .set_var("STRICTNESS", &prefs.strictness.to_string())
+        .await?;
+    }
 
     Self::load_core(
       &dir.join(&config.repo),
