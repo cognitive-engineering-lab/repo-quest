@@ -8,7 +8,6 @@ use octocrab::{
     IssueState, Label,
     issues::Issue,
     pulls::{self, PullRequest},
-    repos::Branch,
   },
   pulls::PullRequestHandler,
   repos::RepoHandler,
@@ -23,7 +22,7 @@ use tracing::warn;
 
 use crate::{
   command::command,
-  git::GitRepo,
+  git::{Branch, GitRepo, Ref},
   package::QuestPackage,
   utils::{self, RetryError},
 };
@@ -43,10 +42,12 @@ pub enum PullSelector {
 }
 
 pub fn find_pr<'a>(
-  branch: &str,
+  branch: &Branch,
   prs: impl IntoIterator<Item = &'a PullRequest> + 'a,
 ) -> Option<usize> {
-  prs.into_iter().position(|pr| pr.head.ref_field == branch)
+  prs
+    .into_iter()
+    .position(|pr| pr.head.ref_field == branch.as_str())
 }
 
 pub fn find_issue<'a>(
@@ -92,7 +93,7 @@ pub enum GitProtocol {
 }
 
 #[derive(PartialEq, Eq, Debug)]
-pub enum TestRepoResult {
+pub enum TestResult {
   HasContent,
   NoContent,
   NotFound,
@@ -115,7 +116,7 @@ impl GithubRepo {
     Ok(repo)
   }
 
-  /// Returns true if repo
+  /// Returns true if the repo is registered w/ github
   pub async fn fetch(&self) -> Result<bool> {
     let (pr_handler, issue_handler) = (self.pr_handler(), self.issue_handler());
     let res = try_join!(
@@ -158,32 +159,35 @@ impl GithubRepo {
     }
   }
 
-  pub async fn test_repo(&self) -> Result<TestRepoResult> {
+  async fn test_repo(&self) -> Result<TestResult> {
     let result = self.repo_handler().list_commits().send().await;
     match result {
       Err(octocrab::Error::GitHub { source, .. })
         if matches!(
-          &*source,
+          *source,
           GitHubError {
             status_code: StatusCode::NO_CONTENT | StatusCode::CONFLICT,
             ..
           }
         ) =>
       {
-        Ok(TestRepoResult::NoContent)
+        Ok(TestResult::NoContent)
       }
+
       Err(octocrab::Error::GitHub { source, .. })
         if matches!(
-          &*source,
+          *source,
           GitHubError {
             status_code: StatusCode::NOT_FOUND,
             ..
           }
         ) =>
       {
-        Ok(TestRepoResult::NotFound)
+        Ok(TestResult::NotFound)
       }
-      Ok(_) => Ok(TestRepoResult::HasContent),
+
+      Ok(_) => Ok(TestResult::HasContent),
+
       Err(e) => {
         if let octocrab::Error::GitHub { source, .. } = &e {
           tracing::debug!("Error: {:?}", source.status_code);
@@ -201,7 +205,7 @@ impl GithubRepo {
 
   // There is some unknown delay between creating a repo from a template and its contents being added.
   // We have to wait until that happens
-  async fn wait_for_content(&self, expected: TestRepoResult) -> Result<()> {
+  async fn wait_for_content(&self, expected: TestResult) -> Result<()> {
     utils::retry_with_timeout(async || match self.test_repo().await {
       Ok(actual) => {
         if actual == expected {
@@ -217,15 +221,16 @@ impl GithubRepo {
 
   async fn create_labels(&self, labels: &[Label]) -> Result<()> {
     let issues = self.issue_handler();
-    try_join_all(labels.iter().filter(|label| !label.default).map(|label| {
+    let futs = labels.iter().filter(|label| !label.default).map(|label| {
       issues.create_label(
         &label.name,
         &label.color,
         label.description.as_deref().unwrap_or(""),
       )
-    }))
-    .await
-    .context("Failed to create labels")?;
+    });
+    try_join_all(futs)
+      .await
+      .context("Failed to create labels")?;
     Ok(())
   }
 
@@ -245,30 +250,46 @@ impl GithubRepo {
     Ok(())
   }
 
+  async fn configure(&self, labels: &[Label]) -> Result<()> {
+    try_join!(self.unsubscribe(), self.create_labels(labels))?;
+    Ok(())
+  }
+
   pub async fn instantiate_from_package(package: &QuestPackage) -> Result<GithubRepo> {
     let user = load_user().await.context("Failed to load user")?;
+    let name = &package.config.repo;
     let params = json!({
-        "name": &package.config.repo,
+        "name": name,
         "private": true,
     });
     octocrab::instance()
       .post::<_, serde_json::Value>("/user/repos", Some(&params))
       .await
       .context("Failed to create repo")?;
-    let repo = GithubRepo::new(&user, &package.config.repo);
+
+    let repo = GithubRepo::new(&user, name);
+
     repo
-      .wait_for_content(TestRepoResult::NoContent)
+      .wait_for_content(TestResult::NoContent)
       .await
       .context("Github repo was not properly initialized")?;
+
     repo
-      .unsubscribe()
+      .configure(&package.labels)
       .await
-      .context("Failed to unsubscribe from repo")?;
-    repo
-      .create_labels(&package.labels)
-      .await
-      .context("Failed to transfer package labels to repo")?;
+      .context("Failed to configure repo")?;
+
     Ok(repo)
+  }
+
+  async fn get_repo_labels(&self) -> Result<Vec<Label>> {
+    let mut page = self
+      .issue_handler()
+      .list_labels_for_repo()
+      .send()
+      .await
+      .context("Failed to fetch labels from repo")?;
+    Ok(page.take_items())
   }
 
   pub async fn instantiate_from_repo(base: &GithubRepo) -> Result<GithubRepo> {
@@ -285,46 +306,20 @@ impl GithubRepo {
       .with_context(|| format!("Failed to clone template repo {}/{}", base.user, base.name))?;
 
     let repo = GithubRepo::new(&user, name);
+
     repo
-      .wait_for_content(TestRepoResult::HasContent)
+      .wait_for_content(TestResult::HasContent)
       .await
       .context("Github repo was not properly initialized")?;
 
-    // Unsubscribe from repo notifications to avoid annoying emails.
-    repo
-      .unsubscribe()
-      .await
-      .context("Failed to unsubscribe from repo")?;
-
-    // Copy all issue labels.
-    let mut page = base
-      .issue_handler()
-      .list_labels_for_repo()
-      .send()
-      .await
-      .context("Failed to fetch labels from upstream repo")?;
-    let labels = page.take_items();
-    repo
-      .create_labels(&labels)
-      .await
-      .context("Failed to transfer upstream labels to repo")?;
+    let labels = base.get_repo_labels().await?;
+    repo.configure(&labels).await?;
 
     Ok(repo)
   }
 
   pub fn repo_handler(&self) -> RepoHandler {
     self.gh.repos(&self.user, &self.name)
-  }
-
-  pub async fn branches(&self) -> Result<Vec<Branch>> {
-    let pages = self
-      .repo_handler()
-      .list_branches()
-      .send()
-      .await
-      .context("Failed to fetch branches")?;
-    let branches = pages.into_iter().collect::<Vec<_>>();
-    Ok(branches)
   }
 
   pub fn pr_handler(&self) -> PullRequestHandler {
@@ -337,7 +332,7 @@ impl GithubRepo {
     })
   }
 
-  pub fn pr(&self, branch: &str) -> Option<MappedMutexGuard<'_, PullRequest>> {
+  pub fn pr(&self, branch: &Branch) -> Option<MappedMutexGuard<'_, PullRequest>> {
     let prs = self.prs();
     let idx = find_pr(branch, prs.iter())?;
     Some(MappedMutexGuard::map(prs, |prs| &mut prs[idx]))
@@ -376,40 +371,46 @@ impl GithubRepo {
     title: &str,
     body: &str,
     labels: &[String],
-    head_ref: &str,
-    head_commit: &str,
+    head_ref: &Branch,
+    head_commit: &Ref,
     comments: &[pulls::Comment],
   ) -> Result<PullRequest> {
     let pulls = self.pr_handler();
-    let request = pulls.create(title, head_ref, "main").body(body);
+    let request = pulls
+      .create(title, head_ref.as_str(), Branch::main().as_str())
+      .body(body);
     let mut pr = request.send().await.context("Failed to create PR")?;
 
-    if !labels.is_empty() {
-      let labels = self
-        .issue_handler()
-        .add_labels(pr.number, labels)
-        .await
-        .context("Failed to add labels to PR")?;
-      pr.labels = Some(labels);
-    }
+    let add_labels = async {
+      if !labels.is_empty() {
+        let labels = self
+          .issue_handler()
+          .add_labels(pr.number, labels)
+          .await
+          .context("Failed to add labels to PR")?;
+        pr.labels = Some(labels);
+      }
+      Ok::<_, eyre::Error>(())
+    };
 
-    for comment in comments {
-      self
-        .copy_pr_comment(pr.number, comment, head_commit)
-        .await
-        .context("Failed to add comment to PR")?;
-    }
+    let add_comments = try_join_all(
+      comments
+        .iter()
+        .map(|comment| self.copy_pr_comment(pr.number, comment, head_commit)),
+    );
+
+    try_join!(add_labels, add_comments)?;
 
     self.prs.lock().as_mut().unwrap().push(pr.clone());
 
     Ok(pr)
   }
 
-  async fn copy_pr_comment(&self, pr: u64, comment: &pulls::Comment, commit: &str) -> Result<()> {
+  async fn copy_pr_comment(&self, pr: u64, comment: &pulls::Comment, commit: &Ref) -> Result<()> {
     let route = format!("/repos/{}/{}/pulls/{pr}/comments", self.user, self.name);
     let comment_json = json!({
       "path": comment.path,
-      "commit_id": commit,
+      "commit_id": commit.as_str(),
       "body": comment.body,
       "line": comment.line
     });
@@ -430,8 +431,8 @@ impl GithubRepo {
       let kind = &cap[2];
       let number = match kind {
         "pr" => {
-          let Some(pr) = self.pr(label) else {
-            warn!("No PR with label {label}");
+          let Some(pr) = self.pr(&Branch::new(label)) else {
+            warn!("No PR for branch {label}");
             return None;
           };
           pr.number
@@ -536,6 +537,9 @@ impl GithubRepo {
   #[tracing::instrument(skip_all, fields(number = pr.number, title = pr.title))]
   pub async fn merge_pr(&self, pr: &PullRequest) -> Result<()> {
     let pr_handler = self.pr_handler();
+
+    // Both 405 and 409 seem to happen after a PR is filed and before Github
+    // decides a PR is mergeable, so we try on a loop until those errors go away.
     utils::retry_with_timeout(async || {
       let req = pr_handler.merge(pr.number);
       let resp = req.send().await;
@@ -544,14 +548,17 @@ impl GithubRepo {
           if matches!(
             &*source,
             GitHubError {
-              status_code: StatusCode::CONFLICT,
+              status_code: StatusCode::CONFLICT | StatusCode::METHOD_NOT_ALLOWED,
               ..
             }
           ) =>
         {
           RetryError::Wait
         }
-        e => RetryError::Err(e.into()),
+        e => {
+          eprintln!("This error seems to be flaky, so printing full error in debug mode for diagnostics:\n{e:#?}");
+          RetryError::Err(e.into())
+        }
       })
     })
     .await

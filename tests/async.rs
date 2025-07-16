@@ -21,8 +21,8 @@ async fn async_quest() -> Result<()> {
     },
   )
   .await?;
-  // quest.start_stage(0).await?;
-  quest.skip_to_stage(1).await?;
+  // quest.start_chapter(0).await?;
+  quest.skip_to_chapter(1).await?;
 
   Ok(())
 }

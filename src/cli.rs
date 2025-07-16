@@ -1,5 +1,5 @@
 use std::{
-  env::current_dir,
+  env,
   path::{Path, PathBuf},
 };
 
@@ -10,7 +10,7 @@ use crate::{
 };
 use clap::{Parser, Subcommand};
 use crossterm::style::{StyledContent, Stylize};
-use eyre::Result;
+use eyre::{Result, ensure};
 use inquire::{
   CustomUserError,
   validator::{ErrorMessage, Validation},
@@ -157,18 +157,18 @@ impl Ui {
 
     match desc.state {
       QuestState::Ongoing {
-        stage: stage_index,
+        chapter: chapter_index,
         started,
       } => {
-        let stage = &quest.stages()[stage_index as usize];
-        let state = &desc.stages[stage_index as usize];
+        let chapter = &quest.chapters()[chapter_index as usize];
+        let state = &desc.chapters[chapter_index as usize];
         println!(
           "{}",
           self.emph(format!(
             "Chapter {}/{}: {}",
-            stage_index + 1,
-            quest.config.stages.len(),
-            stage.name
+            chapter_index + 1,
+            quest.config.chapters.len(),
+            chapter.name
           ))
         );
 
@@ -179,10 +179,10 @@ impl Ui {
           match action {
             Some("Start chapter") => {
               let (pr, issue) =
-                spinner("Starting...", quest.start_stage(stage_index as usize)).await?;
+                spinner("Starting...", quest.start_chapter(chapter_index as usize)).await?;
               println!("\nIssue:        {}", issue.html_url);
               println!("Pull request: {}", pr.html_url.unwrap());
-              if stage.no_starter() {
+              if chapter.no_starter() {
                 print!("\nStart by reading the issue.")
               } else {
                 print!("\nStart by reading the issue and the starter code in the PR.")
@@ -222,9 +222,9 @@ impl Ui {
                 Some("View reference solution") => println!("Open this link: {url}"),
 
                 Some("Add reference solution to PR") => {
-                  spinner("Adding...", quest.add_solution(stage_index as usize)).await?;
+                  spinner("Adding...", quest.add_solution(chapter_index as usize)).await?;
                   println!(
-                    "The reference solution has been added to your PR: {}\nReview the changes and merge when you're ready.\nThen, re-run repo-quest to start the next stage.",
+                    "The reference solution has been added to your PR: {}\nReview the changes and merge when you're ready.\nThen, re-run repo-quest to start the next chapter.",
                     state.pr_url.as_ref().unwrap()
                   )
                 }
@@ -285,18 +285,11 @@ enum Command {
 
 pub async fn main() -> Result<()> {
   let args = Cli::parse();
-
   let ui = Ui::new()?;
+  let cwd = env::current_dir()?;
 
-  println!(
-    "{}",
-    ui.emph(format!(
-      "Welcome to RepoQuest v{}!",
-      env!("CARGO_PKG_VERSION")
-    ))
-  );
-
-  let cwd = current_dir()?;
+  let version = env!("CARGO_PKG_VERSION");
+  println!("{}", ui.emph(format!("Welcome to RepoQuest v{version}!",)));
 
   match args.command {
     None => {
@@ -309,16 +302,36 @@ pub async fn main() -> Result<()> {
         ui.new_quest_ui(&cwd).await?;
       }
     }
+
     Some(Command::Skip { chapter }) => {
       let quest_fut = Quest::load(&cwd);
       let quest = spinner("Loading quest from current directory...", quest_fut).await?;
+
+      ensure!(
+        chapter > 0,
+        "Chapters are 1-indexed, so it should be 1 or greater."
+      );
+      let zero_indexed_chapter = chapter - 1;
+
+      println!(
+        "Skipping to a chapter will IRREVOCABLY OVERWRITE your work with the reference solution."
+      );
+      let confirmed = inquire::Confirm::new("Continue?")
+        .with_default(false)
+        .prompt()?;
+      if !confirmed {
+        return Ok(());
+      }
+
       spinner(
         format!("Advancing to Chapter {chapter}..."),
-        quest.skip_to_stage(chapter),
+        quest.skip_to_chapter(zero_indexed_chapter),
       )
       .await?;
+
       println!("Done!");
     }
+
     Some(Command::Pack { path }) => {
       let package = QuestPackage::build(&path).await?;
       let dst = format!("{}.json.gz", package.config.repo);

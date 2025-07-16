@@ -2,68 +2,70 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
+use crate::git::Branch;
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
-pub struct Stage {
+pub struct Chapter {
   pub label: String,
   pub name: String,
   pub no_starter: Option<bool>,
 }
 
-impl Stage {
+impl Chapter {
   pub fn no_starter(&self) -> bool {
     self.no_starter.unwrap_or(false)
   }
 
-  pub fn branch_name(&self, part: StagePart) -> String {
-    format!("{}-{}", self.label, part)
+  pub fn branch(&self, part: ChapterPart) -> Branch {
+    Branch::new(format!("{}-{}", self.label, part))
   }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub enum StagePart {
+pub enum ChapterPart {
   Starter,
   Solution,
 }
 
-impl StagePart {
-  pub fn next_part(self) -> Option<StagePart> {
+impl ChapterPart {
+  pub fn next_part(self) -> Option<ChapterPart> {
     match self {
-      StagePart::Starter => Some(StagePart::Solution),
-      StagePart::Solution => None,
+      ChapterPart::Starter => Some(ChapterPart::Solution),
+      ChapterPart::Solution => None,
     }
   }
 
-  pub fn parse(s: &str) -> Option<StagePart> {
+  pub fn parse(s: &str) -> Option<ChapterPart> {
     match s {
-      "a" => Some(StagePart::Starter),
-      "b" => Some(StagePart::Solution),
+      "a" => Some(ChapterPart::Starter),
+      "b" => Some(ChapterPart::Solution),
       _ => None,
     }
   }
 }
 
-impl fmt::Display for StagePart {
+impl fmt::Display for ChapterPart {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
-      StagePart::Starter => write!(f, "a"),
-      StagePart::Solution => write!(f, "b"),
+      ChapterPart::Starter => write!(f, "a"),
+      ChapterPart::Solution => write!(f, "b"),
     }
   }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub enum StagePartStatus {
+pub enum ChapterPartStatus {
   Start,
   Ongoing,
 }
 
-impl StagePartStatus {
+impl ChapterPartStatus {
   pub fn is_start(self) -> bool {
-    matches!(self, StagePartStatus::Start)
+    matches!(self, ChapterPartStatus::Start)
   }
 
   pub fn is_ongoing(self) -> bool {
-    matches!(self, StagePartStatus::Ongoing)
+    matches!(self, ChapterPartStatus::Ongoing)
   }
 }

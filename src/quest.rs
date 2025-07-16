@@ -1,5 +1,4 @@
 use std::{
-  borrow::Cow,
   collections::HashMap,
   fmt::Write,
   fs,
@@ -7,13 +6,13 @@ use std::{
 };
 
 use crate::{
-  git::{GitRepo, MergeType, UPSTREAM},
+  chapter::{Chapter, ChapterPart},
+  git::{Branch, GitRepo, MergeType, Ref},
   github::{self, GithubRepo, load_user},
   package::QuestPackage,
-  source::{InstanceOutputs, PackageSource, QuestSource, RepoSource},
-  stage::{Stage, StagePart},
+  source::{InstanceOutputs, QuestSource},
 };
-use eyre::{Context, Result};
+use eyre::{Context, Result, bail, ensure};
 use http::StatusCode;
 use octocrab::{
   GitHubError,
@@ -29,7 +28,7 @@ pub struct QuestConfig {
   pub title: String,
   pub author: String,
   pub repo: String,
-  pub stages: Vec<Stage>,
+  pub chapters: Vec<Chapter>,
   pub read_only: Option<Vec<PathBuf>>,
   pub r#final: Option<serde_json::Value>,
   pub final_url: Option<String>,
@@ -54,8 +53,8 @@ pub struct QuestUserPrefs {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct StageState {
-  pub stage: Stage,
+pub struct ChapterState {
+  pub chapter: Chapter,
   pub issue_url: Option<String>,
   pub pr_url: Option<String>,
   pub refsol_url: Option<String>,
@@ -64,15 +63,16 @@ pub struct StageState {
 impl QuestConfig {
   pub fn load(repo: &GitRepo, remote: Option<&str>) -> Result<Self> {
     let branch = match remote {
-      Some(remote) => Cow::Owned(format!("{remote}/meta")),
-      None => Cow::Borrowed("meta"),
+      Some(remote) => Branch::new(format!("{remote}/meta")),
+      None => Branch::new("meta"),
     };
-    let config_str = repo.read_file(&branch, "rqst.toml")?;
+    let config_str = repo.read_file_string(&branch, Path::new("rqst.toml"))?;
     let mut config = toml::de::from_str::<QuestConfig>(&config_str)
       .context("Failed to parse quest configuration rqst.toml")?;
 
-    if repo.contains_file(&branch, "final.toml")? {
-      let quiz_str = repo.read_file(&branch, "final.toml")?;
+    let final_path = Path::new("final.toml");
+    if repo.contains_file(&branch, final_path)? {
+      let quiz_str = repo.read_file_string(&branch, final_path)?;
       let quiz =
         toml::de::from_str::<serde_json::Value>(&quiz_str).context("Failed to parse final.toml")?;
       config.r#final = Some(quiz);
@@ -85,7 +85,7 @@ impl QuestConfig {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum QuestState {
-  Ongoing { stage: u32, started: bool },
+  Ongoing { chapter: u32, started: bool },
   Completed,
 }
 
@@ -93,7 +93,7 @@ pub struct Quest {
   pub source: Box<dyn QuestSource>,
   pub origin: GithubRepo,
   pub origin_git: GitRepo,
-  pub stage_index: HashMap<String, usize>,
+  pub chapter_index: HashMap<String, usize>,
   pub dir: PathBuf,
   pub config: QuestConfig,
 }
@@ -101,10 +101,9 @@ pub struct Quest {
 #[derive(Serialize, Deserialize, Clone)]
 pub struct StateDescriptor {
   pub dir: PathBuf,
-  pub stages: Vec<StageState>,
+  pub chapters: Vec<ChapterState>,
   pub state: QuestState,
   pub can_skip: bool,
-  pub behind_origin: bool,
 }
 
 pub enum CreateSource {
@@ -120,11 +119,11 @@ impl Quest {
     origin: GithubRepo,
     origin_git: GitRepo,
   ) -> Result<Self> {
-    let stage_index = config
-      .stages
+    let chapter_index = config
+      .chapters
       .iter()
       .enumerate()
-      .map(|(i, stage)| (stage.label.clone(), i))
+      .map(|(i, chapter)| (chapter.label.clone(), i))
       .collect::<HashMap<_, _>>();
 
     let q = Quest {
@@ -133,10 +132,11 @@ impl Quest {
       source: template,
       origin,
       origin_git,
-      stage_index,
+      chapter_index,
     };
 
-    q.infer_state_update().await?;
+    let exists = q.origin.fetch().await?;
+    ensure!(exists, "Repo is missing");
 
     Ok(q)
   }
@@ -148,9 +148,9 @@ impl Quest {
     let template: Box<dyn QuestSource> = match source {
       CreateSource::Remote { user, repo } => {
         let upstream = GithubRepo::load(&user, &repo).await?;
-        Box::new(RepoSource(upstream))
+        Box::new(upstream)
       }
-      CreateSource::Package(package) => Box::new(PackageSource(*package)),
+      CreateSource::Package(package) => Box::new(*package),
     };
 
     let InstanceOutputs {
@@ -179,26 +179,26 @@ impl Quest {
   pub async fn load(dir: &Path) -> Result<Self> {
     let user = load_user().await?;
     let origin_git = GitRepo::new(dir);
-    let upstream = origin_git
+    let remote = origin_git
       .upstream()
       .context("Failed to test for upstream")?;
-    let config = QuestConfig::load(&origin_git, upstream).context("Failed to load quest config")?;
+    let config = QuestConfig::load(&origin_git, remote).context("Failed to load quest config")?;
     let origin_fut = async {
       GithubRepo::load(&user, &config.repo)
         .await
         .context("Failed to load GitHub repo")
     };
     let template_fut = async {
-      if upstream.is_some() {
+      if remote.is_some() {
         let upstream = GithubRepo::load(&config.author, &config.repo)
           .await
           .context("Failed to load upstream GitHub repo")?;
-        Ok(Box::new(RepoSource(upstream)) as Box<dyn QuestSource>)
+        Ok(Box::new(upstream) as Box<dyn QuestSource>)
       } else {
-        let contents = origin_git.show_bin("meta", "package.json.gz")?;
+        let contents = origin_git.read_file_bytes(&Branch::meta(), Path::new("package.json.gz"))?;
         let package =
           QuestPackage::load_from_blob(&contents).context("Failed to load quest package")?;
-        Ok(Box::new(PackageSource(package)) as Box<dyn QuestSource>)
+        Ok(Box::new(package) as Box<dyn QuestSource>)
       }
     };
     let (origin, template) = try_join!(origin_fut, template_fut)?;
@@ -206,12 +206,12 @@ impl Quest {
     Self::load_core(dir, config, template, origin, origin_git).await
   }
 
-  pub fn stages(&self) -> &[Stage] {
-    &self.config.stages
+  pub fn chapters(&self) -> &[Chapter] {
+    &self.config.chapters
   }
 
-  fn stage(&self, idx: usize) -> &Stage {
-    &self.config.stages[idx]
+  fn chapter(&self, idx: usize) -> &Chapter {
+    &self.config.chapters[idx]
   }
 
   pub async fn infer_state(&self) -> Result<QuestState> {
@@ -236,7 +236,7 @@ impl Quest {
         ) =>
       {
         return Ok(QuestState::Ongoing {
-          stage: 0,
+          chapter: 0,
           started: false,
         });
       }
@@ -258,44 +258,44 @@ impl Quest {
       })
       .collect::<HashMap<_, _>>();
 
-    let stage_map = self
-      .stages()
+    let chapter_map = self
+      .chapters()
       .iter()
-      .map(|stage| (stage.label.clone(), stage))
+      .map(|chapter| (chapter.label.clone(), chapter))
       .collect::<HashMap<_, _>>();
 
-    let issue_stages = issue_map.iter().filter_map(|(label, issue)| {
-      let stage = (*stage_map.get(label)?).clone();
+    let issue_chapters = issue_map.iter().filter_map(|(label, issue)| {
+      let chapter = (*chapter_map.get(label)?).clone();
       let finished = matches!(issue.state, IssueState::Closed);
-      Some((stage, finished))
+      Some((chapter, finished))
     });
 
-    tracing::trace!("Issues: {:#?}", issue_stages.clone().collect::<Vec<_>>());
+    tracing::trace!("Issues: {:#?}", issue_chapters.clone().collect::<Vec<_>>());
 
-    let stage_idx = |stage: &Stage| self.stage_index[&stage.label];
-    let Some((stage, finished)) =
-      issue_stages.max_by_key(|(stage, finished)| (stage_idx(stage), *finished))
+    let chapter_idx = |chapter: &Chapter| self.chapter_index[&chapter.label];
+    let Some((chapter, finished)) =
+      issue_chapters.max_by_key(|(chapter, finished)| (chapter_idx(chapter), *finished))
     else {
       return Ok(QuestState::Ongoing {
-        stage: 0,
+        chapter: 0,
         started: false,
       });
     };
 
-    let stage = stage_idx(&stage);
+    let chapter = chapter_idx(&chapter);
 
     Ok(if finished {
-      if stage == self.stages().len() - 1 {
+      if chapter == self.chapters().len() - 1 {
         QuestState::Completed
       } else {
         QuestState::Ongoing {
-          stage: (stage + 1) as u32,
+          chapter: (chapter + 1) as u32,
           started: false,
         }
       }
     } else {
       QuestState::Ongoing {
-        stage: stage as u32,
+        chapter: chapter as u32,
         started: true,
       }
     })
@@ -303,29 +303,22 @@ impl Quest {
 
   pub async fn state_descriptor(&self) -> Result<StateDescriptor> {
     let state = self.infer_state().await?;
-    let behind_origin = self.origin_git.is_behind_origin()?;
     Ok(StateDescriptor {
       dir: self.dir.clone(),
-      stages: self.stage_states(),
+      chapters: self.chapter_states(),
       state,
       can_skip: self.source.can_skip(),
-      behind_origin,
     })
-  }
-
-  async fn infer_state_update(&self) -> Result<()> {
-    self.origin.fetch().await?;
-    Ok(())
   }
 
   async fn file_pr(
     &self,
     default_title: &str,
-    origin_head: &str,
-    origin_commit: &str,
-    upstream_head: &str,
+    origin_head: &Branch,
+    origin_commit: &Ref,
+    upstream_head: &Branch,
     merge_type: MergeType,
-    stage_label: &str,
+    chapter_label: &str,
   ) -> Result<PullRequest> {
     let pr = self.source.pull_request(upstream_head);
 
@@ -334,7 +327,7 @@ impl Quest {
         let comments = self.source.pull_request_comments(&pr).await?;
         let title = pr.title.expect("Missing PR title");
         let body = format!(
-          "{}\n\nResolves {{{{ {stage_label} issue }}}}.\n",
+          "{}\n\nResolves {{{{ {chapter_label} issue }}}}. (Don't merge until you've added your solution!)\n",
           pr.body.expect("Missing PR body")
         );
         let labels = match pr.labels {
@@ -345,32 +338,17 @@ impl Quest {
       }
       None => (
         default_title.to_string(),
-        format!("This PR resolves {{{{ {stage_label} issue }}}}."),
-        vec![stage_label.to_string()],
+        format!(
+          "This PR resolves {{{{ {chapter_label} issue }}}}. (Don't merge until you've added your solution!)"
+        ),
+        vec![chapter_label.to_string()],
         Vec::new(),
       ),
     };
 
-    let is_reset = match merge_type {
-      MergeType::SolutionReset => {
-        body.push_str(r#"
-
-Note: due to a merge conflict, this PR is a hard reset to the reference solution, and may have overwritten your previous changes."#);
-        true
-      }
-
-      MergeType::StarterReset => {
-        body.push_str(r#"
-
-Note: due to a merge conflict, this PR is a hard reset to the starter code, and may have overwritten your previous changes."#);
-        true
-      }
-
-      MergeType::Success => false,
-    };
-
     const RESET_LABEL: &str = "reset";
-    if is_reset {
+    if merge_type.is_reset() {
+      body.push_str("\n\nNote: due to a merge conflict, this PR is a hard reset to the reference code, and may have overwritten your previous changes.");
       labels.push(RESET_LABEL.into());
     }
 
@@ -390,49 +368,43 @@ Note: due to a merge conflict, this PR is a hard reset to the starter code, and 
   }
 
   #[tracing::instrument(skip(self))]
-  pub async fn start_stage(&self, stage_index: usize) -> Result<(PullRequest, Issue)> {
-    let stage = self.stage(stage_index);
+  pub async fn start_chapter(&self, chapter_index: usize) -> Result<(PullRequest, Issue)> {
+    let chapter = self.chapter(chapter_index);
 
     let src_issue = self
       .source
-      .issue(&stage.label)
-      .with_context(|| format!("Failed to get issue for stage: {}", stage.name))?;
+      .issue(&chapter.label)
+      .with_context(|| format!("Failed to get issue for chapter: {}", chapter.name))?;
 
     let issue = self
       .origin
       .copy_issue(&src_issue)
       .await
-      .with_context(|| format!("Failed to file issue for stage: {}", stage.name))?;
+      .with_context(|| format!("Failed to file issue for chapter: {}", chapter.name))?;
 
-    let upstream_base = if stage_index > 0 {
-      let prev_stage = self.stage(stage_index - 1);
-      prev_stage.branch_name(StagePart::Solution)
+    let upstream_base = if chapter_index > 0 {
+      let prev_chapter = self.chapter(chapter_index - 1);
+      prev_chapter.branch(ChapterPart::Solution)
     } else {
-      "main".into()
+      Branch::new("main")
     };
 
-    self
-      .origin_git
-      .checkout_main()
-      .context("Failed to checkout main")?;
-    self.origin_git.pull().context("Failed to pull")?;
+    let origin_head = Branch::new(&chapter.label);
+    let upstream_head = chapter.branch(ChapterPart::Starter);
 
-    let origin_head = &stage.label;
-    let upstream_head = stage.branch_name(StagePart::Starter);
-
-    self.origin_git.create_branch(origin_head)?;
+    self.origin_git.create_branch_from_main(&origin_head)?;
 
     let readme_path = self.dir.join("README.md");
     let mut readme_contents =
       fs::read_to_string(&readme_path).context("Failed to read README.md")?;
-    write!(readme_contents, "\n- [x] {}", stage.name)?;
+    write!(readme_contents, "\n- [x] {}", chapter.name)?;
     fs::write(&readme_path, readme_contents)?;
 
-    self
-      .origin_git
-      .create_commit(&format!("Start of solution for {}", stage.name))?;
+    self.origin_git.add(&readme_path)?;
+    let commit_msg = format!("Start of solution for {}", chapter.name);
+    self.origin_git.commit(&commit_msg)?;
 
-    let merge_type = if !stage.no_starter() {
+    let merge_type = if !chapter.no_starter() {
       self
         .source
         .apply_patch(&self.origin_git, &upstream_base, &upstream_head)?
@@ -440,17 +412,17 @@ Note: due to a merge conflict, this PR is a hard reset to the starter code, and 
       MergeType::Success
     };
 
-    self.origin_git.push_branch(origin_head)?;
+    self.origin_git.push(&origin_head)?;
     let origin_commit = self.origin_git.head_commit()?;
 
     let pr = self
       .file_pr(
         &src_issue.title,
-        origin_head,
+        &origin_head,
         &origin_commit,
         &upstream_head,
         merge_type,
-        &stage.label,
+        &chapter.label,
       )
       .await?;
 
@@ -463,55 +435,55 @@ Note: due to a merge conflict, this PR is a hard reset to the starter code, and 
   }
 
   #[tracing::instrument(skip(self))]
-  pub async fn add_solution(&self, stage_index: usize) -> Result<()> {
-    let stage = self.stage(stage_index);
-    if self.source.refsol_url(stage).is_none() {
+  pub async fn add_solution(&self, chapter_index: usize) -> Result<()> {
+    let chapter = self.chapter(chapter_index);
+    if self.source.refsol_url(chapter).is_none() {
       panic!("Attempting to use reference solution for a quest source w/o one")
     }
 
-    let base = if stage.no_starter() {
+    let base = if chapter.no_starter() {
       // TODO: repeats w/ file_feature
-      if stage_index > 0 {
-        let prev_stage = self.stage(stage_index - 1);
-        prev_stage.branch_name(StagePart::Solution)
+      if chapter_index > 0 {
+        let prev_chapter = self.chapter(chapter_index - 1);
+        prev_chapter.branch(ChapterPart::Solution)
       } else {
-        "main".into()
+        Branch::main()
       }
     } else {
-      stage.branch_name(StagePart::Starter)
+      chapter.branch(ChapterPart::Starter)
     };
 
-    let origin_head = &stage.label;
-    let upstream_head = stage.branch_name(StagePart::Solution);
+    let origin_head = Branch::new(&chapter.label);
+    let upstream_head = chapter.branch(ChapterPart::Solution);
 
     self
       .source
       .apply_patch(&self.origin_git, &base, &upstream_head)?;
 
-    self.origin_git.push_branch(origin_head)?;
+    self.origin_git.push(&origin_head)?;
 
     Ok(())
   }
 
-  fn stage_states(&self) -> Vec<StageState> {
+  fn chapter_states(&self) -> Vec<ChapterState> {
     self
-      .stages()
+      .chapters()
       .iter()
-      .map(|stage| {
+      .map(|chapter| {
         let issue_url = self
           .origin
-          .issue(&stage.label)
+          .issue(&chapter.label)
           .map(|issue| issue.html_url.to_string());
 
         let pr_url = self
           .origin
-          .pr(&stage.label)
+          .pr(&Branch::new(&chapter.label))
           .map(|pr| pr.html_url.as_ref().unwrap().to_string());
 
-        let refsol_url = self.source.refsol_url(stage);
+        let refsol_url = self.source.refsol_url(chapter);
 
-        StageState {
-          stage: stage.clone(),
+        ChapterState {
+          chapter: chapter.clone(),
           issue_url,
           pr_url,
           refsol_url,
@@ -521,20 +493,28 @@ Note: due to a merge conflict, this PR is a hard reset to the starter code, and 
   }
 
   #[tracing::instrument(skip(self))]
-  pub async fn skip_to_stage(&self, stage_index: usize) -> Result<()> {
-    if stage_index > 1 {
-      let prev_stage = self.stage(stage_index - 2);
-      let branch = format!("{UPSTREAM}/{}", prev_stage.branch_name(StagePart::Solution));
+  pub async fn skip_to_chapter(&self, chapter_index: usize) -> Result<()> {
+    let Some(upstream) = self.origin_git.upstream()? else {
+      bail!("Cannot skip to chapter without an upstream")
+    };
+
+    if chapter_index > 1 {
+      let prev_chapter = self.chapter(chapter_index - 2);
+      let branch = Branch::new(format!(
+        "{upstream}/{}",
+        prev_chapter.branch(ChapterPart::Solution)
+      ));
       self
         .origin_git
-        .reset(&branch)
+        .hard_reset(&branch)
         .with_context(|| format!("Failed to reset to branch: {branch}"))?;
     }
 
-    let (pr, issue) = self.start_stage(stage_index - 1).await?;
-    self.add_solution(stage_index - 1).await?;
+    let (pr, issue) = self.start_chapter(chapter_index - 1).await?;
+    self.add_solution(chapter_index - 1).await?;
     self.origin.merge_pr(&pr).await?;
     self.origin.wait_for_issue_closed(&issue).await?;
+    self.start_chapter(chapter_index).await?;
 
     Ok(())
   }

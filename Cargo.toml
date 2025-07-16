@@ -9,9 +9,8 @@ authors = ["Will Crichton <crichton.will@gmail.com>"]
 
 [dependencies]
 async-trait = "0.1.82" 
-cfg-if = "1.0.0" 
 clap = {version = "4.5.17", features = ["derive"]} 
-color-eyre = "0.6.3" 
+color-eyre = {version = "0.6.3", default-features = false}
 crossterm = "0.25.0" # should match inquire
 eyre = "0.6.12" 
 flate2 = "1.0.35" 

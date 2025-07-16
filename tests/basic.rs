@@ -75,7 +75,7 @@ macro_rules! state_is {
   ($quest:expr, $a:expr, $b:expr) => {{
     let state = $quest.infer_state().await?;
     match state {
-      QuestState::Ongoing { stage, started } => assert_eq!((stage, started), ($a, $b)),
+      QuestState::Ongoing { chapter, started } => assert_eq!((chapter, started), ($a, $b)),
       QuestState::Completed => panic!("finished"),
     };
   }};
@@ -84,7 +84,7 @@ macro_rules! state_is {
 async fn playthrough(quest: &Quest) -> Result<()> {
   state_is!(quest, 0, false);
 
-  let (pr, issue) = quest.start_stage(0).await?;
+  let (pr, issue) = quest.start_chapter(0).await?;
   state_is!(quest, 0, true);
   assert_eq!(pr.title.as_ref().unwrap(), "A");
   assert_eq!(issue.title, "A");
@@ -94,7 +94,7 @@ async fn playthrough(quest: &Quest) -> Result<()> {
   quest.origin.wait_for_issue_closed(&issue).await?;
   state_is!(quest, 1, false);
 
-  let (pr, issue) = quest.start_stage(1).await?;
+  let (pr, issue) = quest.start_chapter(1).await?;
   state_is!(quest, 1, true);
 
   if quest.source.provides_refsol() {
@@ -156,7 +156,7 @@ async fn skip() -> Result<()> {
     ($a:expr, $b:expr) => {
       let state = quest.infer_state().await?;
       match state {
-        QuestState::Ongoing { stage, started } => assert_eq!((stage, started), ($a, $b)),
+        QuestState::Ongoing { chapter, started } => assert_eq!((chapter, started), ($a, $b)),
         QuestState::Completed => panic!("finished"),
       };
     };
@@ -164,11 +164,11 @@ async fn skip() -> Result<()> {
 
   state_is!(0, false);
 
-  quest.skip_to_stage(1).await?;
-  state_is!(1, false);
+  quest.skip_to_chapter(1).await?;
+  state_is!(1, true);
 
-  quest.skip_to_stage(2).await?;
-  state_is!(2, false);
+  quest.skip_to_chapter(2).await?;
+  state_is!(2, true);
 
   Ok(())
 }

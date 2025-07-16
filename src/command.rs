@@ -1,7 +1,5 @@
 use std::{collections::HashMap, ops::Deref, path::Path, process::Command, sync::LazyLock};
 
-use cfg_if::cfg_if;
-
 #[cfg(unix)]
 fn get_user_env() -> HashMap<String, String> {
   use std::env;
@@ -22,12 +20,14 @@ fn get_user_env() -> HashMap<String, String> {
 }
 
 static ENV: LazyLock<HashMap<String, String>> = LazyLock::new(|| {
-  cfg_if! {
-      if #[cfg(unix)] {
-        get_user_env()
-      } else {
-        HashMap::default()
-      }
+  #[cfg(unix)]
+  {
+    get_user_env()
+  }
+
+  #[cfg(not(unix))]
+  {
+    HashMap::default()
   }
 });
 
