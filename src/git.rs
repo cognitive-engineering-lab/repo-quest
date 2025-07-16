@@ -1,30 +1,34 @@
 use std::{
+  cell::OnceCell,
   collections::HashMap,
-  fs,
+  fmt, fs,
   io::Write,
   path::{Path, PathBuf},
-  process::Stdio,
+  process::{Command, Stdio},
 };
 
-use eyre::{Context, Result, ensure, eyre};
+use eyre::{Context, Result, bail, ensure, eyre};
+use serde::{Deserialize, Serialize};
 
-use crate::{
-  command::command,
-  github::{GitProtocol, GithubRepo},
-  package::QuestPackage,
-};
+use crate::{command::command, package::QuestPackage};
 
 pub struct GitRepo {
   path: PathBuf,
+  upstream: OnceCell<Option<&'static str>>,
 }
 
-pub const UPSTREAM: &str = "upstream";
-pub const INITIAL_TAG: &str = "initial";
+const UPSTREAM_REMOTE: &str = "upstream";
+const INITIAL_TAG: &str = "initial";
 
 pub enum MergeType {
   Success,
-  SolutionReset,
-  StarterReset,
+  Reset,
+}
+
+impl MergeType {
+  pub fn is_reset(&self) -> bool {
+    matches!(self, MergeType::Reset)
+  }
 }
 
 macro_rules! git {
@@ -43,37 +47,65 @@ macro_rules! git_output {
   }}
 }
 
+macro_rules! string_newtype {
+  ($name:ident) => {
+    #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
+    pub struct $name(String);
+
+    impl $name {
+      pub fn new(s: impl Into<String>) -> Self {
+        $name(s.into())
+      }
+
+      pub fn as_str(&self) -> &str {
+        &self.0
+      }
+    }
+
+    impl fmt::Display for $name {
+      fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+      }
+    }
+  };
+}
+
+string_newtype!(Branch);
+string_newtype!(Ref);
+
+impl Branch {
+  pub fn main() -> Self {
+    Branch::new("main")
+  }
+
+  pub fn meta() -> Self {
+    Branch::new("meta")
+  }
+}
+
+impl From<&Branch> for Ref {
+  fn from(value: &Branch) -> Self {
+    Ref::new(&value.0)
+  }
+}
+
 impl GitRepo {
   pub fn new(path: &Path) -> Self {
     GitRepo {
       path: path.to_path_buf(),
+      upstream: OnceCell::new(),
     }
   }
 
-  pub fn exists(&self) -> bool {
-    let output = git_output!(self, "rev-parse --is-inside-work-tree");
-    match output {
-      Ok(stdout) => stdout.trim() == "true",
-      Err(_) => false,
-    }
-  }
-
-  pub fn clone(path: &Path, url: &str) -> Result<Self> {
-    let output = command(&format!("git clone {url}"), path.parent().unwrap()).output()?;
-    ensure!(
-      output.status.success(),
-      "`git clone {url}` failed, stderr:\n{}",
-      String::from_utf8(output.stderr)?
-    );
-    Ok(GitRepo::new(path))
-  }
-
-  fn git_core(&self, args: &str) -> Result<std::result::Result<String, String>> {
+  fn git_command(&self, args: &str) -> Command {
     let mut cmd = command(&format!("git {args}"), &self.path);
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
+    cmd
+  }
 
-    let output = cmd.output()?;
+  fn git_core(&self, args: &str) -> Result<std::result::Result<String, String>> {
+    let output = self.git_command(args).output()?;
     if !output.status.success() {
       return Ok(Err(String::from_utf8(output.stderr)?));
     }
@@ -93,55 +125,89 @@ impl GitRepo {
       .map_err(|stderr| eyre!("git failed with stderr:\n{stderr}"))
   }
 
-  pub fn setup_upstream(&self, upstream: &GithubRepo) -> Result<()> {
-    let remote = upstream.remote(GitProtocol::Https);
-    git!(self, "remote add {UPSTREAM} {remote}")?;
-    self.fetch(UPSTREAM)?;
+  /// Returns true if the directory is within a git
+  pub fn exists(&self) -> bool {
+    let output = git_output!(self, "rev-parse --is-inside-work-tree");
+    match output {
+      Ok(stdout) => stdout.trim() == "true",
+      Err(_) => false,
+    }
+  }
+
+  /// Clones repo from `url` into the parent of `path`.
+  pub fn clone(path: &Path, url: &str) -> Result<Self> {
+    let repo_dir = path.parent().expect("Repo path is somehow root");
+    let output = command(&format!("git clone {url}"), repo_dir).output()?;
+    ensure!(
+      output.status.success(),
+      "`git clone {url}` failed, stderr:\n{}",
+      String::from_utf8(output.stderr)?
+    );
+    Ok(GitRepo::new(path))
+  }
+
+  /// Add and fetch an upstream repo.
+  pub fn setup_upstream(&self, remote: &str) -> Result<()> {
+    git!(self, "remote add {UPSTREAM_REMOTE} {remote}")?;
+    git!(self, "fetch {UPSTREAM_REMOTE}")?;
     Ok(())
   }
 
-  pub fn fetch(&self, remote: &str) -> Result<()> {
-    git!(self, "fetch {remote}")
-  }
-
+  /// Returns the repo's upstream remote, if it exists.
   pub fn upstream(&self) -> Result<Option<&'static str>> {
-    let status = command(&format!("git remote get-url {UPSTREAM}"), &self.path)
-      .stdout(Stdio::null())
-      .status()
-      .context("`git remote` failed")?;
-    Ok(status.success().then_some(UPSTREAM))
+    match self.upstream.get() {
+      Some(upstream) => Ok(*upstream),
+      None => {
+        let status = self
+          .git_command(&format!("remote get-url {UPSTREAM_REMOTE}"))
+          .status()
+          .context("`git remote` failed")?;
+        let upstream = status.success().then_some(UPSTREAM_REMOTE);
+        self
+          .upstream
+          .set(upstream)
+          .expect("GitRepo::upstream already initialized");
+        Ok(upstream)
+      }
+    }
   }
 
-  fn apply(&self, patch: &str) -> Result<()> {
+  fn apply_patch(&self, patch: &str) -> Result<()> {
     tracing::trace!("Applying patch:\n{patch}");
+
     let mut child = command("git apply -", &self.path)
       .stdin(Stdio::piped())
       .stderr(Stdio::piped())
       .spawn()?;
+
     let mut stdin = child.stdin.take().unwrap();
     stdin.write_all(patch.as_bytes())?;
     drop(stdin);
+
     let output = child.wait_with_output()?;
     ensure!(
       output.status.success(),
       "git apply failed with stderr:\n{}",
       String::from_utf8(output.stderr)?
     );
-    tracing::trace!("wtf: {}", String::from_utf8(output.stderr)?);
+
     Ok(())
   }
 
-  pub fn apply_patch(&self, patches: &[&str]) -> Result<MergeType> {
+  /// Given a list of patches, attempts to apply the last patch in the list.
+  /// If the application fails, then hard resets the repo back to its initial state,
+  /// and applies all patches in succession.
+  pub fn apply_patch_with_fallback(&self, patches: &[&str]) -> Result<MergeType> {
     let last = patches.last().unwrap();
-    let merge_type = match self.apply(last) {
+    let merge_type = match self.apply_patch(last) {
       Ok(()) => MergeType::Success,
       Err(e) => {
         tracing::warn!("Failed to apply patch: {e:?}");
         git!(self, "reset --hard {INITIAL_TAG}")?;
         for patch in patches {
-          self.apply(patch)?;
+          self.apply_patch(patch)?;
         }
-        MergeType::StarterReset
+        MergeType::Reset
       }
     };
 
@@ -151,21 +217,33 @@ impl GitRepo {
     Ok(merge_type)
   }
 
-  fn first_commit_off_main(&self, branch: &str) -> Result<String> {
+  fn first_commit_off_main(&self, git_ref: &Ref) -> Result<Ref> {
     let merge_base =
-      git_output!(self, "merge-base main {branch}").context("Failed to get merge-base")?;
+      git_output!(self, "merge-base main {git_ref}").context("Failed to get merge-base")?;
     let merge_base = merge_base.trim();
-    let commits = git_output!(self, "rev-list --ancestry-path {merge_base}..{branch}")
+    let commits = git_output!(self, "rev-list --ancestry-path {merge_base}..{git_ref}")
       .context("Failed to get rev-list")?;
-    Ok(commits.lines().last().unwrap().to_string())
+    Ok(Ref::new(commits.lines().last().unwrap()))
   }
 
-  fn current_branch(&self) -> Result<String> {
+  fn head_detached(&self) -> Result<bool> {
+    let status = self.git_command("symbolic-ref -q HEAD").status()?;
+    match status.code() {
+      Some(0) => Ok(false),
+      Some(1) => Ok(true),
+      _ => bail!("symbolic-ref failed"),
+    }
+  }
+
+  fn current_branch(&self) -> Result<Branch> {
+    ensure!(!self.head_detached()?, "head detached");
     let output = git_output!(self, "rev-parse --abbrev-ref HEAD")?;
-    Ok(output.trim().to_string())
+    Ok(Branch::new(output.trim()))
   }
 
-  pub fn cherry_pick(&self, from: &str, to: &str) -> Result<MergeType> {
+  /// Given a range of commits described by refs `from..to`, attempts to cherry-pick them onto
+  /// the current branch. If this fails, then hard reset to the `to` ref without overwriting the history.
+  pub fn cherry_pick_with_fallback(&self, from: &str, to: &str) -> Result<MergeType> {
     let res = git!(self, "cherry-pick {from}..{to}");
 
     match res {
@@ -176,75 +254,84 @@ impl GitRepo {
         git!(self, "cherry-pick --abort").context("Failed to abort cherry-pick")?;
 
         let cur_branch = self.current_branch()?;
-        let first_commit = self.first_commit_off_main(&cur_branch)?;
+        let cur_ref = Ref::from(&cur_branch);
+        let first_commit = self.first_commit_off_main(&cur_ref)?;
 
         git!(self, "reset --hard {to}")?;
         git!(self, "reset --soft origin/{cur_branch}")?;
         git!(self, "checkout {first_commit} README.md")?;
         git!(self, "commit -m 'Hard reset to reference solution'")?;
 
-        // git!(self, "revert --no-commit {first_commit}..")?;
-        // git!(self, "commit -m 'Revert conflicting user changes'")?;
-
-        // git!(self, "cherry-pick {from}..{to}")
-        //   .context("Clean cherry-pick failed, catastrophic git situation")?;
-
-        Ok(MergeType::SolutionReset)
+        Ok(MergeType::Reset)
       }
     }
   }
 
-  pub fn create_branch(&self, branch: &str) -> Result<()> {
+  /// Creates a new branch from main, pulling to ensure it's up-to-date.
+  ///
+  /// TODO: what if there's unchapterd changes?
+  pub fn create_branch_from_main(&self, branch: &Branch) -> Result<()> {
+    git!(self, "checkout main").context("Failed to checkout main")?;
+    git!(self, "pull").context("Failed to pull main")?;
     git!(self, "checkout -b {branch}")
   }
 
-  pub fn create_commit(&self, message: &str) -> Result<()> {
-    git!(self, "add -u")?;
+  /// Runs `git add <file>`
+  pub fn add(&self, file: &Path) -> Result<()> {
+    git!(self, "add {}", file.display())
+  }
+
+  /// Runs `git commit -m <message>`
+  pub fn commit(&self, message: &str) -> Result<()> {
     git!(self, "commit -m {}", shell_escape::escape(message.into()))
   }
 
-  pub fn push_branch(&self, branch: &str) -> Result<()> {
+  /// Runs `git push -u origin <branch>`
+  pub fn push(&self, branch: &Branch) -> Result<()> {
     git!(self, "push -u origin {branch}")
   }
 
-  pub fn pull(&self) -> Result<()> {
-    git!(self, "pull")
-  }
-
-  pub fn checkout_main(&self) -> Result<()> {
-    git!(self, "checkout main")
-  }
-
-  pub fn head_commit(&self) -> Result<String> {
+  /// Returns the commit at the head of the current branch
+  pub fn head_commit(&self) -> Result<Ref> {
     let output = git_output!(self, "rev-parse HEAD").context("Failed to get head commit")?;
-    Ok(output.trim_end().to_string())
+    Ok(Ref::new(output.trim_end()))
   }
 
-  pub fn reset(&self, branch: &str) -> Result<()> {
+  /// Hard resets current branch to `branch` and force pushes current branch.
+  pub fn hard_reset(&self, branch: &Branch) -> Result<()> {
     git!(self, "reset --hard {branch}").context("Failed to reset")?;
-    git!(self, "push --force").context("Failed to push reset branch")?;
-    Ok(())
+    git!(self, "push --force -u origin").context("Failed to push reset branch")
   }
 
-  pub fn diff(&self, base: &str, head: &str) -> Result<String> {
+  /// Returns the output of `git diff <base>..<head>`
+  pub fn diff(&self, base: &Ref, head: &Ref) -> Result<String> {
     git_output!(self, "diff {base}..{head}")
   }
 
-  pub fn contains_file(&self, branch: &str, file: &str) -> Result<bool> {
-    let output = command(&format!("git cat-file -e {branch}:{file}"), &self.path)
-      .output()
-      .with_context(|| format!("Failed to `git cat-file -e {branch}:{file}`"))?;
+  /// Returns true if the `branch` head contains a file at `path`
+  pub fn contains_file(&self, branch: &Branch, path: &Path) -> Result<bool> {
+    let output = command(
+      &format!("git cat-file -e {branch}:{}", path.display()),
+      &self.path,
+    )
+    .output()
+    .with_context(|| format!("Failed to `git cat-file -e {branch}:{}`", path.display()))?;
     Ok(output.status.success())
   }
 
-  pub fn read_file(&self, branch: &str, file: &str) -> Result<String> {
-    git_output!(self, "cat-file -p {branch}:{file}")
+  /// Returns the contents of `file` at the head of `branch` as a string
+  pub fn read_file_string(&self, branch: &Branch, file: &Path) -> Result<String> {
+    git_output!(self, "cat-file -p {branch}:{}", file.display())
   }
 
-  pub fn show_bin(&self, branch: &str, file: &str) -> Result<Vec<u8>> {
-    let output = command(&format!("git cat-file -p {branch}:{file}"), &self.path)
-      .output()
-      .with_context(|| format!("Failed to `git cat-file -p {branch}:{file}"))?;
+  /// Returns the contents of `file` at the head of `branch` as a byte array
+  pub fn read_file_bytes(&self, branch: &Branch, file: &Path) -> Result<Vec<u8>> {
+    let output = command(
+      &format!("git cat-file -p {branch}:{}", file.display()),
+      &self.path,
+    )
+    .output()
+    .with_context(|| format!("Failed to `git cat-file -p {branch}:{}", file.display()))?;
     ensure!(
       output.status.success(),
       "git show failed with stderr:\n{}",
@@ -253,25 +340,23 @@ impl GitRepo {
     Ok(output.stdout)
   }
 
-  pub fn read_initial_files(&self) -> Result<HashMap<PathBuf, String>> {
-    let ls_tree_out = git_output!(self, "ls-tree -r main --name-only")?;
-    let files = ls_tree_out.trim().split("\n");
-    files
-      .map(|file| {
-        let path = PathBuf::from(file);
-        let contents = self.read_file("main", file)?;
+  /// Returns a list of all file paths checked in at the head of `branch`
+  pub fn file_paths(&self, branch: &Branch) -> Result<Vec<PathBuf>> {
+    let ls_tree_out = git_output!(self, "ls-tree -r --name-only {branch}")?;
+    let paths = ls_tree_out.trim().lines();
+    Ok(paths.map(PathBuf::from).collect())
+  }
+
+  /// Returns the contents of all files checked in at the head of `branch`
+  pub fn read_files(&self, branch: &Branch) -> Result<HashMap<PathBuf, String>> {
+    self
+      .file_paths(branch)?
+      .into_iter()
+      .map(|path| {
+        let contents = self.read_file_string(branch, &path)?;
         Ok((path, contents))
       })
       .collect()
-  }
-
-  pub fn is_behind_origin(&self) -> Result<bool> {
-    let out = git_output!(self, "rev-list --count main..origin/main")?;
-    let count = out
-      .trim()
-      .parse::<i32>()
-      .with_context(|| format!("rev-list returned non-numeric output:\n{out}"))?;
-    Ok(count > 0)
   }
 
   pub fn write_initial_files(&self, package: &QuestPackage) -> Result<()> {
@@ -347,7 +432,6 @@ impl GitRepo {
 
       git!(self, "config --local core.hooksPath .githooks")?;
     }
-
     Ok(())
   }
 }
