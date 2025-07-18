@@ -176,7 +176,9 @@ impl Quest {
     let remote = origin_git
       .upstream()
       .context("Failed to test for upstream")?;
-    let config = QuestConfig::load(&origin_git, remote).context("Failed to load quest config")?;
+    let config = QuestConfig::load(&origin_git, remote).context(
+      "Failed to load quest config. Did you run repo-quest in a non-RepoQuest Git repository?",
+    )?;
     let origin_fut = async {
       GithubRepo::load(&user, &config.repo)
         .await

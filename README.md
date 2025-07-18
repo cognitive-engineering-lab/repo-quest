@@ -8,7 +8,18 @@ Before starting, you will need Git and Rust installed on your computer. You will
 
 ### 1. Install RepoQuest
 
-You need [Rust](https://www.rust-lang.org/tools/install) installed. Then run:
+#### Prebuilt binary
+
+You can use our [install script] to install a prebuilt binary from our [Github releases], if one is available for your platform. Currently, we build for: x86-64 Linux, x86-64 Mac, and ARM Mac (all 64-bit). 
+
+```
+curl https://raw.githubusercontent.com/cognitive-engineering-lab/repo-quest/refs/heads/main/scripts/install.sh | sh
+```
+
+
+#### `cargo install`
+
+You can use Rust's `cargo install` command to install it from <crates.io>. You will need Rust installed.
 
 ```
 cargo install repo-quest --locked
@@ -49,3 +60,6 @@ repo-quest
 ```
 
 Then follow the directions in the terminal.
+
+[install script]: https://github.com/cognitive-engineering-lab/repo-quest/tree/main/scripts/install.sh
+[Github releases]: https://github.com/cognitive-engineering-lab/repo-quest/releases
