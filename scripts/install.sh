@@ -8,14 +8,15 @@ download() {
   cd $(mktemp -d)
   
   echo 'Downloading prebuilt binary from Github...'
-  wget "${BASE_URL}/$1.tar.gz"
+  wget -q "${BASE_URL}/$1.tar.gz"
   tar -xf $1.tar.gz
 
   mkdir -p $INSTALL_DIR  
   mv repo-quest $INSTALL_DIR/repo-quest
 
   echo "Installed to: $INSTALL_DIR/repo-quest"
-  echo "Make sure to add $INSTALL_DIR to your \$PATH."
+  echo "Make sure to add the binary directory to your PATH. For example:"
+  echo "  export PATH="\$PATH:$INSTALL_DIR""
 }
 
 ARCH=$(uname -m)
