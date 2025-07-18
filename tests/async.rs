@@ -17,6 +17,7 @@ async fn async_quest() -> Result<()> {
     &dir,
     source,
     QuestUserPrefs {
+      name: "rqst-async".into(),
       strictness: QuestStrictness::Relaxed,
     },
   )

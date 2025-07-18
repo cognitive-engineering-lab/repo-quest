@@ -4,12 +4,12 @@ use tracing_tree::HierarchicalLayer;
 
 pub mod chapter;
 pub mod cli;
-mod command;
-mod git;
+pub mod command;
+pub mod git;
 pub mod github;
 pub mod package;
 pub mod quest;
-mod source;
+pub mod source;
 pub mod utils;
 
 pub fn init_globals() -> Result<()> {

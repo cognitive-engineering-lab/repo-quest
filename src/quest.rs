@@ -17,10 +17,10 @@ use http::StatusCode;
 use octocrab::{
   GitHubError,
   models::{IssueState, issues::Issue, pulls::PullRequest},
-  params::{Direction, issues},
+  params::{Direction, pulls},
 };
 use serde::{Deserialize, Serialize};
-use tokio::try_join;
+use tokio::{join, try_join};
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
@@ -49,6 +49,7 @@ impl QuestStrictness {
 
 #[derive(Debug)]
 pub struct QuestUserPrefs {
+  pub name: String,
   pub strictness: QuestStrictness,
 }
 
@@ -64,7 +65,7 @@ impl QuestConfig {
   pub fn load(repo: &GitRepo, remote: Option<&str>) -> Result<Self> {
     let branch = match remote {
       Some(remote) => Branch::new(format!("{remote}/meta")),
-      None => Branch::new("meta"),
+      None => Branch::meta(),
     };
     let config_str = repo.read_file_string(&branch, Path::new("rqst.toml"))?;
     let mut config = toml::de::from_str::<QuestConfig>(&config_str)
@@ -157,7 +158,7 @@ impl Quest {
       origin,
       origin_git,
       config,
-    } = template.instantiate(dir).await?;
+    } = template.instantiate(dir, &prefs.name).await?;
 
     if prefs.strictness.is_strict() {
       origin_git.install_hooks()?;
@@ -166,14 +167,7 @@ impl Quest {
         .await?;
     }
 
-    Self::load_core(
-      &dir.join(&config.repo),
-      config,
-      template,
-      origin,
-      origin_git,
-    )
-    .await
+    Self::load_core(&dir.join(&prefs.name), config, template, origin, origin_git).await
   }
 
   pub async fn load(dir: &Path) -> Result<Self> {
@@ -182,7 +176,9 @@ impl Quest {
     let remote = origin_git
       .upstream()
       .context("Failed to test for upstream")?;
-    let config = QuestConfig::load(&origin_git, remote).context("Failed to load quest config")?;
+    let config = QuestConfig::load(&origin_git, remote).context(
+      "Failed to load quest config. Did you run repo-quest in a non-RepoQuest Git repository?",
+    )?;
     let origin_fut = async {
       GithubRepo::load(&user, &config.repo)
         .await
@@ -215,16 +211,15 @@ impl Quest {
   }
 
   pub async fn infer_state(&self) -> Result<QuestState> {
-    let issue_handler = self.origin.issue_handler();
-    let issue_page_future = issue_handler
+    let prs = self.origin.pr_handler();
+    let pr_page_future = prs
       .list()
       .state(octocrab::params::State::All)
-      .sort(issues::Sort::Created)
+      .sort(pulls::Sort::Created)
       .direction(Direction::Descending)
       .per_page(10)
       .send();
-
-    let mut issue_page = match issue_page_future.await {
+    let mut pr_page = match pr_page_future.await {
       Ok(result) => result,
       Err(octocrab::Error::GitHub { source, .. })
         if matches!(
@@ -243,20 +238,7 @@ impl Quest {
       Err(e) => return Err(e.into()),
     };
 
-    let issues = issue_page.take_items();
-
-    let issue_map = issues
-      .into_iter()
-      .filter_map(|issue| {
-        let label = issue.labels.first()?;
-        let is_issue = issue.pull_request.is_none();
-        if is_issue {
-          Some((label.name.clone(), issue))
-        } else {
-          None
-        }
-      })
-      .collect::<HashMap<_, _>>();
+    let prs = pr_page.take_items();
 
     let chapter_map = self
       .chapters()
@@ -264,17 +246,21 @@ impl Quest {
       .map(|chapter| (chapter.label.clone(), chapter))
       .collect::<HashMap<_, _>>();
 
-    let issue_chapters = issue_map.iter().filter_map(|(label, issue)| {
+    let pr_chapters = prs.into_iter().filter_map(|pr| {
+      let label = &pr.labels.iter().flatten().nth(0)?.name;
       let chapter = (*chapter_map.get(label)?).clone();
-      let finished = matches!(issue.state, IssueState::Closed);
-      Some((chapter, finished))
+      match (pr.state.as_ref(), pr.merged_at.is_some()) {
+        (Some(IssueState::Open), _) => Some((chapter, false)),
+        (Some(IssueState::Closed), true) => Some((chapter, true)),
+        _ => None,
+      }
     });
 
-    tracing::trace!("Issues: {:#?}", issue_chapters.clone().collect::<Vec<_>>());
+    tracing::trace!("PRs: {:#?}", pr_chapters.clone().collect::<Vec<_>>());
 
     let chapter_idx = |chapter: &Chapter| self.chapter_index[&chapter.label];
     let Some((chapter, finished)) =
-      issue_chapters.max_by_key(|(chapter, finished)| (chapter_idx(chapter), *finished))
+      pr_chapters.max_by_key(|(chapter, finished)| (chapter_idx(chapter), *finished))
     else {
       return Ok(QuestState::Ongoing {
         chapter: 0,
@@ -367,33 +353,7 @@ impl Quest {
     Ok(new_pr)
   }
 
-  #[tracing::instrument(skip(self))]
-  pub async fn start_chapter(&self, chapter_index: usize) -> Result<(PullRequest, Issue)> {
-    let chapter = self.chapter(chapter_index);
-
-    let src_issue = self
-      .source
-      .issue(&chapter.label)
-      .with_context(|| format!("Failed to get issue for chapter: {}", chapter.name))?;
-
-    let issue = self
-      .origin
-      .copy_issue(&src_issue)
-      .await
-      .with_context(|| format!("Failed to file issue for chapter: {}", chapter.name))?;
-
-    let upstream_base = if chapter_index > 0 {
-      let prev_chapter = self.chapter(chapter_index - 1);
-      prev_chapter.branch(ChapterPart::Solution)
-    } else {
-      Branch::new("main")
-    };
-
-    let origin_head = Branch::new(&chapter.label);
-    let upstream_head = chapter.branch(ChapterPart::Starter);
-
-    self.origin_git.create_branch_from_main(&origin_head)?;
-
+  fn commit_chapter_to_readme(&self, chapter: &Chapter) -> Result<()> {
     let readme_path = self.dir.join("README.md");
     let mut readme_contents =
       fs::read_to_string(&readme_path).context("Failed to read README.md")?;
@@ -404,18 +364,167 @@ impl Quest {
     let commit_msg = format!("Start of solution for {}", chapter.name);
     self.origin_git.commit(&commit_msg)?;
 
-    let merge_type = if !chapter.no_starter() {
-      self
-        .source
-        .apply_patch(&self.origin_git, &upstream_base, &upstream_head)?
-    } else {
-      MergeType::Success
+    Ok(())
+  }
+
+  /// Starts a new chapter by filing an issue and pull request.
+  #[tracing::instrument(skip(self))]
+  pub async fn start_chapter(&self, chapter_index: usize) -> Result<(PullRequest, Issue)> {
+    // This panics if `chapter_index` is out of bounds, which should be checked by the caller.
+    let chapter = self.chapter(chapter_index);
+
+    ensure!(
+      !self.origin_git.contains_unstaged_changes()?,
+      "Your Git workspace contains unstaged changes. Remove or commit them before starting a new chapter."
+    );
+
+    // Find the issue for the chapter in the quest source.
+    //
+    // This fails if the chapter is mis-labeled, which should be checked by the quest designer.
+    // TODO: incorporate this into a quest linter
+    let src_issue = self
+      .source
+      .issue(&chapter.label)
+      .with_context(|| format!("Failed to get issue for chapter: {}", chapter.name))?;
+
+    // Copy the issue into the user's quest instance. Do this early on because we need
+    // the issue ID later.
+    //
+    // This should only fail due to connection issues w/ Github.
+    let issue = self
+      .origin
+      .copy_issue(&src_issue)
+      .await
+      .with_context(|| format!("Failed to file issue for chapter: {}", chapter.name))?;
+
+    macro_rules! unrecoverable_expect {
+      ($e:expr, $e2:expr, $fmt:expr, $($arg:expr)*) => {{
+        match $e {
+          Ok(x) => x,
+          Err(e) => {
+            let s = format!($fmt, $($arg),*);
+            panic!("Repo is now in an inconsistent state because a failure occurred, and a second failure occurred while rolling back from the first failure.\n\nThe second failure was: {s}:\n{e:?}\n\nThe first failure was: {:?}", $e2);
+          }
+        }
+      }}
+    }
+
+    let cleanup_issue = async |err| {
+      unrecoverable_expect!(
+        self.origin.close_issue(&issue).await,
+        err,
+        "Failed to close issue #{}",
+        issue.number
+      )
     };
 
-    self.origin_git.push(&origin_head)?;
-    let origin_commit = self.origin_git.head_commit()?;
+    // By default, the upstream quest repo should have a branch structure:
+    //   ch00-foo-a -> ch00-foo-b -> ch01-bar-a -> ch01-bar-b
+    // If we are starting chapter 1, then we want in the origin:
+    //    origin_head = ch01-bar
+    // And from upstream:
+    //    upstream_base = ch00-foo-b
+    //    upstream_head = ch01-bar-a
+    // The goal is to port the commits in ch00-foo-b..ch01-bar-a onto ch01-bar.
+    //
+    // If no_starter = true, then the upstream repo should look like:
+    //   ch00-foo-a -> ch00-foo-b               -> ch01-bar-b
+    // And we instead want:
+    //    upstream_head = ch01-bar-b
+    // And we will not port any commits.
+    let upstream_base = (!chapter.no_starter()).then(|| {
+      if chapter_index > 0 {
+        let prev_chapter = self.chapter(chapter_index - 1);
+        prev_chapter.branch(ChapterPart::Solution)
+      } else {
+        Branch::main()
+      }
+    });
+    let origin_head = Branch::new(&chapter.label);
+    let upstream_head = chapter.branch(ChapterPart::Starter);
 
-    let pr = self
+    // Start by creating the new branch from a fresh pull of main.
+    //
+    // This could fail if the workspace is unclean.
+    let res = self.origin_git.create_branch_from_main(&origin_head);
+    if let Err(e) = res {
+      cleanup_issue(&e).await;
+      return Err(e);
+    }
+    let cleanup_local_branch = |err| {
+      unrecoverable_expect!(
+        self.origin_git.checkout(&Branch::main()),
+        err,
+        "Failed to checkout main",
+      );
+      unrecoverable_expect!(
+        self.origin_git.delete_local_branch(&origin_head),
+        err,
+        "Failed to delete branch `{}`",
+        origin_head.as_str()
+      )
+    };
+
+    // We can only file a pull request with at least one commit, so we create a sort-of dummy
+    // commit by adding a checked box for the chapter to the README.
+    //
+    // This could fail if the workspace is unclean.
+    let res = self.commit_chapter_to_readme(chapter);
+    if let Err(e) = res {
+      cleanup_issue(&e).await;
+      cleanup_local_branch(&e);
+      return Err(e);
+    }
+
+    let merge_type = match upstream_base.as_ref() {
+      Some(upstream_base) => {
+        // If the chapter has starter code, then we commit the starter code to the current branch.
+        match self
+          .source
+          .apply_patch(&self.origin_git, upstream_base, &upstream_head)
+        {
+          Ok(merge_type) => merge_type,
+          Err(e) => {
+            cleanup_issue(&e).await;
+            cleanup_local_branch(&e);
+            return Err(e);
+          }
+        }
+      }
+      None => MergeType::Success,
+    };
+
+    // We then push the local branch to Github in preparation for making a pull request.
+    //
+    // This should only fail for network/auth reasons.
+    let res = self.origin_git.push(&origin_head);
+    if let Err(e) = res {
+      cleanup_issue(&e).await;
+      cleanup_local_branch(&e);
+      return Err(e);
+    }
+    let cleanup_remote_branch = |err| {
+      unrecoverable_expect!(
+        self.origin_git.delete_remote_branch(&origin_head),
+        err,
+        "Failed to cleanup remote branch `{}`",
+        origin_head.as_str()
+      )
+    };
+
+    // Retrieve the SHA of the current HEAD to file for the PR.
+    let res = self.origin_git.head_commit();
+    let origin_commit = match res {
+      Ok(x) => x,
+      Err(e) => {
+        cleanup_issue(&e).await;
+        cleanup_local_branch(&e);
+        cleanup_remote_branch(&e);
+        return Err(e);
+      }
+    };
+
+    let res = self
       .file_pr(
         &src_issue.title,
         &origin_head,
@@ -424,18 +533,44 @@ impl Quest {
         merge_type,
         &chapter.label,
       )
-      .await?;
+      .await;
+    let pr = match res {
+      Ok(x) => x,
+      Err(e) => {
+        cleanup_issue(&e).await;
+        cleanup_local_branch(&e);
+        cleanup_remote_branch(&e);
+        return Err(e);
+      }
+    };
+    let cleanup_pr = async |err| {
+      unrecoverable_expect!(
+        self.origin.close_pr(&pr).await,
+        err,
+        "Failed to cleanup PR #{}",
+        pr.number
+      )
+    };
 
-    try_join!(
+    // Now that we have the PR and issue numbers, go back and update the bodies of each
+    // with the right internal links.
+    let res = try_join!(
       self.origin.update_issue_links(&issue),
       self.origin.update_pr_links(&pr)
-    )?;
+    );
+    if let Err(e) = res {
+      // let e = eyre!("foo");
+      join!(cleanup_issue(&e), cleanup_pr(&e));
+      cleanup_local_branch(&e);
+      cleanup_remote_branch(&e);
+      return Err(e);
+    }
 
     Ok((pr, issue))
   }
 
   #[tracing::instrument(skip(self))]
-  pub async fn add_solution(&self, chapter_index: usize) -> Result<()> {
+  pub async fn add_solution(&self, chapter_index: usize) -> Result<MergeType> {
     let chapter = self.chapter(chapter_index);
     if self.source.refsol_url(chapter).is_none() {
       panic!("Attempting to use reference solution for a quest source w/o one")
@@ -456,13 +591,13 @@ impl Quest {
     let origin_head = Branch::new(&chapter.label);
     let upstream_head = chapter.branch(ChapterPart::Solution);
 
-    self
+    let merge_type = self
       .source
       .apply_patch(&self.origin_git, &base, &upstream_head)?;
 
     self.origin_git.push(&origin_head)?;
 
-    Ok(())
+    Ok(merge_type)
   }
 
   fn chapter_states(&self) -> Vec<ChapterState> {

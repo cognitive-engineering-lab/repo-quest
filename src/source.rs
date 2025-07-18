@@ -22,7 +22,7 @@ pub struct InstanceOutputs {
 
 #[async_trait]
 pub trait QuestSource: Send + Sync + 'static {
-  async fn instantiate(&self, path: &Path) -> Result<InstanceOutputs>;
+  async fn instantiate(&self, path: &Path, name: &str) -> Result<InstanceOutputs>;
   fn pull_request(&self, branch: &Branch) -> Option<PullRequest>;
   async fn pull_request_comments(&self, selector: &PullRequest) -> Result<Vec<pulls::Comment>>;
   fn issue(&self, label: &str) -> Result<Issue>;
@@ -34,8 +34,8 @@ pub trait QuestSource: Send + Sync + 'static {
 
 #[async_trait]
 impl QuestSource for GithubRepo {
-  async fn instantiate(&self, path: &Path) -> Result<InstanceOutputs> {
-    let origin = GithubRepo::instantiate_from_repo(self)
+  async fn instantiate(&self, path: &Path, name: &str) -> Result<InstanceOutputs> {
+    let origin = GithubRepo::instantiate_from_repo(self, name)
       .await
       .context("Failed to instantiate Github repo from template")?;
     let origin_git = origin.clone(path).context("Failed to clone Github repo")?;
@@ -89,8 +89,8 @@ impl QuestSource for GithubRepo {
 
 #[async_trait]
 impl QuestSource for QuestPackage {
-  async fn instantiate(&self, path: &Path) -> Result<InstanceOutputs> {
-    let origin = GithubRepo::instantiate_from_package(self)
+  async fn instantiate(&self, path: &Path, name: &str) -> Result<InstanceOutputs> {
+    let origin = GithubRepo::instantiate_from_package(self, name)
       .await
       .context("Failed to instantiate repo from package")?;
     let origin_git = origin.clone(path).context("Failed to clone repo")?;
