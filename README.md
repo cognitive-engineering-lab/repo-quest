@@ -19,7 +19,7 @@ curl https://raw.githubusercontent.com/cognitive-engineering-lab/repo-quest/refs
 
 #### `cargo install`
 
-You can use Rust's `cargo install` command to install it from <crates.io>. You will need Rust installed.
+You can use Rust's `cargo install` command to install it from [crates.io]. You will need Rust installed.
 
 ```
 cargo install repo-quest --locked
@@ -63,3 +63,4 @@ Then follow the directions in the terminal.
 
 [install script]: https://github.com/cognitive-engineering-lab/repo-quest/tree/main/scripts/install.sh
 [Github releases]: https://github.com/cognitive-engineering-lab/repo-quest/releases
+[crates.io]: https://crates.io/
