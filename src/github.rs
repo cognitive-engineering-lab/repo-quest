@@ -1,6 +1,7 @@
-use eyre::{Context, Result, bail, ensure};
+use eyre::{Context, Result, bail, ensure, eyre};
 use futures_util::future::try_join_all;
 use http::StatusCode;
+use itertools::Itertools;
 use octocrab::{
   GitHubError, Octocrab,
   issues::IssueHandler,
@@ -9,6 +10,7 @@ use octocrab::{
     issues::Issue,
     pulls::{self, PullRequest},
   },
+  params::pulls::State,
   pulls::PullRequestHandler,
   repos::RepoHandler,
 };
@@ -45,9 +47,15 @@ pub fn find_pr<'a>(
   branch: &Branch,
   prs: impl IntoIterator<Item = &'a PullRequest> + 'a,
 ) -> Option<usize> {
+  // It's possible there may be identical PRs (or issues) because one was partially created and
+  // later closed in a rollback. We therefore look for the most recently created one.
   prs
     .into_iter()
-    .position(|pr| pr.head.ref_field == branch.as_str())
+    .enumerate()
+    .sorted_by_key(|(_, pr)| pr.created_at)
+    .rev()
+    .find(|(_, pr)| (pr.head.ref_field == branch.as_str()))
+    .map(|(idx, _)| idx)
 }
 
 pub fn find_issue<'a>(
@@ -56,7 +64,11 @@ pub fn find_issue<'a>(
 ) -> Option<usize> {
   issues
     .into_iter()
-    .position(|issue| issue.labels.iter().any(|label| label.name == label_name))
+    .enumerate()
+    .sorted_by_key(|(_, issue)| issue.created_at)
+    .rev()
+    .find(|(_, issue)| issue.labels.iter().any(|label| label.name == label_name))
+    .map(|(idx, _)| idx)
 }
 
 pub async fn load_user() -> Result<String> {
@@ -76,13 +88,14 @@ pub fn check_ssh() -> Result<()> {
     Some(1) => Ok(()),
     _ => {
       let stderr = String::from_utf8(output.stderr)?;
-      if stderr.contains("git@github.com: Permission denied (publickey).") {
-        bail!(
+      let error = if stderr.contains("git@github.com: Permission denied (publickey).") {
+        eyre!(
           "Your machine is not setup for a secure connection to Github. Please follow the instructions here: https://docs.github.com/en/authentication/troubleshooting-ssh/error-permission-denied-publickey"
         )
       } else {
-        bail!("Failed to establish a secure connection to Github with error:\n{stderr}")
-      }
+        eyre!("Failed to establish a secure connection to Github with error:\n{stderr}")
+      };
+      Err(error)
     }
   }
 }
@@ -255,9 +268,8 @@ impl GithubRepo {
     Ok(())
   }
 
-  pub async fn instantiate_from_package(package: &QuestPackage) -> Result<GithubRepo> {
+  pub async fn instantiate_from_package(package: &QuestPackage, name: &str) -> Result<GithubRepo> {
     let user = load_user().await.context("Failed to load user")?;
-    let name = &package.config.repo;
     let params = json!({
         "name": name,
         "private": true,
@@ -292,9 +304,8 @@ impl GithubRepo {
     Ok(page.take_items())
   }
 
-  pub async fn instantiate_from_repo(base: &GithubRepo) -> Result<GithubRepo> {
+  pub async fn instantiate_from_repo(base: &GithubRepo, name: &str) -> Result<GithubRepo> {
     let user = load_user().await?;
-    let name = &base.name;
     base
       .repo_handler()
       .generate(name)
@@ -457,6 +468,9 @@ impl GithubRepo {
     new_body
   }
 
+  /// Copies a reference issue onto the current repo, including comments and labels.
+  ///
+  /// Fails for any of the reasons that `CreateIssueBuilder::send` can fail.
   #[tracing::instrument(skip_all, fields(src_issue = src_issue.title))]
   pub async fn copy_issue(&self, src_issue: &Issue) -> Result<Issue> {
     let issue_handler = self.issue_handler();
@@ -516,6 +530,17 @@ impl GithubRepo {
       .send()
       .await
       .with_context(|| format!("Failed to close issue: {}", issue.number))?;
+    Ok(())
+  }
+
+  pub async fn close_pr(&self, pr: &PullRequest) -> Result<()> {
+    self
+      .pr_handler()
+      .update(pr.number)
+      .state(State::Closed)
+      .send()
+      .await
+      .with_context(|| format!("Failed to close PR: {}", pr.number))?;
     Ok(())
   }
 

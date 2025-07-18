@@ -212,7 +212,7 @@ impl GitRepo {
     };
 
     git!(self, "add .")?;
-    git!(self, "commit -m 'Starter code'")?;
+    self.commit("Starter code")?;
 
     Ok(merge_type)
   }
@@ -227,7 +227,7 @@ impl GitRepo {
   }
 
   fn head_detached(&self) -> Result<bool> {
-    let status = self.git_command("symbolic-ref -q HEAD").status()?;
+    let status = self.git_command("symbolic-ref --quiet HEAD").status()?;
     match status.code() {
       Some(0) => Ok(false),
       Some(1) => Ok(true),
@@ -260,7 +260,7 @@ impl GitRepo {
         git!(self, "reset --hard {to}")?;
         git!(self, "reset --soft origin/{cur_branch}")?;
         git!(self, "checkout {first_commit} README.md")?;
-        git!(self, "commit -m 'Hard reset to reference solution'")?;
+        self.commit("Hard reset to reference solution")?;
 
         Ok(MergeType::Reset)
       }
@@ -269,11 +269,19 @@ impl GitRepo {
 
   /// Creates a new branch from main, pulling to ensure it's up-to-date.
   ///
-  /// TODO: what if there's unchapterd changes?
+  /// TODO: what if there's unstaged changes?
   pub fn create_branch_from_main(&self, branch: &Branch) -> Result<()> {
-    git!(self, "checkout main").context("Failed to checkout main")?;
+    self.checkout(&Branch::main())?;
     git!(self, "pull").context("Failed to pull main")?;
     git!(self, "checkout -b {branch}")
+  }
+
+  pub fn delete_local_branch(&self, branch: &Branch) -> Result<()> {
+    git!(self, "branch -D {branch}")
+  }
+
+  pub fn delete_remote_branch(&self, branch: &Branch) -> Result<()> {
+    git!(self, "push origin :{branch}")
   }
 
   /// Runs `git add <file>`
@@ -281,14 +289,18 @@ impl GitRepo {
     git!(self, "add {}", file.display())
   }
 
-  /// Runs `git commit -m <message>`
+  /// Runs `git commit --message=<message>`
   pub fn commit(&self, message: &str) -> Result<()> {
-    git!(self, "commit -m {}", shell_escape::escape(message.into()))
+    git!(
+      self,
+      "commit --message={}",
+      shell_escape::escape(message.into())
+    )
   }
 
   /// Runs `git push -u origin <branch>`
   pub fn push(&self, branch: &Branch) -> Result<()> {
-    git!(self, "push -u origin {branch}")
+    git!(self, "push --set-upstream origin {branch}")
   }
 
   /// Returns the commit at the head of the current branch
@@ -300,7 +312,7 @@ impl GitRepo {
   /// Hard resets current branch to `branch` and force pushes current branch.
   pub fn hard_reset(&self, branch: &Branch) -> Result<()> {
     git!(self, "reset --hard {branch}").context("Failed to reset")?;
-    git!(self, "push --force -u origin").context("Failed to push reset branch")
+    git!(self, "push --force --set-upstream origin").context("Failed to push reset branch")
   }
 
   /// Returns the output of `git diff <base>..<head>`
@@ -393,10 +405,10 @@ impl GitRepo {
       }
     }
 
-    git!(self, "add .")?;
-    git!(self, "commit -m 'Initial commit'")?;
+    self.add(Path::new("."))?;
+    self.commit("Initial commit")?;
     git!(self, "tag {INITIAL_TAG}")?;
-    git!(self, "push -u origin main")?;
+    self.push(&Branch::main())?;
 
     git!(self, "checkout -b meta")?;
 
@@ -411,12 +423,16 @@ impl GitRepo {
       .save(&pkg_path)
       .with_context(|| format!("Failed to write package to: {}", pkg_path.display()))?;
 
-    git!(self, "add .")?;
-    git!(self, "commit -m 'Add meta'")?;
-    git!(self, "push -u origin meta")?;
-    git!(self, "checkout main")?;
+    self.add(Path::new("."))?;
+    self.commit("Add meta")?;
+    self.push(&Branch::meta())?;
+    self.checkout(&Branch::main())?;
 
     Ok(())
+  }
+
+  pub fn checkout(&self, branch: &Branch) -> Result<()> {
+    git!(self, "checkout {branch}")
   }
 
   pub fn install_hooks(&self) -> Result<()> {
@@ -433,5 +449,10 @@ impl GitRepo {
       git!(self, "config --local core.hooksPath .githooks")?;
     }
     Ok(())
+  }
+
+  pub fn contains_unstaged_changes(&self) -> Result<bool> {
+    let status = self.git_command("diff-index --quiet HEAD --").status()?;
+    Ok(!status.success())
   }
 }

@@ -5,6 +5,7 @@ use std::{
 
 use crate::{
   git::GitRepo,
+  github,
   package::QuestPackage,
   quest::{CreateSource, Quest, QuestState, QuestStrictness, QuestUserPrefs},
 };
@@ -66,7 +67,7 @@ impl Ui {
     )
     .prompt()?;
 
-    let source = match source_type {
+    let (source, default_name) = match source_type {
       QuestSourceType::Github => {
         fn validator(val: &str) -> std::result::Result<Validation, CustomUserError> {
           if val.split_once("/").is_some() {
@@ -96,10 +97,12 @@ impl Ui {
 
         let (user, repo) = repo.split_once("/").unwrap();
 
-        CreateSource::Remote {
+        let source = CreateSource::Remote {
           user: user.to_string(),
           repo: repo.to_string(),
-        }
+        };
+        let default_name = repo.to_string();
+        (source, default_name)
       }
 
       QuestSourceType::Local => {
@@ -109,31 +112,55 @@ impl Ui {
           .prompt()?;
 
         let package = QuestPackage::load_from_file(Path::new(&path))?;
+        let default_name = package.config.repo.clone();
+        let source = CreateSource::Package(Box::new(package));
 
-        CreateSource::Package(Box::new(package))
+        (source, default_name)
       }
     };
 
     println!(
-      "\nFinally, choose whether you want to play this quest in relaxed mode (lints disabled) or strict mode (lints enabled in CI and local githooks)."
+      "\nChoose whether you want to play this quest in relaxed mode (lints disabled) or strict mode (lints enabled in CI and local githooks)."
     );
     let strictness: QuestStrictness = inquire::Select::new(
       "Mode:",
       vec![QuestStrictness::Relaxed, QuestStrictness::Strict],
     )
     .prompt()?;
-    let prefs = QuestUserPrefs { strictness };
+
+    println!("\nWhat would you like to call the quest repository?");
+    let name = inquire::Text::new("Name:")
+      .with_initial_value(&default_name)
+      .prompt()?;
+
+    let prefs = QuestUserPrefs { strictness, name };
+
+    let user = github::load_user().await?;
+    println!(
+      "\nI am about to create a GitHub repository: {}",
+      self.emph(format!("{user}/{}", &prefs.name))
+    );
+    println!(
+      "And I will create a local Git repository at: {}",
+      self.emph(cwd.join(&prefs.name).display().to_string())
+    );
+    let confirmed = inquire::Confirm::new("Continue?")
+      .with_default(true)
+      .prompt()?;
+    if !confirmed {
+      return Ok(());
+    }
 
     let quest_fut = Quest::create(cwd, source, prefs);
     let quest = spinner("Creating quest...", quest_fut).await?;
 
+    println!("\nQuest created!");
     println!(
-      "\nQuest created in directory: {}",
-      self.emph(quest.dir.to_string_lossy()),
+      "Open the quest directory in your preferred code editor: {}",
+      self.emph(quest.dir.to_string_lossy())
     );
-    println!(
-      "\nYou should open that directory in your preferred code editor, then start the quest by running:"
-    );
+    println!("Then start the quest by running:");
+
     println!(
       "\n$ {}",
       self.code(format!(

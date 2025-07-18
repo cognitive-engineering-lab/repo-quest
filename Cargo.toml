@@ -19,6 +19,7 @@ fuzzy-matcher = "0.3.7"
 http = "1.2.0" 
 idna_adapter = "=1.1.0" # https://github.com/servo/rust-url/issues/993
 inquire = "0.7.5" 
+itertools = "0.14.0"
 octocrab = "0.44.0" 
 parking_lot = "0.12.3" 
 regex = "1.11.1" 

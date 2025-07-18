@@ -1,6 +1,7 @@
 use env::current_dir;
 use eyre::{Result, ensure};
 use repo_quest::{
+  git::MergeType,
   package::QuestPackage,
   quest::{CreateSource, Quest, QuestState, QuestStrictness, QuestUserPrefs},
 };
@@ -45,6 +46,7 @@ async fn create_test_quest(source: CreateSource) -> Result<Arc<Quest>> {
     &dir,
     source,
     QuestUserPrefs {
+      name: TEST_REPO.into(),
       strictness: QuestStrictness::Relaxed,
     },
   )
@@ -90,6 +92,11 @@ async fn playthrough(quest: &Quest) -> Result<()> {
   assert_eq!(issue.title, "A");
   assert_eq!(issue.body.as_ref().unwrap(), "A");
 
+  if quest.source.provides_refsol() {
+    let merge_type = quest.add_solution(0).await?;
+    assert!(matches!(merge_type, MergeType::Success));
+  }
+
   quest.origin.merge_pr(&pr).await?;
   quest.origin.wait_for_issue_closed(&issue).await?;
   state_is!(quest, 1, false);
@@ -98,8 +105,10 @@ async fn playthrough(quest: &Quest) -> Result<()> {
   state_is!(quest, 1, true);
 
   if quest.source.provides_refsol() {
-    quest.add_solution(1).await?;
+    let merge_type = quest.add_solution(1).await?;
+    assert!(matches!(merge_type, MergeType::Success));
   }
+
   quest.origin.merge_pr(&pr).await?;
   quest.origin.wait_for_issue_closed(&issue).await?;
   state_is!(quest, 2, false);
@@ -146,29 +155,28 @@ async fn local_playthrough() -> Result<()> {
   Ok(())
 }
 
-// TODO: can't seem to run these even sequentially?
-#[tokio::test(flavor = "multi_thread")]
-#[ignore]
-async fn skip() -> Result<()> {
-  test_quest!(quest);
+// #[tokio::test(flavor = "multi_thread")]
+// #[ignore]
+// async fn skip() -> Result<()> {
+//   test_quest!(quest);
 
-  macro_rules! state_is {
-    ($a:expr, $b:expr) => {
-      let state = quest.infer_state().await?;
-      match state {
-        QuestState::Ongoing { chapter, started } => assert_eq!((chapter, started), ($a, $b)),
-        QuestState::Completed => panic!("finished"),
-      };
-    };
-  }
+//   macro_rules! state_is {
+//     ($a:expr, $b:expr) => {
+//       let state = quest.infer_state().await?;
+//       match state {
+//         QuestState::Ongoing { chapter, started } => assert_eq!((chapter, started), ($a, $b)),
+//         QuestState::Completed => panic!("finished"),
+//       };
+//     };
+//   }
 
-  state_is!(0, false);
+//   state_is!(0, false);
 
-  quest.skip_to_chapter(1).await?;
-  state_is!(1, true);
+//   quest.skip_to_chapter(1).await?;
+//   state_is!(1, true);
 
-  quest.skip_to_chapter(2).await?;
-  state_is!(2, true);
+//   quest.skip_to_chapter(2).await?;
+//   state_is!(2, true);
 
-  Ok(())
-}
+//   Ok(())
+// }
