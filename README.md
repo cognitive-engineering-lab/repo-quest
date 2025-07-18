@@ -27,7 +27,15 @@ cargo install repo-quest --locked
 
 ### 2. Generate a Github token
 
-You need to generate a Github access token that allows RepoQuest to perform automatically Github actions (e.g., filing an issue). You have two options:
+You need to generate a Github access token that allows RepoQuest to perform automatically Github actions. 
+
+<details>
+  <summary><i>Why does RepoQuest need a Github token?</i></summary>
+
+  RepoQuest needs to do two things: (1) Create a Github repository on your account for a new quest, and (2) interact with that created Github repository, e.g., by creating issues and pull requests. RepoQuest **does not** touch any other repositories on your account. We hope to use fine-grained tokens for this purpose soon, but unfortunately Github's interface makes this slow, tedious, and error-prone.
+</details>
+
+You have two options:
 
 #### Option A: Use the Github CLI (Recommended)
 
