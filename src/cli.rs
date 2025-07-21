@@ -201,7 +201,8 @@ impl Ui {
 
         if !started {
           let action =
-            inquire::Select::new("Action:", vec!["Start chapter", "Exit"]).prompt_skippable()?;
+            inquire::Select::new("Action:", vec!["Start chapter", "Give feedback", "Exit"])
+              .prompt_skippable()?;
 
           match action {
             Some("Start chapter") => {
@@ -222,6 +223,11 @@ impl Ui {
               )
             }
 
+            Some("Give feedback") => println!(
+              "We would appreciate any feedback about the tool. Please leave it here: {}",
+              self.emph(FEEDBACK_FORM)
+            ),
+
             Some("Exit") | None => return Ok(()),
 
             _ => unreachable!(),
@@ -240,6 +246,7 @@ impl Ui {
                 vec![
                   "View reference solution",
                   "Add reference solution to PR",
+                  "Give feedback",
                   "Exit",
                 ],
               )
@@ -255,6 +262,11 @@ impl Ui {
                     state.pr_url.as_ref().unwrap()
                   )
                 }
+
+                Some("Give feedback") => println!(
+                  "We would appreciate any feedback about the tool. Please leave it here: {}",
+                  self.emph(FEEDBACK_FORM)
+                ),
 
                 Some("Exit") | None => return Ok(()),
 
@@ -278,15 +290,21 @@ impl Ui {
           "One thing"
         };
         println!("You have completed the quest! {num_things} before you leave.");
-        println!(
-          "- If you have any feedback about your experience, please tell us here: {FEEDBACK_FORM}"
-        );
+
         if let Some(final_url) = &quest.config.final_url {
-          println!("- Please take this quiz which reviews the material in this quest: {final_url}");
+          println!(
+            "- Please take this quiz which reviews the material in this quest: {}",
+            self.emph(final_url)
+          );
           println!(
             "  Taking the quiz helps us evaluate the efficacy of RepoQuest and this quest in particular!"
           )
         }
+
+        println!(
+          "- If you have any feedback about your experience, please tell us here: {}",
+          self.emph(FEEDBACK_FORM)
+        );
       }
     }
 
