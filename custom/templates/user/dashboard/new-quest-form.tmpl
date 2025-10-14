@@ -1,0 +1,95 @@
+{{ if .IsSigned }}
+<h2>Start a New Quest</h2>
+<p class="help">Select a quest to create a new repository.</p>
+<div>
+    <style>
+     dl.start-quest-list {}
+     .start-quest-list .quest-name {
+         font-weight: bold;
+         font-size: larger;
+     }
+     .start-quest-list dd {
+         margin-bottom: 12pt;
+     }
+    </style>
+    <dl class="start-quest-list" id="start-quest-list"></dl>
+
+    <script>
+     function submitStartQuest(event) {
+         event.submitter.disabled = true;
+         const formData = new FormData(event.target);
+         const data = {
+             "username": formData.get("username"),
+             "questTemplateId": formData.get("questTemplateId"),
+         };
+         fetch("http:///localhost:8000/quest", {
+             method: "POST",
+             headers: { "Content-Type": "application/json" },
+             body: JSON.stringify(data),
+         }).then(function(response) {
+             if (!response.ok) {
+                 throw new Error(`Error starting quest: ${response.status} ${response.body}`);
+             }
+             return response.json();
+         }).then(function(response) {
+             window.location.href = response.url;
+         });
+         event.preventDefault();
+     }
+
+     // Populate quest templates
+     fetch("http://localhost:8000/quest_definition")
+         .then(function(response) {
+             if (!response.ok) {
+                 throw new Error(`Error starting quest: ${response.status} ${response.body}`);
+             }
+             return response.json();
+         })
+         .then(function(response) {
+             const startQuestList = document.getElementById("start-quest-list");
+             for (let key of Object.keys(response).sort()) {
+                 console.log(key);
+                 if (response.hasOwnProperty(key)) {
+
+                     const questTemplateId = document.createElement("input");
+                     questTemplateId.type = "hidden";
+                     questTemplateId.name = "questTemplateId";
+                     questTemplateId.value = key;
+                     const username = document.createElement("input");
+                     username.type = "hidden";
+                     username.name = "username";
+                     username.value = "{{.SignedUser.Name}}"
+                     const submit = document.createElement("input");
+                     submit.classList.add("ui");
+                     submit.classList.add("primary");
+                     submit.classList.add("button");
+                     submit.type = "submit";
+                     submit.value = "Start " + response[key].name;
+                     const form = document.createElement("form");
+                     form.classList.add("right");
+                     form.classList.add("button-sequence");
+                     form.append(questTemplateId, username, submit);
+                     form.addEventListener("submit", submitStartQuest);
+                     // Re-enable button when returning to page via back-button.
+                     window.addEventListener("pageshow", (event) => {
+                         if (event.persisted) {
+                             submit.disabled = false;
+                         }
+                     });
+
+                     const questName = document.createElement("span");
+                     questName.classList.add("quest-name");
+                     questName.append(response[key].name);
+                     const dt = document.createElement("dt");
+                     dt.append(questName);
+
+                     const dd = document.createElement("dd");
+                     dd.append(response[key].description, " ", form);
+
+                     startQuestList.append(dt, dd);
+                 }
+             }
+         });
+    </script>
+</div>
+{{ end }}

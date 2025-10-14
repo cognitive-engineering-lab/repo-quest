@@ -1,0 +1,56 @@
+{{ if .IsSigned }}
+<h2>Current Quests</h2>
+<p class="help">These are the repositories for your quests.</p>
+<div>
+    <ul id="active-quest-list"></ul>
+
+    <script>
+     function populateQuests() {
+         fetch('http://localhost:8000/quest')
+             .then(function(response) {
+                 if (!response.ok) {
+                     throw new Error("Error starting quest: {response.status} {response.body}");
+                 }
+                 return response.json();
+             })
+             .then(function(response) {
+                 const list = document.getElementById('active-quest-list');
+                 for (let key in response) {
+                     if (response.hasOwnProperty(key)) {
+                         const quest = response[key];
+                         const li = document.createElement('li');
+
+                         const repoLink = document.createElement('a');
+                         repoLink.href = quest.repoUrl;
+                         repoLink.textContent = quest.name;
+
+                         li.append(repoLink);
+
+                         if (quest.taskInfo) {
+                             const issueLink = document.createElement('a');
+                             issueLink.href = quest.taskInfo.issueUrl;
+                             issueLink.textContent = "issue"
+
+                             const prLink = document.createElement('a');
+                             prLink.href = quest.taskInfo.prUrl;
+                             prLink.textContent = "PR"
+                             li.append(" (", issueLink, " | ", prLink, ")");
+                         }
+
+                         list.appendChild(li);
+                     }
+                 }
+             });
+     }
+
+     // repopulate quests on every load,
+     // so that quests started by pressing a start quest button
+     // show when returning to the page via the back button
+     window.addEventListener("pageshow", (event) => {
+         const list = document.getElementById('active-quest-list');
+         list.innerHTML = "";
+         populateQuests()
+     });
+    </script>
+</div>
+{{ end }}

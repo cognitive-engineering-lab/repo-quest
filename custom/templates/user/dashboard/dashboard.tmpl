@@ -1,0 +1,17 @@
+{{template "base/head" .}}
+<div role="main" aria-label="{{.Title}}" class="page-content dashboard feeds">
+    {{template "user/dashboard/navbar" .}}
+    <div class="ui container flex-container">
+        <div class="flex-container-main">
+            {{template "base/alert" .}}
+            <div>
+                {{svg "octicon-tasklist" 64 "tw-text-placeholder-text"}}
+                {{template "user/dashboard/current-quests" .}}
+
+                {{template "user/dashboard/new-quest-form" .}}
+            </div>
+		</div>
+		{{template "user/dashboard/repolist" .}}
+	</div>
+</div>
+{{template "base/footer" .}}
