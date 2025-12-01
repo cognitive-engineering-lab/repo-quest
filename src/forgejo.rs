@@ -229,7 +229,7 @@ impl ForgejoBackend {
                 username,
                 repo_name,
                 CreatePullRequestOption {
-                    assignee: None,
+                    assignee: Some(username.to_string()),
                     assignees: None,
                     base: Some("main".to_string()),
                     body: None,
