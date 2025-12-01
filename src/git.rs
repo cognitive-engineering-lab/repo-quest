@@ -143,6 +143,7 @@ impl GitRepo {
     pub fn commit(&self, msg: &str) -> Result<()> {
         self.git()
             .arg("commit")
+            .arg("--allow-empty")
             .arg("-m")
             .arg(msg)
             .run_with_context(|| format!("Could not create commit for {self:?}."))
