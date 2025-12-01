@@ -8,7 +8,7 @@
 //! TODO: Split quest definitions into more files to make them easier to edit by
 //! hand.
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,

@@ -1,4 +1,4 @@
-use anyhow::{Context as _, Error, Result, anyhow};
+use anyhow::{Context as _, Result, anyhow};
 use log::debug;
 use serde::{Deserialize, Serialize};
 use std::{

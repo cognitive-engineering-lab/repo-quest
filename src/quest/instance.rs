@@ -3,7 +3,7 @@
 //! Many of the structures have IDs that refer to parts of the the quest
 //! template or to things managed by Forgejo.
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context as _, Result, bail};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
