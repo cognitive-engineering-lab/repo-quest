@@ -83,6 +83,17 @@ impl GitRepo {
     }
 
     /// Initializes a new git repository and returns a `GitRepo` representing it.
+    pub fn init_bare(dir: PathBuf) -> Result<GitRepo> {
+        Command::new("git")
+            .arg("init")
+            .arg("--bare")
+            .arg(&dir)
+            .run_with_context(|| format!("Could not initilize git repo in {dir:?}"))?;
+
+        Ok(GitRepo { dir })
+    }
+
+    /// Initializes a new git repository and returns a `GitRepo` representing it.
     pub fn init(dir: PathBuf) -> Result<GitRepo> {
         Command::new("git")
             .arg("init")
@@ -172,12 +183,48 @@ impl GitRepo {
             })
     }
 
+    pub fn create_tracking_branch(&self, branch_source: &str, branch_name: &str) -> Result<()> {
+        self.git()
+            .arg("branch")
+            .arg(branch_name)
+            .arg(branch_source)
+            .run_with_context(|| {
+                format!(
+                    "Could not create branch {branch_name} from {branch_source} for repo {self:?}."
+                )
+            })
+    }
+
     pub fn switch_branch(&self, branch_name: &str) -> Result<()> {
         self.git()
             .arg("switch")
             .arg(branch_name)
             .run_with_context(|| {
                 format!("Could not switch to branch {branch_name} for repo {self:?}.")
+            })
+    }
+
+    pub fn rev_parse(&self, rev: &str) -> Result<String> {
+        Ok(self
+            .git()
+            .arg("rev-parse")
+            .arg(rev)
+            .stdout_with_context(|| format!("Could not parse rev {rev} for repo {self:?}."))?
+            .lines()
+            .nth(0)
+            .with_context(|| {
+                format!("Git rev-parse output is empty fo rev {rev} in repo {self:?}.")
+            })?
+            .to_string())
+    }
+
+    pub fn cat_blob(&self, oid: &str) -> Result<String> {
+        self.git()
+            .arg("cat-file")
+            .arg("blob")
+            .arg(oid)
+            .stdout_with_context(|| {
+                format!("Could not cat blob for object {oid} in repo {self:?}.")
             })
     }
 }
