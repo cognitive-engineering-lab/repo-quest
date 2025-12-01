@@ -41,7 +41,7 @@ pub async fn handler(
             .id;
 
         let quest = state.quest_instances.metadata(quest_id)?;
-        let quest_defn = state.quest_definitions.definition(&quest.definition_id)?;
+        let quest_defn = state.quest_definitions.definition(quest.definition_id)?;
 
         let next_chapter_number = quest.tasks.len();
         if next_chapter_number < quest_defn.metadata.tasks.len() {

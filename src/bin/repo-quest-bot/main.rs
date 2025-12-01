@@ -6,6 +6,7 @@ mod forgejo_hook;
 use std::{
     collections::{HashMap, hash_map::Entry},
     env, fs,
+    io::{Seek, Write as _},
     path::PathBuf,
     process::Command,
     sync::Arc,
@@ -16,15 +17,16 @@ use anyhow::{Context, anyhow, bail};
 use async_lock::Mutex;
 use axum::{
     Form, Json, Router, ServiceExt,
-    extract::{Path, Query, Request, State},
+    extract::{Multipart, Path, Query, Request, State},
     http::{StatusCode, header},
     response::{IntoResponse, Redirect, Response},
     routing::{get, post},
 };
 use env_logger::Env;
+use flate2::read::GzDecoder;
 use log::{debug, error, info};
 use serde::{Deserialize, Serialize};
-use tempfile::TempDir;
+use tar::Archive;
 use thiserror::Error;
 use tower_http::{cors, normalize_path::NormalizePathLayer};
 use tower_layer::Layer as _;
@@ -180,43 +182,91 @@ async fn main() -> Result<()> {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct QuestDefinitionInfo {
+    id: usize,
     name: String,
     description: String,
 }
 
 async fn get_quest_definitions(
     State(state): State<Arc<Mutex<AppState>>>,
-) -> Result<Json<HashMap<String, QuestDefinitionInfo>>> {
+) -> Result<Json<Vec<QuestDefinitionInfo>>> {
     let state = state.lock().await;
 
     let quest_definitions = &state.quest_definitions;
-    let mut result = HashMap::with_capacity(quest_definitions.len());
-    for quest_id in quest_definitions.keys() {
+    let mut result = Vec::with_capacity(quest_definitions.len());
+    for quest_id in 0..quest_definitions.len() {
         let quest_definition = quest_definitions.definition(quest_id)?;
-        result.insert(
-            quest_id.clone(),
-            QuestDefinitionInfo {
-                name: quest_definition.metadata.title.clone(),
-                description: quest_definition.metadata.description.clone(),
-            },
-        );
+        result.push(QuestDefinitionInfo {
+            id: quest_id,
+            name: quest_definition.metadata.title.clone(),
+            description: quest_definition.metadata.description.clone(),
+        });
     }
     Ok(Json(result))
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-enum QuestSource {
-    GitHub { slug: String },
-    Bundle { path: Url },
-    // TODO: Upload { },
-}
-
 async fn add_quest_definition(
     State(state): State<Arc<Mutex<AppState>>>,
-    Json(source): Json<QuestSource>,
-) -> Result<Json<String>> {
-    todo!()
+    mut bundle: Multipart,
+) -> Result<Json<QuestDefinitionInfo>> {
+    let mut state = state.lock().await;
+    // save tarball
+    let mut tar_gz = tempfile::tempfile().context("Could not create tempfile for downloading.")?;
+    {
+        let mut found = false;
+        // drop file content early, in case it is big
+        while let Some(content) = bundle.next_field().await.context("File upload failed.")? {
+            debug!("multipart field: {:?}", content.name());
+            if content.name().is_some_and(|n| n == "quest-bundle") {
+                // TODO: write content as it streams in.
+                let bytes = content
+                    .bytes()
+                    .await
+                    .context("Could not get uploaded file data.")?;
+                tar_gz
+                    .write_all(&bytes)
+                    .with_context(|| format!("Could not write bundle to disk at {tar_gz:?}."))?;
+                // TODO: is this needed if we're using the same file handle?
+                tar_gz.flush().with_context(|| {
+                    format!("Could not flush after writing bundle to disk at {tar_gz:?}.")
+                })?;
+                tar_gz
+                    .seek(std::io::SeekFrom::Start(0))
+                    .context("Could not seek to start of bundle file on disk.")?;
+
+                found = true;
+                break;
+            }
+        }
+        if !found {
+            return Err(AppError(anyhow!("No file uploaded.")));
+        }
+    }
+
+    let dir = tempfile::Builder::new()
+        .disable_cleanup(true)
+        .prefix("quest-defn")
+        .tempdir_in(&state.quest_definitions.dir)
+        .context("Could not create directory to unpack quest bundle.")?;
+    let mut archive = Archive::new(GzDecoder::new(tar_gz));
+    archive
+        .unpack(&dir)
+        .context("Could not unpack quest bundle.")?;
+
+    // TODO: validate bundle
+    // - check that metadata file parses
+    // - check that repo is a git repo with a meta branch and file, etc.
+
+    // add to index
+    let quest_defn_id = state.quest_definitions.insert(dir.path().to_path_buf());
+    state.quest_definitions.store()?;
+
+    let metadata = state.quest_definitions.metadata(quest_defn_id)?;
+    Ok(Json(QuestDefinitionInfo {
+        id: quest_defn_id,
+        name: metadata.title,
+        description: metadata.description,
+    }))
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -236,7 +286,7 @@ async fn get_quests(
     let mut quests_info = HashMap::new();
     for id in quests.keys() {
         let quest = quests.metadata(id)?;
-        let quest_defn = quest_defns.definition(&quest.definition_id)?;
+        let quest_defn = quest_defns.definition(quest.definition_id)?;
         let quest_info = QuestInfo {
             name: quest_defn.metadata.title.clone(),
             repo_url: quest.repo_url.clone(),
@@ -251,7 +301,7 @@ async fn get_quests(
 #[serde(rename_all = "camelCase")]
 struct StartQuestQuery {
     username: String,
-    quest_template_id: String,
+    quest_template_id: usize,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -274,7 +324,7 @@ async fn start_quest(
         repo: template_repo,
     } = state
         .quest_definitions
-        .definition(&query.quest_template_id)?
+        .definition(query.quest_template_id)?
         .clone();
 
     // generate forgejo repo from template
@@ -287,7 +337,7 @@ async fn start_quest(
 
     // define quest instance
     let quest = QuestMetadata {
-        definition_id: query.quest_template_id.clone(),
+        definition_id: query.quest_template_id,
         repo_url: repo_url.clone(),
         owner: query.username,
         repo: forgejo_repo.name.context("No repo name")?,
@@ -306,9 +356,7 @@ async fn start_quest(
     debug!("Initialized local git repo {local_repo:?}");
 
     // set the quest definition repo as a remote
-    let defn_repo_path = state
-        .quest_definitions
-        .repo_path(&query.quest_template_id)?;
+    let defn_repo_path = state.quest_definitions.repo_path(query.quest_template_id)?;
     local_repo.add_remote(
         "quest",
         defn_repo_path.to_str().with_context(|| {
@@ -391,7 +439,7 @@ async fn get_chapters(
 
     let quest_definitions = &state.quest_definitions;
     let task_templates_len = quest_definitions
-        .definition(&quest.definition_id)
+        .definition(quest.definition_id)
         .with_context(|| {
             format!(
                 "No quest template id {}, for quest {quest_id}.",
@@ -458,7 +506,7 @@ async fn set_current_chapter(
         .quest(quest_id)
         .with_context(|| format!("No quest with id {quest_id}."))?;
 
-    let quest_definition = defns.definition(&quest.definition_id)?;
+    let quest_definition = defns.definition(quest.definition_id)?;
 
     let next_task_pos = quest.tasks.len();
 

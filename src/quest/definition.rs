@@ -225,10 +225,10 @@ pub struct QuestDefinitionMetadata {
 #[derive(Debug, Clone)]
 pub struct QuestDefinitionIndex {
     /// Root directory of definitions
-    dir: PathBuf,
+    pub dir: PathBuf,
     /// Map from quest ID to the quest definition directory. The directory is
     /// relative to the root directory give by `dir`.
-    index: HashMap<String, PathBuf>,
+    index: Vec<PathBuf>,
 }
 
 #[derive(Clone, Debug)]
@@ -255,11 +255,7 @@ impl QuestDefinitionIndex {
             })?;
             QuestDefinitionIndex { dir, index }
         } else {
-            // for testing
-            let mut index = HashMap::new();
-            index.insert("rqst-async".to_string(), "rqst-async".into());
-            let index = QuestDefinitionIndex { dir, index };
-            // end for testing
+            let index = QuestDefinitionIndex { dir, index: vec![] };
             index.store()?;
             index
         };
@@ -294,13 +290,9 @@ impl QuestDefinitionIndex {
         self.index.is_empty()
     }
 
-    pub fn keys(&self) -> impl Iterator<Item = &String> {
-        self.index.keys()
-    }
-
     /// Directory containing the quest definition for the quest with the given
     /// id.
-    pub fn dir(&self, id: &str) -> Result<PathBuf> {
+    pub fn dir(&self, id: usize) -> Result<PathBuf> {
         Ok(self.dir.join(
             self.index
                 .get(id)
@@ -309,17 +301,17 @@ impl QuestDefinitionIndex {
     }
 
     /// Path to git repository for the quest with the given id.
-    pub fn repo_path(&self, id: &str) -> Result<PathBuf> {
+    pub fn repo_path(&self, id: usize) -> Result<PathBuf> {
         Ok(self.dir(id)?.join("git"))
     }
 
     /// Git repository for the quest with the given id.
-    pub fn repo(&self, id: &str) -> Result<GitRepo> {
+    pub fn repo(&self, id: usize) -> Result<GitRepo> {
         GitRepo::open(self.dir(id)?.join("git"))
     }
 
     /// Metadata info for the quest with the given id.
-    pub fn metadata(&self, id: &str) -> Result<QuestDefinitionMetadata> {
+    pub fn metadata(&self, id: usize) -> Result<QuestDefinitionMetadata> {
         let path = self.dir(id)?;
         let metadata_path = path.join("data.json");
         let data = fs::read_to_string(&metadata_path)
@@ -329,9 +321,15 @@ impl QuestDefinitionIndex {
     }
 
     /// Quest definition for the quest with the given id.
-    pub fn definition(&self, id: &str) -> Result<QuestDefinition> {
+    pub fn definition(&self, id: usize) -> Result<QuestDefinition> {
         let metadata = self.metadata(id)?;
         let repo = self.repo(id)?;
         Ok(QuestDefinition { metadata, repo })
+    }
+
+    /// Add a quest definition and return its id
+    pub fn insert(&mut self, path: PathBuf) -> usize {
+        self.index.push(path);
+        self.index.len() - 1
     }
 }

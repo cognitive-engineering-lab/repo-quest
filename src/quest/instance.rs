@@ -46,7 +46,7 @@ pub struct Task {
 #[serde(rename_all = "camelCase")]
 pub struct QuestMetadata {
     /// The ID of the quest definition that this quest instantiates.
-    pub definition_id: String,
+    pub definition_id: usize,
     /// The Forgejo repo owner for this quest.
     pub owner: String,
     /// The Forgejo repo for this quest.
@@ -185,7 +185,7 @@ impl QuestInstanceIndex {
     ///
     /// Fails if a quest with the given id already exists.
     pub fn insert_quest(&mut self, id: i64, quest: &QuestMetadata) -> Result<()> {
-        let dir_name = quest.definition_id.clone() + "-" + &id.to_string();
+        let dir_name = format!("{}-{}", quest.definition_id, &id.to_string());
         match self.index.entry(id) {
             Entry::Occupied(_) => bail!("Quest with given id {id} already exists."),
             Entry::Vacant(vacant_entry) => vacant_entry.insert(dir_name.into()),
