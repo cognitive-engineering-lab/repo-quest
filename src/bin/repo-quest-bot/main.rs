@@ -88,7 +88,15 @@ async fn main() -> Result<()> {
         .with_context(|| format!("Could not canonicalize quest dir path {given_quest_dir:?}"))?;
     info!("Quest directory {quest_dir:?}.");
 
-    let forgejo = ForgejoBackend::new();
+    let forgejo = {
+        let auth = forgejo_api::Auth::Password {
+            username: "repoquest",
+            password: "repoquest",
+            mfa: None,
+        };
+        let url = Url::parse("http://localhost:3000").unwrap();
+        ForgejoBackend::new(auth, url)
+    };
     let quest_definitions = QuestDefinitionIndex::load_or_init(quest_dir.join("definitions"))?;
     let quest_instances = QuestInstanceIndex::load_or_init(quest_dir.join("instances"))?;
 

@@ -9,7 +9,7 @@ use crate::quest::{
 };
 use anyhow::{Context as _, Result, anyhow};
 use forgejo_api::{
-    Forgejo,
+    Auth, Forgejo,
     structs::{
         AddCollaboratorOption, AddCollaboratorOptionPermission, CreateHookOptionConfig,
         CreateHookOptionType, CreateIssueOption, CreatePullRequestOption, CreateRepoOption,
@@ -26,13 +26,7 @@ pub struct ForgejoBackend {
 }
 
 impl ForgejoBackend {
-    pub fn new() -> ForgejoBackend {
-        let auth = forgejo_api::Auth::Password {
-            username: "repoquest",
-            password: "repoquest",
-            mfa: None,
-        };
-        let url = Url::parse("http://localhost:3000").unwrap();
+    pub fn new(auth: Auth, url: Url) -> ForgejoBackend {
         let forgejo = Arc::new(Forgejo::new(auth, url).unwrap());
 
         ForgejoBackend { forgejo }
