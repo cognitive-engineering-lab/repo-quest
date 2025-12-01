@@ -57,7 +57,7 @@ impl RunCommand for Command {
 /// methods for manipulating it.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GitRepo {
-    dir: PathBuf,
+    pub dir: PathBuf,
 }
 
 impl GitRepo {
