@@ -40,15 +40,11 @@ pub async fn handler(
             .ok_or(anyhow!("No repository info provided with hook body."))?
             .id;
 
-        let quest = state
-            .quest_instances
-            .quests
-            .get(&quest_id)
-            .ok_or(anyhow!("No quest corresponding to repository {quest_id}."))?;
-        let quest_defn = state.quest_definitions.get(&quest.definition_id)?;
+        let quest = state.quest_instances.metadata(quest_id)?;
+        let quest_defn = state.quest_definitions.definition(&quest.definition_id)?;
 
         let next_chapter_number = quest.tasks.len();
-        if next_chapter_number < quest_defn.tasks.len() {
+        if next_chapter_number < quest_defn.metadata.tasks.len() {
             set_current_chapter(&mut state, quest_id, next_chapter_number).await?;
         }
     }

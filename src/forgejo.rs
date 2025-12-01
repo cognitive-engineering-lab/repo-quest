@@ -4,9 +4,8 @@ use std::{
 };
 
 use crate::quest::{
-    definition::{QuestDefinition, TaskTemplate},
+    definition::{GitRef, QuestDefinitionMetadata, TaskTemplate},
     instance::{IssueId, PullRequestId, Task},
-    *,
 };
 use anyhow::{Context as _, Result, anyhow};
 use forgejo_api::{
@@ -14,8 +13,7 @@ use forgejo_api::{
     structs::{
         AddCollaboratorOption, AddCollaboratorOptionPermission, CreateHookOptionConfig,
         CreateHookOptionType, CreateIssueOption, CreatePullRequestOption, CreateRepoOption,
-        EditIssueOption, EditPullRequestOption, EditRepoOption, Hook, RepoListPullRequestsQuery,
-        RepoListPullRequestsQuerySort, RepoListPullRequestsQueryState, Repository,
+        EditIssueOption, EditPullRequestOption, EditRepoOption, Hook, Repository,
         UserListReposQuery,
     },
 };
@@ -113,7 +111,7 @@ impl ForgejoBackend {
     pub async fn create_quest_repo(
         &self,
         username: &str,
-        template: &QuestDefinition,
+        template: &QuestDefinitionMetadata,
     ) -> Result<Repository> {
         let repo_name = self
             .fresh_repo_name(username, template.generated_repo_name.clone())
@@ -125,7 +123,7 @@ impl ForgejoBackend {
                 CreateRepoOption {
                     auto_init: Some(false),
                     default_branch: Some("main".to_string()),
-                    description: Some(template.name.clone()),
+                    description: Some(template.title.clone()),
                     gitignores: None,
                     issue_labels: None,
                     license: None,
@@ -221,6 +219,10 @@ impl ForgejoBackend {
         let issue_number = issue.number.ok_or(anyhow!("No issue id."))? as u64;
         debug!("Created issue {username}/{repo_name}/{issue_number}.");
 
+        let pr_title = template
+            .pr_template
+            .clone()
+            .map_or_else(|| template.issue_template.title.clone(), |t| t.title);
         let pr = self
             .forgejo
             .repo_create_pull_request(
@@ -233,10 +235,16 @@ impl ForgejoBackend {
                     body: None,
                     due_date: None,
                     // TODO: synthesize branch name
-                    head: Some(template.scaffolding.0.clone()),
+                    head: Some(
+                        template
+                            .scaffolding
+                            .clone()
+                            .unwrap_or_else(|| GitRef("main".to_string()))
+                            .0,
+                    ),
                     labels: None,
                     milestone: None,
-                    title: Some(template.pr_template.title.clone()),
+                    title: Some(pr_title),
                 },
             )
             .await
@@ -274,14 +282,17 @@ impl ForgejoBackend {
             .with_context(|| format!("Couldn't edit issue with ID {issue_number}"))?;
         debug!("Updated issue {username}/{repo_name}/{issue_number}.");
 
-        let pr_body = template
-            .pr_template
-            .body
-            .instantiate(HashMap::from([
-                (format!("pr"), format!("{pr_number}")),
-                (format!("issue"), format!("{issue_number}")),
-            ]))
-            .with_context(|| "Couldn't instantiate PR template")?;
+        let pr_body = template.pr_template.as_ref().map_or_else(
+            || Ok(format!("This PR resolves #{issue_number}. (Don't merge until you've added your solution!)")),
+            |t| {
+                t.body
+                    .instantiate(HashMap::from([
+                        (format!("pr"), format!("{pr_number}")),
+                        (format!("issue"), format!("{issue_number}")),
+                    ]))
+                    .with_context(|| "Couldn't instantiate PR template")
+            },
+        )?;
         self.forgejo
             .repo_edit_pull_request(
                 username,

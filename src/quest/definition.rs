@@ -15,7 +15,8 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
-use url::Url;
+
+use crate::git::GitRepo;
 
 /// A template string that will be instantiated with some data.
 ///
@@ -150,106 +151,149 @@ pub struct TaskTemplate {
 /// TODO: non-linear quests?
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct QuestDefinition {
-    pub name: String,
+pub struct QuestDefinitionMetadata {
+    /// The title of the quest.
+    pub title: String,
+    // TODO: change to Vec<String> for multiple authors.
+    /// The author(s) of the quest.
+    pub author: String,
+    /// A brief description of the quest.
     pub description: String,
+    /// The name to use for the repository generated for the user to use for the
+    /// quest.
+    ///
+    /// The name given here will have a hyphen and number suffixed when it is
+    /// required to make the generated name unique. E.g., if a user starts three
+    /// quests from the same definition with a `generated_repo_name` of
+    /// "quest-name", the first one will be quest-name, the second will be
+    /// quest-name-1, and the third will be quest-name-2.
     pub generated_repo_name: String,
-    pub repo: PathBuf,
+    /// The templates defining the tasks for this quest.
     pub tasks: Vec<TaskTemplate>,
+    /// A map from the task names used in templates to the internal identifiers
+    /// (which are just the chapter numbers).
     pub task_ids: HashMap<String, usize>,
 }
 
 /// A collection of quest definitions indexed by an ID.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+///
+/// On disk the index is a JSON object mapping from quest IDs to the paths for
+/// the directories storing the individual quest definitions. The paths are
+/// relative to `dir`, which is the directory containing the JSON for the index
+/// in `data.json`. The individual quests directories have a `data.json` with
+/// the quest metadata, as defined by [`QuestDefinitionMetadata`] and a `git`
+/// folder containing the bare git repository defining the quest.
+#[derive(Debug, Clone)]
 pub struct QuestDefinitionIndex {
-    /// Map from quest ID to the quest definition.
-    pub quest_definitions: HashMap<String, QuestDefinition>,
+    /// Root directory of definitions
+    dir: PathBuf,
+    /// Map from quest ID to the quest definition directory. The directory is
+    /// relative to the root directory give by `dir`.
+    index: HashMap<String, PathBuf>,
 }
 
-fn test_quest(name: &str) -> QuestDefinition {
-    QuestDefinition {
-        name: name.to_string(),
-        generated_repo_name: "my-test-quest".to_string(),
-        description: "My Test Quest description. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.".to_string(),
-        repo: "my-test-quest".into(),
-        tasks: vec![
-            TaskTemplate {
-                issue_template: IssueTemplate {
-                    title: "test issue 1".to_string(),
-                    body: Template("test issue body".to_string()),
-                    comments: vec![],
-                },
-                pr_template: PullRequestTemplate {
-                    title: "test pr 1".to_string(),
-                    body: Template("test pr body".to_string()),
-                    comments: vec![],
-                },
-                scaffolding: GitRef("00-first-scaffolding".to_string()),
-                reference_solution: GitRef("00-first-solution".to_string()),
-            },
-            TaskTemplate {
-                issue_template: IssueTemplate {
-                    title: "test issue 2".to_string(),
-                    body: Template("test issue 2 body".to_string()),
-                    comments: vec![],
-                },
-                pr_template: PullRequestTemplate {
-                    title: "test pr 2".to_string(),
-                    body: Template("test pr 2 body".to_string()),
-                    comments: vec![],
-                },
-                scaffolding: GitRef("01-next-scaffolding".to_string()),
-                reference_solution: GitRef("01-next-solution".to_string()),
-            }
-        ],
-        task_ids: HashMap::from([("00-first".to_string(), 0), ("01-next".to_string(), 1)]),
-    }
+#[derive(Clone, Debug)]
+pub struct QuestDefinition {
+    pub metadata: QuestDefinitionMetadata,
+    pub repo: GitRepo,
 }
 
 impl QuestDefinitionIndex {
+    /// Loads the quest definition index, creating it if it does not exist.
+    ///
+    /// See [`QuestDefinitionIndex`] for the directory format.
+    ///
+    /// * `param path` - The directory containing the quest definitions
     pub fn load_or_init(path: impl AsRef<Path>) -> Result<Self> {
-        let path: &Path = path.as_ref();
-        let index = if path.exists() {
-            let data = fs::read_to_string(path)
-                .with_context(|| format!("Could not read quest definition index file {path:?}"))?;
-            serde_json::from_str(&data)
-                .with_context(|| format!("Could not parse quest definition index from {path:?}"))?
+        let dir: PathBuf = path.as_ref().to_path_buf();
+        let index_file = dir.join("data.json");
+        let index = if index_file.exists() {
+            let file_contents = fs::read_to_string(&index_file).with_context(|| {
+                format!("Could not read quest definition index file {index_file:?}")
+            })?;
+            let index = serde_json::from_str(&file_contents).with_context(|| {
+                format!("Could not parse quest definition index from {index_file:?}")
+            })?;
+            QuestDefinitionIndex { dir, index }
         } else {
-            let dir = path
-                .parent()
-                .ok_or(anyhow!("Bad quest instance path {path:?}"))?;
-            fs::create_dir_all(dir)
-                .with_context(|| format!("Could not create quest instances dir {:?}.", &dir))?;
             // for testing
-            let mut defs = HashMap::new();
-            defs.insert("my-test-quest".to_string(), test_quest("My First Quest"));
-            defs.insert(
-                "some-other-quest".to_string(),
-                test_quest("Some Other Quest"),
-            );
-            let index = QuestDefinitionIndex {
-                quest_definitions: defs,
-            };
+            let mut index = HashMap::new();
+            index.insert("rqst-async".to_string(), "rqst-async".into());
+            index.insert("some-other-quest".to_string(), "some-other-quest".into());
+            let index = QuestDefinitionIndex { dir, index };
             // end for testing
-            index.store(path)?;
+            index.store()?;
             index
         };
         Ok(index)
     }
 
-    pub fn store(&self, path: impl AsRef<Path>) -> Result<()> {
-        let path: &Path = path.as_ref();
-        let quest = serde_json::to_string(self)
-            .with_context(|| format!("Could not serialize quest definition index {self:?}"))?;
-        fs::write(path, quest)
-            .with_context(|| format!("Could not write quest definition index to file {path:?}"))?;
+    /// Store the quest definition index. Only stores the index itself, not the
+    /// individual quests.
+    ///
+    /// See [`QuestDefinitionIndex`] for the directory format.
+    pub fn store(&self) -> Result<()> {
+        fs::create_dir_all(&self.dir)
+            .with_context(|| format!("Could not create quest definition dir {:?}.", self.dir))?;
+        let index = serde_json::to_string(&self.index).with_context(|| {
+            format!("Could not serialize quest definition index {:?}", self.dir)
+        })?;
+        let index_file = self.dir.join("data.json");
+        fs::write(&index_file, index).with_context(|| {
+            format!(
+                "Could not write quest definition index to file {:?}",
+                index_file
+            )
+        })?;
         Ok(())
     }
 
-    pub fn get(&self, id: &str) -> Result<&QuestDefinition> {
-        self.quest_definitions
-            .get(id)
-            .ok_or(anyhow!("No quest template id {}.", id))
+    pub fn len(&self) -> usize {
+        self.index.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.index.is_empty()
+    }
+
+    pub fn keys(&self) -> impl Iterator<Item = &String> {
+        self.index.keys()
+    }
+
+    /// Directory containing the quest definition for the quest with the given
+    /// id.
+    pub fn dir(&self, id: &str) -> Result<PathBuf> {
+        Ok(self.dir.join(
+            self.index
+                .get(id)
+                .with_context(|| format!("No quest definition with id {id}."))?,
+        ))
+    }
+
+    /// Path to git repository for the quest with the given id.
+    pub fn repo_path(&self, id: &str) -> Result<PathBuf> {
+        Ok(self.dir(id)?.join("git"))
+    }
+
+    /// Git repository for the quest with the given id.
+    pub fn repo(&self, id: &str) -> Result<GitRepo> {
+        GitRepo::open(self.dir(id)?.join("git"))
+    }
+
+    /// Metadata info for the quest with the given id.
+    pub fn metadata(&self, id: &str) -> Result<QuestDefinitionMetadata> {
+        let path = self.dir(id)?;
+        let metadata_path = path.join("data.json");
+        let data = fs::read_to_string(&metadata_path)
+            .with_context(|| format!("Could not read quest definition file {metadata_path:?}"))?;
+        serde_json::from_str(&data)
+            .with_context(|| format!("Could not parse quest definition from {metadata_path:?}"))
+    }
+
+    /// Quest definition for the quest with the given id.
+    pub fn definition(&self, id: &str) -> Result<QuestDefinition> {
+        let metadata = self.metadata(id)?;
+        let repo = self.repo(id)?;
+        Ok(QuestDefinition { metadata, repo })
     }
 }

@@ -1,10 +1,7 @@
 #![allow(unused_variables)]
 #![allow(dead_code)]
 #![allow(unused_imports)]
-mod forgejo;
 mod forgejo_hook;
-mod git;
-mod quest;
 
 use std::{
     collections::{HashMap, hash_map::Entry},
@@ -33,7 +30,7 @@ use tower_http::{cors, normalize_path::NormalizePathLayer};
 use tower_layer::Layer as _;
 use url::Url;
 
-use crate::{
+use repo_quest::{
     forgejo::ForgejoBackend,
     git::GitRepo,
     quest::{definition::*, instance::*},
@@ -48,11 +45,7 @@ use crate::{
 #[derive(Clone)]
 struct AppState {
     forgejo: ForgejoBackend,
-    quest_definitions_dir: PathBuf,
-    quest_definitions_file: PathBuf,
     quest_definitions: QuestDefinitionIndex,
-    quest_instances_dir: PathBuf,
-    quest_instances_file: PathBuf,
     quest_instances: QuestInstanceIndex,
 }
 
@@ -78,9 +71,9 @@ type Result<T> = std::result::Result<T, AppError>;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    #[cfg(not(debug_assertions))]
-    env_logger::Builder::from_env(Env::default().default_filter_or("warn")).init();
-    #[cfg(debug_assertions)]
+    // #[cfg(not(debug_assertions))]
+    // env_logger::Builder::from_env(Env::default().default_filter_or("warn")).init();
+    // #[cfg(debug_assertions)]
     env_logger::Builder::from_env(Env::default().default_filter_or("debug")).init();
 
     let args: Vec<String> = env::args().collect();
@@ -95,18 +88,9 @@ async fn main() -> Result<()> {
         .with_context(|| format!("Could not canonicalize quest dir path {given_quest_dir:?}"))?;
     info!("Quest directory {quest_dir:?}.");
 
-    let mut quest_definitions_dir = quest_dir.clone();
-    quest_definitions_dir.push("definitions/");
-    let mut quest_instances_dir = quest_dir.clone();
-    quest_instances_dir.push("instances/");
-    let mut quest_definitions_file = quest_definitions_dir.clone();
-    quest_definitions_file.push("data.json");
-    let mut quest_instances_file = quest_instances_dir.clone();
-    quest_instances_file.push("data.json");
-
     let forgejo = ForgejoBackend::new();
-    let quest_definitions = QuestDefinitionIndex::load_or_init(&quest_definitions_file)?;
-    let quest_instances = QuestInstanceIndex::load_or_init(&quest_instances_file)?;
+    let quest_definitions = QuestDefinitionIndex::load_or_init(quest_dir.join("definitions"))?;
+    let quest_instances = QuestInstanceIndex::load_or_init(quest_dir.join("instances"))?;
 
     // register to receive webhooks
     forgejo
@@ -124,11 +108,7 @@ async fn main() -> Result<()> {
     // them in parallel.
     let state = Arc::new(Mutex::new(AppState {
         forgejo,
-        quest_definitions_dir,
-        quest_definitions_file,
         quest_definitions,
-        quest_instances_dir,
-        quest_instances_file,
         quest_instances,
     }));
 
@@ -202,21 +182,18 @@ async fn get_quest_definitions(
     let state = state.lock().await;
 
     let quest_definitions = &state.quest_definitions;
-    Ok(Json(
-        quest_definitions
-            .quest_definitions
-            .iter()
-            .map(|(k, t)| {
-                (
-                    k.clone(),
-                    QuestDefinitionInfo {
-                        name: t.name.clone(),
-                        description: t.description.clone(),
-                    },
-                )
-            })
-            .collect(),
-    ))
+    let mut result = HashMap::with_capacity(quest_definitions.len());
+    for quest_id in quest_definitions.keys() {
+        let quest_definition = quest_definitions.definition(quest_id)?;
+        result.insert(
+            quest_id.clone(),
+            QuestDefinitionInfo {
+                name: quest_definition.metadata.title.clone(),
+                description: quest_definition.metadata.description.clone(),
+            },
+        );
+    }
+    Ok(Json(result))
 }
 
 #[derive(Debug, Deserialize)]
@@ -246,13 +223,14 @@ async fn get_quests(
     State(state): State<Arc<Mutex<AppState>>>,
 ) -> Result<Json<HashMap<i64, QuestInfo>>> {
     let state = state.lock().await;
-    let quests = &state.quest_instances.quests;
+    let quests = &state.quest_instances;
     let quest_defns = &state.quest_definitions;
     let mut quests_info = HashMap::new();
-    for (&id, quest) in quests {
-        let quest_defn = quest_defns.get(&quest.definition_id)?;
+    for id in quests.keys() {
+        let quest = quests.metadata(id)?;
+        let quest_defn = quest_defns.definition(&quest.definition_id)?;
         let quest_info = QuestInfo {
-            name: quest_defn.name.clone(),
+            name: quest_defn.metadata.title.clone(),
             repo_url: quest.repo_url.clone(),
             task_info: quest.tasks.last().cloned(),
         };
@@ -282,89 +260,80 @@ async fn start_quest(
     Json(query): Json<StartQuestQuery>,
 ) -> Result<Json<StartQuestResponse>> {
     let mut state = state.lock().await;
-    let defns = &state.quest_definitions;
 
-    let template = defns.get(&query.quest_template_id)?.clone();
-
-    // create local quest repo
-    let prefix = template.generated_repo_name.clone() + ".";
-    let local_repo_dir = tempfile::Builder::new()
-        .prefix(&prefix)
-        .tempdir_in(&state.quest_instances_dir)
-        .with_context(|| {
-            format!(
-                "Could not initialize tempdir in {:?}",
-                &state.quest_instances_dir
-            )
-        })?
-        .keep();
-    let local_repo = GitRepo::init(local_repo_dir)?;
-    debug!("Initialized local git repo {local_repo:?}");
-
-    // set the quest definition repo as a remote
-    let mut defn_repo_path = state.quest_definitions_dir.clone();
-    defn_repo_path.push(template.repo.as_path());
-    local_repo.add_remote(
-        "quest",
-        defn_repo_path.to_str().ok_or(anyhow!(
-            "Could not convert template repo path {defn_repo_path:?} to string."
-        ))?,
-    )?;
-
-    // fetch and initialize
-    local_repo.fetch("quest")?;
-    local_repo.restore_from("quest/main")?;
-    local_repo.commit("Initial commit")?;
+    let QuestDefinition {
+        metadata: template,
+        repo: template_repo,
+    } = state
+        .quest_definitions
+        .definition(&query.quest_template_id)?
+        .clone();
 
     // generate forgejo repo from template
     let forgejo_repo = state
         .forgejo
         .create_quest_repo(&query.username, &template)
         .await?;
+    let id = forgejo_repo.id.context("No repo id.")?;
+    let repo_url = forgejo_repo.html_url.context("Forgejo repo has no url.")?;
+
+    // define quest instance
+    let quest = QuestMetadata {
+        definition_id: query.quest_template_id.clone(),
+        repo_url: repo_url.clone(),
+        owner: query.username,
+        repo: forgejo_repo.name.context("No repo name")?,
+        tasks: Vec::new(),
+    };
+
+    // write quest to file and add to index
+    debug!("Storing quest metadata.");
+    state.quest_instances.insert_quest(id, &quest)?;
+
+    // save index
+    state.quest_instances.store()?;
+
+    // create local quest repo
+    let local_repo = GitRepo::init(state.quest_instances.repo_path(id)?)?;
+    debug!("Initialized local git repo {local_repo:?}");
+
+    // set the quest definition repo as a remote
+    let defn_repo_path = state
+        .quest_definitions
+        .repo_path(&query.quest_template_id)?;
+    local_repo.add_remote(
+        "quest",
+        defn_repo_path.to_str().with_context(|| {
+            format!("Could not convert template repo path {defn_repo_path:?} to string.")
+        })?,
+    )?;
+
+    // fetch and initialize
+    local_repo.fetch("quest")?;
+    // TODO: how to handle no_starter?
+    // local_repo.restore_from("quest/main")?;
+    local_repo.commit("Initial commit")?;
 
     // set repo upstream to forgejo
-    let repo_url = forgejo_repo
-        .html_url
-        .ok_or(anyhow!("Forgejo repo has no url."))?;
     let mut remote_url = repo_url.clone();
     remote_url
         .set_username("repoquest")
-        .map_err(|_| anyhow!(""))?;
+        .map_err(|_| anyhow!("Can't set remote username."))?;
     remote_url
         .set_password(Some("repoquest"))
-        .map_err(|_| anyhow!(""))?;
+        .map_err(|_| anyhow!("Can't set remote password"))?;
 
     local_repo.add_remote("origin", remote_url.as_str())?;
 
     // push starter code to upstream main
     local_repo.push("origin", "main", "main")?;
 
-    // define quest instance
-    let quest = Quest {
-        definition_id: query.quest_template_id,
-        local_repo,
-        repo_url: repo_url.clone(),
-        owner: query.username,
-        repo: forgejo_repo.name.ok_or(anyhow!("No repo name"))?,
-        tasks: Vec::new(),
-    };
-    let id = forgejo_repo.id.ok_or(anyhow!("No repo id."))?;
-
-    // add quest to index
-    let quest = match state.quest_instances.quests.entry(id) {
-        Entry::Occupied(_) => Err(anyhow!("Quest with given id already exists.")),
-        Entry::Vacant(vacant_entry) => Ok(vacant_entry.insert(quest)),
-    }?;
-
-    // save index
-    state.quest_instances.store(&state.quest_instances_file)?;
-
     let mut url = repo_url;
     // start first chapter, if there are chapters
     if !template.tasks.is_empty() {
         // Forgejo can't accept PRs right away... this works around that.
         // TODO: don't return from repo creation until the repo is fully created.
-        std::thread::sleep(Duration::from_secs(1));
+        std::thread::sleep(Duration::from_secs(2));
         let task = set_current_chapter(&mut state, id, 0).await?;
         url = task.issue_url;
     };
@@ -403,9 +372,8 @@ async fn get_chapters(
     let quests = &state.quest_instances;
 
     let quest = quests
-        .quests
-        .get(&quest_id)
-        .ok_or(anyhow!("No quest with id {quest_id}."))?;
+        .metadata(quest_id)
+        .with_context(|| format!("No quest with id {quest_id}."))?;
 
     let mut tasks = quest
         .tasks
@@ -416,13 +384,14 @@ async fn get_chapters(
 
     let quest_definitions = &state.quest_definitions;
     let task_templates_len = quest_definitions
-        .quest_definitions
-        // TODO: how to fix this while keeping the newtype?
-        .get(&quest.definition_id)
-        .ok_or(anyhow!(
-            "No quest template id {}, for quest {quest_id}.",
-            &quest.definition_id
-        ))?
+        .definition(&quest.definition_id)
+        .with_context(|| {
+            format!(
+                "No quest template id {}, for quest {quest_id}.",
+                &quest.definition_id
+            )
+        })?
+        .metadata
         .tasks
         .len();
 
@@ -439,9 +408,8 @@ async fn get_current_chapter(
     let quests = &state.quest_instances;
 
     let quest = quests
-        .quests
-        .get(&quest_id)
-        .ok_or(anyhow!("No quest with id {quest_id}."))?;
+        .metadata(quest_id)
+        .with_context(|| format!("No quest with id {quest_id}."))?;
 
     let cur_task_id = quest.tasks.len().checked_sub(1);
     Ok(Json(cur_task_id))
@@ -470,21 +438,20 @@ async fn set_current_chapter(
 ) -> Result<Task> {
     let AppState {
         ref forgejo,
-        ref quest_instances_file,
         quest_instances: ref mut quests,
         quest_definitions: ref defns,
         ..
     } = *state;
 
-    let quest = quests
-        .quests
-        .get(&quest_id)
-        .ok_or(anyhow!("No quest with id {quest_id}."))?;
+    let Quest {
+        metadata: quest,
+        repo: local_repo,
+        ..
+    } = quests
+        .quest(quest_id)
+        .with_context(|| format!("No quest with id {quest_id}."))?;
 
-    let quest_definition = defns
-        .quest_definitions
-        .get(&quest.definition_id)
-        .ok_or(anyhow!("No quest definition with {}", &quest.definition_id))?;
+    let quest_definition = defns.definition(&quest.definition_id)?;
 
     let next_task_pos = quest.tasks.len();
 
@@ -509,32 +476,34 @@ async fn set_current_chapter(
         .into());
     }
 
-    let task_template = quest_definition.tasks.get(chapter_number).ok_or(anyhow!(
-        "Missing definition of task for chapter {chapter_number}."
-    ))?;
+    let task_template = quest_definition
+        .metadata
+        .tasks
+        .get(chapter_number)
+        .with_context(|| format!("Missing definition of task for chapter {chapter_number}."))?;
 
-    let local_repo = &quest.local_repo;
-    let scaffolding = &task_template.scaffolding.0;
-    local_repo.create_branch("main", scaffolding)?;
-    local_repo.switch_branch(scaffolding)?;
-    let remote_branch = format!("remotes/quest/{}", scaffolding);
-    local_repo.restore_from(&remote_branch)?;
-    local_repo.commit("task commit message")?;
-    local_repo.push("origin", scaffolding, scaffolding)?;
-    local_repo.switch_branch("main")?;
+    if let Some(scaffolding) = &task_template.scaffolding {
+        let scaffolding = &scaffolding.0;
+        local_repo.create_branch("main", scaffolding)?;
+        local_repo.switch_branch(scaffolding)?;
+        let remote_branch = format!("remotes/quest/{}", scaffolding);
+        local_repo.restore_from(&remote_branch)?;
+        local_repo.commit("task commit message")?;
+        local_repo.push("origin", scaffolding, scaffolding)?;
+        local_repo.switch_branch("main")?;
+    }
 
     let task = forgejo
         .create_task(&quest.owner, &quest.repo, task_template)
         .await?;
 
-    let quest = quests
-        .quests
-        .get_mut(&quest_id)
-        .ok_or(anyhow!("No quest with id {quest_id}."))?;
+    let mut quest = quests
+        .metadata(quest_id)
+        .with_context(|| format!("No quest with id {quest_id}."))?;
 
     quest.tasks.push(task.clone());
 
-    quests.store(quest_instances_file)?;
+    quests.store_quest(quest_id, &quest)?;
 
     Ok(task)
 }
