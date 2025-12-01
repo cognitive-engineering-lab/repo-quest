@@ -498,8 +498,16 @@ async fn set_current_chapter(
     local_repo.push("origin", scaffolding, scaffolding)?;
     local_repo.switch_branch("main")?;
 
+    let mut task_info = HashMap::new();
+    for (task_id, chapter_num) in quest_definition.metadata.task_ids {
+        if let Some(task) = quest.tasks.get(chapter_num) {
+            task_info.insert(format!("{} pr", task_id), format!("#{}", task.pr.0));
+            task_info.insert(format!("{} issue", task_id), format!("#{}", task.issue.0));
+        }
+    }
+
     let task = forgejo
-        .create_task(&quest.owner, &quest.repo, task_template)
+        .create_task(&quest.owner, &quest.repo, task_template, task_info)
         .await?;
 
     let mut quest = quests

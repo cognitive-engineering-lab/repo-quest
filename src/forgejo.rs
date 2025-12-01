@@ -190,6 +190,7 @@ impl ForgejoBackend {
         username: &str,
         repo_name: &str,
         template: &TaskTemplate,
+        mut task_info: HashMap<String, String>,
     ) -> Result<Task> {
         let issue = self
             .forgejo
@@ -240,14 +241,17 @@ impl ForgejoBackend {
         let pr_number = pr.number.ok_or(anyhow!("No PR id."))? as u64;
         debug!("Created pull request {username}/{repo_name}/{pr_number}.");
 
+        task_info.insert(format!("{} pr", template.task_id), format!("#{pr_number}"));
+        task_info.insert(
+            format!("{} issue", template.task_id),
+            format!("#{issue_number}"),
+        );
+
         let issue_body = template
             .issue_template
             .body
-            .instantiate(&HashMap::from([
-                (format!("pr"), format!("{pr_number}")),
-                (format!("issue"), format!("{issue_number}")),
-            ]))
-            .with_context(|| "Couldn't instantiate issue template")?;
+            .instantiate(&task_info)
+            .context("Couldn't instantiate issue template")?;
         self.forgejo
             .issue_edit_issue(
                 username,
@@ -270,17 +274,16 @@ impl ForgejoBackend {
             .with_context(|| format!("Couldn't edit issue with ID {issue_number}"))?;
         debug!("Updated issue {username}/{repo_name}/{issue_number}.");
 
-        let pr_body = template.pr_template.as_ref().map_or_else(
-            || Ok(format!("This PR resolves #{issue_number}. (Don't merge until you've added your solution!)")),
-            |t| {
-                t.body
-                    .instantiate(&HashMap::from([
-                        (format!("pr"), format!("{pr_number}")),
-                        (format!("issue"), format!("{issue_number}")),
-                    ]))
-                    .with_context(|| "Couldn't instantiate PR template")
-            },
-        )?;
+        let pr_body = if let Some(pr_template) = template.pr_template.as_ref() {
+            pr_template
+                .body
+                .instantiate(&task_info)
+                .context("Couldn't instantiate PR template")?
+        } else {
+            format!(
+                "This PR resolves #{issue_number}. (Don't merge until you've added your solution!)"
+            )
+        };
         self.forgejo
             .repo_edit_pull_request(
                 username,
