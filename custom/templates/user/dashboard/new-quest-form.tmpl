@@ -2,17 +2,7 @@
 <h2>Start a New Quest</h2>
 <p class="help">Select a quest to create a new repository.</p>
 <div>
-    <style>
-     dl.start-quest-list {}
-     .start-quest-list .quest-name {
-         font-weight: bold;
-         font-size: larger;
-     }
-     .start-quest-list dd {
-         margin-bottom: 12pt;
-     }
-    </style>
-    <dl class="start-quest-list" id="start-quest-list"></dl>
+    <div class="start-quest-list" id="start-quest-list"></div>
 
     <script>
      function submitStartQuest(event) {
@@ -80,13 +70,20 @@
                      const questName = document.createElement("span");
                      questName.classList.add("quest-name");
                      questName.append(response[key].name);
-                     const dt = document.createElement("dt");
-                     dt.append(questName);
+                     const header = document.createElement("div");
+                     header.classList.add("ui");
+                     header.classList.add("top");
+                     header.classList.add("attached");
+                     header.classList.add("header");
+                     header.append(questName);
 
-                     const dd = document.createElement("dd");
-                     dd.append(response[key].description, " ", form);
+                     const questinfo = document.createElement("div");
+                     questinfo.classList.add("ui");
+                     questinfo.classList.add("attached");
+                     questinfo.classList.add("segment");
+                     questinfo.append(response[key].description, " ", form);
 
-                     startQuestList.append(dt, dd);
+                     startQuestList.append(header, questinfo);
                  }
              }
          });
