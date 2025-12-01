@@ -54,8 +54,7 @@ impl GitRepo {
             .git()
             .arg("rev-parse")
             .arg("--is-inside-work-tree")
-            .spawn()?
-            .wait()?;
+            .run_with_context(|| format!("Could not open git repo at {:?}.", git_repo.dir))?;
 
         Ok(git_repo)
     }
