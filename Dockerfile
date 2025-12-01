@@ -1,10 +1,10 @@
 FROM rust:alpine as rq-bot-build
 
-ADD ./ /root/app
 RUN apk add --no-cache \
     openssl-dev \
     openssl-libs-static \
     musl-dev
+ADD ./ /root/app
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/root/app/target/ \
     cd /root/app && \
