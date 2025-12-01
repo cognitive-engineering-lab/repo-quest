@@ -243,7 +243,7 @@ impl ForgejoBackend {
         let issue_body = template
             .issue_template
             .body
-            .instantiate(HashMap::from([
+            .instantiate(&HashMap::from([
                 (format!("pr"), format!("{pr_number}")),
                 (format!("issue"), format!("{issue_number}")),
             ]))
@@ -274,7 +274,7 @@ impl ForgejoBackend {
             || Ok(format!("This PR resolves #{issue_number}. (Don't merge until you've added your solution!)")),
             |t| {
                 t.body
-                    .instantiate(HashMap::from([
+                    .instantiate(&HashMap::from([
                         (format!("pr"), format!("{pr_number}")),
                         (format!("issue"), format!("{issue_number}")),
                     ]))
