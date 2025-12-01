@@ -139,6 +139,7 @@ pub struct IssueTemplate {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskTemplate {
+    pub task_id: String,
     /// A template for creating an issue for this task.
     pub issue_template: IssueTemplate,
     /// A template for creating a PR for this task.

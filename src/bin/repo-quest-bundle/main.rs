@@ -332,6 +332,7 @@ async fn main() -> Result<()> {
         };
 
         tasks.push(TaskTemplate {
+            task_id: label.clone(),
             issue_template,
             pr_template,
             scaffolding: (label.to_string() + "-a").into(),
