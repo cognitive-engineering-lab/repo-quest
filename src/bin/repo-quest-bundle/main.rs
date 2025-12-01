@@ -105,14 +105,27 @@ async fn main() -> Result<()> {
     debug!("Metadata is {meta:?}.");
 
     // create local branch for main and for every chapter
+    let mut prev_scaffolding_branch = "main".to_string();
     repo.create_tracking_branch("origin/main", "main")?;
     for Chapter {
-        label, no_starter, ..
+        name,
+        label,
+        no_starter,
+        ..
     } in &meta.chapters
     {
+        let scaffolding_branch = format!("{label}-a");
         if !*no_starter {
-            repo.create_tracking_branch(&format!("origin/{label}-a"), &format!("{label}-a"))?;
+            repo.create_tracking_branch(&format!("origin/{label}-a"), &scaffolding_branch)?;
+        } else {
+            repo.create_branch(&prev_scaffolding_branch, &format!("{label}-a"))?;
+            // create empty commit so that a PR can be created from the branch
+            repo.create_empty_commit(
+                &scaffolding_branch,
+                &format!("Initial commit for chapter {name}"),
+            )?;
         }
+        prev_scaffolding_branch = scaffolding_branch;
         repo.create_tracking_branch(&format!("origin/{label}-b"), &format!("{label}-b"))?;
     }
 
@@ -321,12 +334,8 @@ async fn main() -> Result<()> {
         tasks.push(TaskTemplate {
             issue_template,
             pr_template,
-            scaffolding: if *no_starter {
-                None
-            } else {
-                Some(GitRef(label.to_string() + "-a"))
-            },
-            reference_solution: GitRef(label.to_string() + "-b"),
+            scaffolding: (label.to_string() + "-a").into(),
+            reference_solution: (label.to_string() + "-b").into(),
         });
     }
 

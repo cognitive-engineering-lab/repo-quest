@@ -310,8 +310,7 @@ async fn start_quest(
 
     // fetch and initialize
     local_repo.fetch("quest")?;
-    // TODO: how to handle no_starter?
-    // local_repo.restore_from("quest/main")?;
+    local_repo.restore_from("quest/main")?;
     local_repo.commit("Initial commit")?;
 
     // set repo upstream to forgejo
@@ -482,16 +481,14 @@ async fn set_current_chapter(
         .get(chapter_number)
         .with_context(|| format!("Missing definition of task for chapter {chapter_number}."))?;
 
-    if let Some(scaffolding) = &task_template.scaffolding {
-        let scaffolding = &scaffolding.0;
-        local_repo.create_branch("main", scaffolding)?;
-        local_repo.switch_branch(scaffolding)?;
-        let remote_branch = format!("remotes/quest/{}", scaffolding);
-        local_repo.restore_from(&remote_branch)?;
-        local_repo.commit("task commit message")?;
-        local_repo.push("origin", scaffolding, scaffolding)?;
-        local_repo.switch_branch("main")?;
-    }
+    let scaffolding = &task_template.scaffolding.0;
+    local_repo.create_branch("main", scaffolding)?;
+    local_repo.switch_branch(scaffolding)?;
+    let remote_branch = format!("remotes/quest/{}", scaffolding);
+    local_repo.restore_from(&remote_branch)?;
+    local_repo.commit("task commit message")?;
+    local_repo.push("origin", scaffolding, scaffolding)?;
+    local_repo.switch_branch("main")?;
 
     let task = forgejo
         .create_task(&quest.owner, &quest.repo, task_template)

@@ -19,6 +19,11 @@ trait RunCommand {
     where
         C: Display + Debug + Send + Sync + 'static,
         F: FnOnce() -> C;
+
+    fn line_with_context<C, F>(&mut self, f: F) -> Result<String>
+    where
+        C: Display + Debug + Send + Sync + 'static,
+        F: FnOnce() -> C;
 }
 
 impl RunCommand for Command {
@@ -41,8 +46,31 @@ impl RunCommand for Command {
     {
         let output = self.stdout(std::process::Stdio::piped()).output()?;
         if output.status.success() {
-            let rev = String::from_utf8(output.stdout)?;
-            Ok(rev)
+            let output_content = String::from_utf8(output.stdout)?;
+            Ok(output_content)
+        } else {
+            Err(anyhow!(
+                "Child process exited with non-success exit code {}.",
+                output.status
+            ))
+            .with_context(f)
+        }
+    }
+
+    fn line_with_context<C, F>(&mut self, f: F) -> Result<String>
+    where
+        C: Display + Debug + Send + Sync + 'static,
+        F: FnOnce() -> C,
+    {
+        let output = self.stdout(std::process::Stdio::piped()).output()?;
+        if output.status.success() {
+            let output_content = String::from_utf8(output.stdout)?;
+            Ok(output_content
+                .lines()
+                .nth(0)
+                .context("Command output is empty when at least one line expected.")
+                .with_context(f)?
+                .to_string())
         } else {
             Err(anyhow!(
                 "Child process exited with non-success exit code {}.",
@@ -205,17 +233,10 @@ impl GitRepo {
     }
 
     pub fn rev_parse(&self, rev: &str) -> Result<String> {
-        Ok(self
-            .git()
+        self.git()
             .arg("rev-parse")
             .arg(rev)
-            .stdout_with_context(|| format!("Could not parse rev {rev} for repo {self:?}."))?
-            .lines()
-            .nth(0)
-            .with_context(|| {
-                format!("Git rev-parse output is empty fo rev {rev} in repo {self:?}.")
-            })?
-            .to_string())
+            .line_with_context(|| format!("Could not parse rev {rev} for repo {self:?}."))
     }
 
     pub fn cat_blob(&self, oid: &str) -> Result<String> {
@@ -226,5 +247,42 @@ impl GitRepo {
             .stdout_with_context(|| {
                 format!("Could not cat blob for object {oid} in repo {self:?}.")
             })
+    }
+
+    /// Creates a commit with the same content as the previous and with the
+    /// given message on the given branch.
+    ///
+    /// Unlike `commit` this works in a bare repo. Unlike `commit`, this can't
+    /// create an initial empty commit.
+    pub fn create_empty_commit(&self, branch: &str, message: &str) -> Result<()> {
+        let tree_oid = self
+            .git()
+            .arg("rev-parse")
+            .arg(format!("{branch}^{{tree}}"))
+            .line_with_context(|| format!("Get tree oid for {branch} in {self:?}."))?;
+
+        let parent_oid = self.rev_parse(branch)?;
+
+        let commit_oid = self.git()
+            .arg("commit-tree")
+            .arg("-m")
+            .arg(message)
+            .arg("-p")
+            .arg(&parent_oid)
+            .arg(&tree_oid)
+            .line_with_context(|| format!("Could not create commit for {self:?} tree object {tree_oid} with parent {parent_oid} and message {message:?}"))?;
+
+        self.git()
+            .arg("update-ref")
+            .arg(format!("refs/heads/{branch}"))
+            .arg(&commit_oid)
+            .arg(&parent_oid)
+            .run_with_context(|| {
+                format!(
+                    "Could not update ref refs/heads/{branch} to {commit_oid} with parent {parent_oid}."
+                )
+            })?;
+
+        Ok(())
     }
 }

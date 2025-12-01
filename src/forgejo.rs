@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::quest::{
-    definition::{GitRef, QuestDefinitionMetadata, TaskTemplate},
+    definition::{QuestDefinitionMetadata, TaskTemplate},
     instance::{IssueId, PullRequestId, Task},
 };
 use anyhow::{Context as _, Result, anyhow};
@@ -235,13 +235,7 @@ impl ForgejoBackend {
                     body: None,
                     due_date: None,
                     // TODO: synthesize branch name
-                    head: Some(
-                        template
-                            .scaffolding
-                            .clone()
-                            .unwrap_or_else(|| GitRef("main".to_string()))
-                            .0,
-                    ),
+                    head: Some(template.scaffolding.0.clone()),
                     labels: None,
                     milestone: None,
                     title: Some(pr_title),

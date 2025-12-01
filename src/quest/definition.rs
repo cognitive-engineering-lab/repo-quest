@@ -50,6 +50,12 @@ impl From<String> for GitRef {
     }
 }
 
+impl From<&str> for GitRef {
+    fn from(value: &str) -> Self {
+        GitRef(value.to_string())
+    }
+}
+
 /// A git commit hash
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -136,10 +142,12 @@ pub struct TaskTemplate {
     /// A template for creating an issue for this task.
     pub issue_template: IssueTemplate,
     /// A template for creating a PR for this task.
+    ///
+    /// If absent, a standard message referring to the issue is used.
     pub pr_template: Option<PullRequestTemplate>,
     /// Reference to the commit containing the scaffolding code in the defining
     /// repository for the quest containing this task.
-    pub scaffolding: Option<GitRef>,
+    pub scaffolding: GitRef,
     /// Reference to the commit containing the reference solution code in the
     /// defining repository for the quest containing this task.
     pub reference_solution: GitRef,
@@ -219,7 +227,6 @@ impl QuestDefinitionIndex {
             // for testing
             let mut index = HashMap::new();
             index.insert("rqst-async".to_string(), "rqst-async".into());
-            index.insert("some-other-quest".to_string(), "some-other-quest".into());
             let index = QuestDefinitionIndex { dir, index };
             // end for testing
             index.store()?;
