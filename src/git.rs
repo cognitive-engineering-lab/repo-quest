@@ -14,6 +14,11 @@ trait RunCommand {
     where
         C: Display + Debug + Send + Sync + 'static,
         F: FnOnce() -> C;
+
+    fn stdout_with_context<C, F>(&mut self, f: F) -> Result<String>
+    where
+        C: Display + Debug + Send + Sync + 'static,
+        F: FnOnce() -> C;
 }
 
 impl RunCommand for Command {
@@ -26,6 +31,24 @@ impl RunCommand for Command {
             Ok(())
         } else {
             Err(anyhow!(f()))
+        }
+    }
+
+    fn stdout_with_context<C, F>(&mut self, f: F) -> Result<String>
+    where
+        C: Display + Debug + Send + Sync + 'static,
+        F: FnOnce() -> C,
+    {
+        let output = self.stdout(std::process::Stdio::piped()).output()?;
+        if output.status.success() {
+            let rev = String::from_utf8(output.stdout)?;
+            Ok(rev)
+        } else {
+            Err(anyhow!(
+                "Child process exited with non-success exit code {}.",
+                output.status
+            ))
+            .with_context(f)
         }
     }
 }
