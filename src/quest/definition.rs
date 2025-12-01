@@ -66,8 +66,8 @@ pub struct GitCommitHash(pub String);
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReviewLineSubject {
-    start: Option<i64>,
-    end: i64,
+    pub start: Option<u64>,
+    pub end: u64,
 }
 
 /// The thing being commented on for PR review comments.
@@ -76,10 +76,10 @@ pub struct ReviewLineSubject {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReviewSubject {
-    commit: GitCommitHash,
-    file: String,
-    old_line: Option<ReviewLineSubject>,
-    new_line: Option<ReviewLineSubject>,
+    pub commit: GitCommitHash,
+    pub file: String,
+    pub old_line: Option<ReviewLineSubject>,
+    pub new_line: Option<ReviewLineSubject>,
 }
 
 /// A comment on a pull request.
@@ -90,8 +90,8 @@ pub struct ReviewSubject {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PullRequestComment {
-    quote: Option<ReviewSubject>,
-    body: Template,
+    pub quote: Option<ReviewSubject>,
+    pub body: Template,
 }
 
 /// A template for creating an issue.
@@ -109,7 +109,7 @@ pub struct PullRequestTemplate {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Comment {
-    body: Template,
+    pub body: Template,
 }
 
 /// A template for creating an issue.
@@ -135,10 +135,10 @@ pub struct TaskTemplate {
     /// A template for creating an issue for this task.
     pub issue_template: IssueTemplate,
     /// A template for creating a PR for this task.
-    pub pr_template: PullRequestTemplate,
+    pub pr_template: Option<PullRequestTemplate>,
     /// Reference to the commit containing the scaffolding code in the defining
     /// repository for the quest containing this task.
-    pub scaffolding: GitRef,
+    pub scaffolding: Option<GitRef>,
     /// Reference to the commit containing the reference solution code in the
     /// defining repository for the quest containing this task.
     pub reference_solution: GitRef,
