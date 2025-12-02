@@ -85,8 +85,6 @@ async fn main() -> Result<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("debug")).init();
 
     let workdir = tempfile::tempdir().context("Could not create temporary working directory.")?;
-    // reserve tarball
-    let tar_file = fs::File::create(output).context("Could not create output file {output}.")?;
 
     // clone repo from GitHub (as bare repo)
     let git_dir_path = workdir.path().to_path_buf().join("git");
@@ -364,7 +362,9 @@ async fn main() -> Result<()> {
 
     debug!("Creating bundle archive.");
     // create tarball
-    let mut archive = tar::Builder::new(tar_file);
+    let tar_file = fs::File::create(output).context("Could not create output file {output}.")?;
+    let gz_file = flate2::write::GzEncoder::new(tar_file, flate2::Compression::default());
+    let mut archive = tar::Builder::new(gz_file);
     archive
         .append_path_with_name(&quest_json_path, "data.json")
         .context("Could not add data.json to bundle.")?;
