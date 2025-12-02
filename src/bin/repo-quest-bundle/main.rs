@@ -62,7 +62,9 @@ struct Args {
     /// The name of the repository.
     #[arg(long)]
     repo: String,
-    target: PathBuf,
+    /// The path to which to write the bundle archive.
+    #[arg(short, long)]
+    output: PathBuf,
 }
 
 type Result<A> = anyhow::Result<A>;
@@ -75,21 +77,24 @@ async fn main() -> Result<()> {
         base_uri,
         owner,
         repo: repo_name,
-        target,
+        output,
     } = Args::parse();
     #[cfg(not(debug_assertions))]
     env_logger::Builder::from_env(Env::default().default_filter_or("warn")).init();
     #[cfg(debug_assertions)]
     env_logger::Builder::from_env(Env::default().default_filter_or("debug")).init();
 
+    let workdir = tempfile::tempdir().context("Could not create temporary working directory.")?;
+    // reserve tarball
+    let tar_file = fs::File::create(output).context("Could not create output file {output}.")?;
+
     // clone repo from GitHub (as bare repo)
-    let mut git_target = target.clone();
-    git_target.push("git");
+    let git_dir_path = workdir.path().to_path_buf().join("git");
 
     // TODO: Handle cloning private repos
-    debug!("Cloning https://github.com/{owner}/{repo_name} into {git_target:?}.");
-    fs::create_dir_all(&git_target)?;
-    let repo = GitRepo::init_bare(git_target.clone())?;
+    debug!("Cloning https://github.com/{owner}/{repo_name} into {git_dir_path:?}.");
+    fs::create_dir_all(&git_dir_path)?;
+    let repo = GitRepo::init_bare(git_dir_path.clone())?;
     repo.add_remote("origin", &format!("https://github.com/{owner}/{repo_name}"))?;
     repo.fetch("origin")?;
 
@@ -349,15 +354,25 @@ async fn main() -> Result<()> {
         task_ids,
     };
 
+    debug!("Writing quest definition metadata to temporary file.");
     // write quest definition to file
     let quest_json = serde_json::to_string(&quest)
         .with_context(|| format!("Could not serialize quest {quest:?}"))?;
-    let mut path = target.clone();
-    path.push("data.json");
-    fs::write(path.as_path(), &quest_json)
-        .with_context(|| format!("Could not write quest index to file {path:?}"))?;
+    let quest_json_path = workdir.path().to_path_buf().join("data.json");
+    fs::write(&quest_json_path, &quest_json)
+        .with_context(|| format!("Could not write quest index to file {quest_json_path:?}"))?;
 
-    // leave tarball to external process
+    debug!("Creating bundle archive.");
+    // create tarball
+    let mut archive = tar::Builder::new(tar_file);
+    archive
+        .append_path_with_name(&quest_json_path, "data.json")
+        .context("Could not add data.json to bundle.")?;
+    archive
+        .append_dir_all("git", &git_dir_path)
+        .context("Could not add git repo to bundle.")?;
+    archive.finish().context("Could not finalize archive")?;
+
     Ok(())
 }
 
