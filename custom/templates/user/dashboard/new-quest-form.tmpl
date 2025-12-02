@@ -77,14 +77,14 @@
          if (!response.ok) {
              throw new Error(`Error starting quest: ${response.status} ${response.body}`);
          }
-         event.submitter.reset();
+         event.target.reset();
          return response.json();
      }).then(function(response) {
 
          const startQuestList = document.getElementById("start-quest-list");
          var [header, questinfo] = createQuestEntry(response.id, response.name, response.description);
          startQuestList.insertBefore(questinfo, startQuestList.firstChild);
-         startQuestList.insertBefore(questinfo, startQuestList.firstChild);
+         startQuestList.insertBefore(header, startQuestList.firstChild);
      });
      event.preventDefault();
  }
