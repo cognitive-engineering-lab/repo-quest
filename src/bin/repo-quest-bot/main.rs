@@ -455,10 +455,18 @@ async fn get_chapters(
     Ok(Json(tasks))
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ChapterInfo {
+    id: usize,
+    issue_url: Url,
+    pr_url: Url,
+}
+
 async fn get_current_chapter(
     State(state): State<Arc<Mutex<AppState>>>,
     Path(quest_id): Path<i64>,
-) -> Result<Json<Option<usize>>> {
+) -> Result<Json<Option<ChapterInfo>>> {
     let state = state.lock().await;
     let quests = &state.quest_instances;
 
@@ -466,8 +474,17 @@ async fn get_current_chapter(
         .metadata(quest_id)
         .with_context(|| format!("No quest with id {quest_id}."))?;
 
-    let cur_task_id = quest.tasks.len().checked_sub(1);
-    Ok(Json(cur_task_id))
+    let response = if let Some(cur_task_id) = quest.tasks.len().checked_sub(1) {
+        let cur_task = &quest.tasks[cur_task_id];
+        Some(ChapterInfo {
+            id: cur_task_id,
+            issue_url: cur_task.issue_url.clone(),
+            pr_url: cur_task.pr_url.clone(),
+        })
+    } else {
+        None
+    };
+    Ok(Json(response))
 }
 
 /// Sets the current chapter to the requested chapter, if the requested chapter

@@ -1,2 +1,21 @@
-<a class="right item">Current Task</a>
+{{ if .IsSigned }}
+<a id="current-task-link" class="right item">Current Task</a>
 <button class="right button ui">Add Solution</button>
+
+<script>
+ fetch("http:///localhost:8000/quest/{{.Repository.ID}}/chapter/current", {
+     method: "GET",
+     headers: { "Content-Type": "application/json" },
+ }).then(function(response) {
+     if (!response.ok) {
+         throw new Error(`Error starting quest: ${response.status} ${response.body}`);
+     }
+     return response.json();
+ }).then(function(response) {
+     const currentTaskLink = document.getElementById("current-task-link");
+     console.log(response);
+     currentTaskLink.href = response.issueUrl;
+ });
+</script>
+
+{{ end }}
