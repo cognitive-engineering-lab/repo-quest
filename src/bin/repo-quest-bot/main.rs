@@ -17,7 +17,7 @@ use anyhow::{Context, anyhow, bail};
 use async_lock::Mutex;
 use axum::{
     Form, Json, Router, ServiceExt,
-    extract::{Multipart, Path, Query, Request, State},
+    extract::{DefaultBodyLimit, Multipart, Path, Query, Request, State},
     http::{StatusCode, header},
     response::{IntoResponse, Redirect, Response},
     routing::{get, post},
@@ -136,7 +136,10 @@ async fn main() -> Result<()> {
         // POST: Creates a new quest template from source.
         .route(
             "/quest_definition",
-            get(get_quest_definitions).post(add_quest_definition),
+            get(get_quest_definitions)
+                // allow quest definitions to be large
+                .post(add_quest_definition)
+                .layer(DefaultBodyLimit::disable()),
         )
         // GET: Gets the list of current quest ids and the names of the
         // templates the quests are based on.
