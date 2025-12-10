@@ -37,7 +37,7 @@ To start a quest after registering, first [upload a quest
 definition bundle](http://localhost:3000) (such as [rqst-async.tgz]()), and then start the
 quest.
 
-> [!INFO]
+> [!NOTE]
 >
 > rqst-async does not currently distribute a quest bundle, but you can
 > create one by following [the bundling steps below](#bundling-a-quest).
