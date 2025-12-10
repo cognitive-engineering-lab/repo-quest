@@ -73,9 +73,9 @@ type Result<T> = std::result::Result<T, AppError>;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // #[cfg(not(debug_assertions))]
-    // env_logger::Builder::from_env(Env::default().default_filter_or("warn")).init();
-    // #[cfg(debug_assertions)]
+    #[cfg(not(debug_assertions))]
+    env_logger::Builder::from_env(Env::default().default_filter_or("warn")).init();
+    #[cfg(debug_assertions)]
     env_logger::Builder::from_env(Env::default().default_filter_or("debug")).init();
 
     let args: Vec<String> = env::args().collect();

@@ -59,4 +59,5 @@ podman run \
     --mount=type=bind,source="$socket",destination=/var/run/docker.sock \
     --userns keep-id:uid=1000,gid=1000 \
     --name repoquest \
+    --env RUST_LOG \
     repoquest:latest
