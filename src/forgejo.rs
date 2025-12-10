@@ -12,9 +12,9 @@ use forgejo_api::{
     Auth, Forgejo,
     structs::{
         AddCollaboratorOption, AddCollaboratorOptionPermission, CreateHookOptionConfig,
-        CreateHookOptionType, CreateIssueOption, CreatePullRequestOption, CreateRepoOption,
-        EditIssueOption, EditPullRequestOption, EditRepoOption, Hook, Repository,
-        UserListReposQuery,
+        CreateHookOptionType, CreateIssueCommentOption, CreateIssueOption, CreatePullRequestOption,
+        CreatePullReviewComment, CreatePullReviewOptions, CreateRepoOption, EditIssueOption,
+        EditPullRequestOption, EditRepoOption, Hook, Repository, UserListReposQuery,
     },
 };
 use log::debug;
@@ -306,6 +306,63 @@ impl ForgejoBackend {
             .await
             .with_context(|| format!("Couldn't edit PR with ID {pr_number}"))?;
         debug!("Updated pull request {username}/{repo_name}/{pr_number}.");
+
+        for issue_comment in &template.issue_template.comments {
+            let body = CreateIssueCommentOption {
+                body: issue_comment.body.instantiate(&task_info)?,
+                updated_at: None,
+            };
+            self.forgejo
+                .issue_create_comment(username, repo_name, issue_number, body)
+                .await?;
+        }
+
+        if let Some(pr_template) = &template.pr_template {
+            for pr_comment in &pr_template.comments {
+                let comment_text = pr_comment.body.instantiate(&task_info)?;
+                if let Some(quote) = &pr_comment.quote {
+                    // In Forgejo, only one line can have the comment, so only
+                    // one of old or new can be set. Since some lines above the
+                    // indicated one are displayed and new lines are displayed
+                    // after old lines, using the new line number gives the best
+                    // result.
+                    let (old_line, new_line) = match (&quote.old_line, &quote.new_line) {
+                        (None, None) => (None, None),
+                        (Some(old), None) => (Some(old.end), None),
+                        (_, Some(new)) => (None, Some(new.end)),
+                    };
+                    debug!("Commenting on {old_line:?}:{new_line:?}.");
+                    let body = CreatePullReviewComment {
+                        body: Some(comment_text),
+                        new_position: new_line,
+                        old_position: old_line,
+                        path: Some(quote.file.clone()),
+                    };
+                    let review = CreatePullReviewOptions {
+                        body: None,
+                        comments: Some(vec![body]),
+                        // TODO: track enough info to put the comment on the right commit
+                        // This will default to the head.
+                        commit_id: None,
+                        // This event type is needed to avoid having a review
+                        // body and makes it submit the given comment directly.
+                        event: Some("COMMENT".to_string()),
+                    };
+                    self.forgejo
+                        .repo_create_pull_review(username, repo_name, pr_number, review)
+                        .await?;
+                    // Reviews with event type COMMENT are not separately submitted.
+                } else {
+                    let body = CreateIssueCommentOption {
+                        body: comment_text,
+                        updated_at: None,
+                    };
+                    self.forgejo
+                        .issue_create_comment(username, repo_name, pr_number, body)
+                        .await?;
+                }
+            }
+        }
 
         Ok(Task {
             issue: IssueId(issue_number),

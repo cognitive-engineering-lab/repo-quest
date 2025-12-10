@@ -305,15 +305,43 @@ async fn main() -> Result<()> {
                         file: github_comment.path,
                         old_line: match github_comment.original_line {
                             Some(line) => Some(ReviewLineSubject {
-                                start: github_comment.original_start_line,
-                                end: line,
+                                start: match github_comment.original_start_line {
+                                    None => None,
+                                    Some(start_line) =>
+                                        Some(start_line.try_into().with_context(|| {
+                                            format!(
+                                                "Old start line number {line} out of bounds for comment {:?}",
+                                                github_comment.url
+                                            )
+                                        })?)
+                                },
+                                end: line.try_into().with_context(|| {
+                                    format!(
+                                        "Old end line number {line} out of bounds for comment {:?}",
+                                        github_comment.url
+                                    )
+                                })?,
                             }),
                             None => None,
                         },
                         new_line: match github_comment.line {
                             Some(line) => Some(ReviewLineSubject {
-                                start: github_comment.start_line,
-                                end: line,
+                                start: match github_comment.start_line {
+                                    None => None,
+                                    Some(start_line) =>
+                                        Some(start_line.try_into().with_context(|| {
+                                            format!(
+                                                "New start line number {line} out of bounds for comment {:?}",
+                                                github_comment.url
+                                            )
+                                        })?)
+                                },
+                                end: line.try_into().with_context(|| {
+                                    format!(
+                                        "New end line number {line} out of bounds for comment {:?}",
+                                        github_comment.url
+                                    )
+                                })?,
                             }),
                             None => None,
                         },

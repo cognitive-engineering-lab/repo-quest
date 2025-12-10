@@ -98,18 +98,28 @@ pub struct GitCommitHash(pub String);
 /// by GitHub. The start line is preserved for use when
 /// https://codeberg.org/forgejo/forgejo/issues/6093 is implemented.
 ///
+/// `i64` is used instead of `u64` to match the Forgejo Rust bindings API.
+///
 /// TODO: Find a way to make the comment be better preserved when the
 /// scaffolding code is merged into the previous student solution.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReviewLineSubject {
-    pub start: Option<u64>,
-    pub end: u64,
+    pub start: Option<i64>,
+    pub end: i64,
 }
 
 /// The thing being commented on for PR review comments.
 ///
 /// Omitting the lines entirely means to refer to the file itself.
+///
+/// NOTE: Forgejo only supports comments on a single line, so only one of
+/// old_line or new_line should be filled out. However, GitHub provides values
+/// for both (without explanation of the meaning), so we use a pair of options
+/// in order to preserve that information, even though there is not (at the
+/// moment) a sensible way to use it. (Something more like start being new/old
+/// and end being new/old is easier to make sense of, but that is not how the
+/// information is represented by either Forgejo or GitHub.)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReviewSubject {
