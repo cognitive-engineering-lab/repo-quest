@@ -1,25 +1,21 @@
-#![allow(unused_variables)]
-#![allow(dead_code)]
-#![allow(unused_imports)]
 mod forgejo_hook;
 
 use std::{
-    collections::{HashMap, hash_map::Entry},
+    collections::HashMap,
     env, fs,
     io::{Seek, Write as _},
     path::PathBuf,
-    process::Command,
     sync::Arc,
     time::Duration,
 };
 
-use anyhow::{Context, anyhow, bail};
+use anyhow::{Context, anyhow};
 use async_lock::Mutex;
 use axum::{
-    Form, Json, Router, ServiceExt,
-    extract::{DefaultBodyLimit, Multipart, Path, Query, Request, State},
-    http::{StatusCode, header},
-    response::{IntoResponse, Redirect, Response},
+    Json, Router, ServiceExt,
+    extract::{DefaultBodyLimit, Multipart, Path, Request, State},
+    http::StatusCode,
+    response::IntoResponse,
     routing::{get, post},
 };
 use env_logger::Env;
@@ -323,8 +319,7 @@ async fn start_quest(
     let mut state = state.lock().await;
 
     let QuestDefinition {
-        metadata: template,
-        repo: template_repo,
+        metadata: template, ..
     } = state
         .quest_definitions
         .definition(query.quest_template_id)?
@@ -400,17 +395,17 @@ async fn start_quest(
 }
 
 async fn create_reference_solution(
-    State(state): State<Arc<Mutex<AppState>>>,
-    Path(quest_id): Path<String>,
-    Path(chapter_id): Path<String>,
+    State(_state): State<Arc<Mutex<AppState>>>,
+    Path(_quest_id): Path<String>,
+    Path(_chapter_id): Path<String>,
 ) -> Result<()> {
     todo!()
 }
 
 async fn get_reference_solution(
-    State(state): State<Arc<Mutex<AppState>>>,
-    Path(quest_id): Path<i64>,
-    Path(chapter_id): Path<String>,
+    State(_state): State<Arc<Mutex<AppState>>>,
+    Path(_quest_id): Path<i64>,
+    Path(_chapter_id): Path<String>,
 ) -> Result<Json<i64>> {
     todo!()
 }
