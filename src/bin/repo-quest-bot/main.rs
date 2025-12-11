@@ -551,13 +551,36 @@ async fn set_current_chapter(
         .tasks
         .get(chapter_number)
         .with_context(|| format!("Missing definition of task for chapter {chapter_number}."))?;
+    let prev_task_solution_branch = match chapter_number.checked_sub(1) {
+        None => "main",
+        Some(prev_chapter_number) => {
+            &quest_definition
+                .metadata
+                .tasks
+                .get(prev_chapter_number)
+                .with_context(|| {
+                    format!("Missing definition of task for chapter {chapter_number}.")
+                })?
+                .reference_solution
+                .0
+        }
+    };
 
     let scaffolding = &task_template.scaffolding.0;
-    local_repo.create_branch("main", scaffolding)?;
+    local_repo.create_branch(&format!("refs/remotes/quest/{scaffolding}"), scaffolding)?;
     local_repo.switch_branch(scaffolding)?;
-    let remote_branch = format!("remotes/quest/{}", scaffolding);
-    local_repo.restore_from(&remote_branch)?;
-    local_repo.commit("task commit message")?;
+    let remote_prev_solution_branch = format!("refs/remotes/quest/{prev_task_solution_branch}");
+    // TODO: return list of original/new commit hashes for later use in aligning PR comments
+    if local_repo
+        .rebase("main", &remote_prev_solution_branch)
+        .is_err()
+    {
+        // If the rebase fails, first reset to the previous reference solution branch and then
+        // rebase onto that.
+        local_repo.restore_from(&remote_prev_solution_branch)?;
+        local_repo.commit("Reset to the reference solution")?;
+        local_repo.rebase("main", &remote_prev_solution_branch)?
+    };
     local_repo.push("origin", scaffolding, scaffolding)?;
     local_repo.switch_branch("main")?;
 

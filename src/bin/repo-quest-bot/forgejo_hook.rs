@@ -43,16 +43,20 @@ pub async fn handler(
             .ok_or(anyhow!("No repository info provided with hook body."))?
             .id;
 
-        let quest = state.quest_instances.metadata(quest_id)?;
-        let corresponding_pr = match quest.tasks.last() {
+        let quest = state.quest_instances.quest(quest_id)?;
+        let corresponding_pr = match quest.metadata.tasks.last() {
             Some(cur_task) => cur_task.pr.0 == pr.number,
             None => pr.number == 0,
         };
         if corresponding_pr {
-            let quest_defn = state.quest_definitions.definition(quest.definition_id)?;
+            let quest_defn = state
+                .quest_definitions
+                .definition(quest.metadata.definition_id)?;
 
-            let next_chapter_number = quest.tasks.len();
+            let next_chapter_number = quest.metadata.tasks.len();
             if next_chapter_number < quest_defn.metadata.tasks.len() {
+                quest.repo.fetch("origin")?;
+                quest.repo.hard_reset("refs/remotes/origin/main")?;
                 set_current_chapter(&mut state, quest_id, next_chapter_number).await?;
             }
         }

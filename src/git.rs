@@ -201,9 +201,9 @@ impl GitRepo {
     pub fn create_branch(&self, branch_source: &str, branch_name: &str) -> Result<()> {
         self.git()
             .arg("branch")
-            .arg("-c")
-            .arg(branch_source)
+            .arg("--no-track")
             .arg(branch_name)
+            .arg(branch_source)
             .run_with_context(|| {
                 format!(
                     "Could not create branch {branch_name} from {branch_source} for repo {self:?}."
@@ -283,6 +283,46 @@ impl GitRepo {
                 )
             })?;
 
+        Ok(())
+    }
+
+    /// Copies the history from `from` to the current HEAD onto `onto` via a rebase.
+    /// Preserves empty commits and merges and resolves conflicts in favor of
+    /// the branch being rebased.
+    pub fn rebase(&self, onto: &str, from: &str) -> Result<()> {
+        let rebase_result = self
+            .git()
+            .arg("rebase")
+            .arg("--empty=keep")
+            .arg("--strategy=ort")
+            .arg("--strategy-option=theirs")
+            .arg("--rebase-merges")
+            .arg("--no-update-refs")
+            .arg("--onto")
+            .arg(onto)
+            .arg(from)
+            .run_with_context(|| format!("Could not rebase --onto={onto} {from} in {self:?}"));
+        match rebase_result {
+            Ok(()) => Ok(()),
+            Err(err) => {
+                self.git()
+                    .arg("rebase")
+                    .arg("--abort")
+                    .run_with_context(|| {
+                        format!("Could not abort failed rebase --onto={onto} {from} in {self:?}")
+                    })?;
+                Err(err)
+            }
+        }
+    }
+
+    /// Hard reset (i.e., update the branch) the current branch to the given branch.
+    pub fn hard_reset(&self, branch: &str) -> Result<()> {
+        self.git()
+            .arg("reset")
+            .arg("--hard")
+            .arg(branch)
+            .run_with_context(|| format!("Could not reset to {branch} in {self:?}"))?;
         Ok(())
     }
 }
