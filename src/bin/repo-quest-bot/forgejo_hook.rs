@@ -17,7 +17,7 @@ pub struct RepositoryHookData {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct PullRequestHookData {
-    pub number: i64,
+    pub number: u64,
     pub merged: bool,
 }
 
@@ -33,7 +33,10 @@ pub async fn handler(
     Json(body): Json<ForgejoHookBody>,
 ) -> Result<()> {
     debug!("Hook call:\n\n{:?}\n", body);
-    if body.action == "closed" && body.pull_request.is_some_and(|pr| pr.merged) {
+    if let Some(pr) = body.pull_request
+        && body.action == "closed"
+        && pr.merged
+    {
         let mut state = state.lock().await;
         let quest_id = body
             .repository
@@ -41,11 +44,17 @@ pub async fn handler(
             .id;
 
         let quest = state.quest_instances.metadata(quest_id)?;
-        let quest_defn = state.quest_definitions.definition(quest.definition_id)?;
+        let corresponding_pr = match quest.tasks.last() {
+            Some(cur_task) => cur_task.pr.0 == pr.number,
+            None => pr.number == 0,
+        };
+        if corresponding_pr {
+            let quest_defn = state.quest_definitions.definition(quest.definition_id)?;
 
-        let next_chapter_number = quest.tasks.len();
-        if next_chapter_number < quest_defn.metadata.tasks.len() {
-            set_current_chapter(&mut state, quest_id, next_chapter_number).await?;
+            let next_chapter_number = quest.tasks.len();
+            if next_chapter_number < quest_defn.metadata.tasks.len() {
+                set_current_chapter(&mut state, quest_id, next_chapter_number).await?;
+            }
         }
     }
     Ok(())
