@@ -191,6 +191,7 @@ impl ForgejoBackend {
         repo_name: &str,
         template: &TaskTemplate,
         mut task_info: HashMap<String, String>,
+        hashes: HashMap<String, String>,
     ) -> Result<Task> {
         let issue = self
             .forgejo
@@ -341,9 +342,7 @@ impl ForgejoBackend {
                     let review = CreatePullReviewOptions {
                         body: None,
                         comments: Some(vec![body]),
-                        // TODO: track enough info to put the comment on the right commit
-                        // This will default to the head.
-                        commit_id: None,
+                        commit_id: hashes.get(&quote.commit.0).cloned(),
                         // This event type is needed to avoid having a review
                         // body and makes it submit the given comment directly.
                         event: Some("COMMENT".to_string()),

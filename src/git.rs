@@ -1,8 +1,10 @@
-use anyhow::{Context as _, Result, anyhow};
+use anyhow::{Context as _, Result, anyhow, bail};
 use log::debug;
 use serde::{Deserialize, Serialize};
 use std::{
+    collections::HashMap,
     fmt::{Debug, Display},
+    io::Read,
     path::PathBuf,
     process::Command,
 };
@@ -289,21 +291,50 @@ impl GitRepo {
     /// Copies the history from `from` to the current HEAD onto `onto` via a rebase.
     /// Preserves empty commits and merges and resolves conflicts in favor of
     /// the branch being rebased.
-    pub fn rebase(&self, onto: &str, from: &str) -> Result<()> {
-        let rebase_result = self
-            .git()
-            .arg("rebase")
-            .arg("--empty=keep")
-            .arg("--strategy=ort")
-            .arg("--strategy-option=theirs")
-            .arg("--rebase-merges")
-            .arg("--no-update-refs")
-            .arg("--onto")
-            .arg(onto)
-            .arg(from)
-            .run_with_context(|| format!("Could not rebase --onto={onto} {from} in {self:?}"));
+    pub fn rebase(&self, onto: &str, from: &str) -> Result<HashMap<String, String>> {
+        let tmpfile = tempfile::NamedTempFile::new()
+            .context("Could not create tempfile for storing rebase info.")?;
+        let rebase_result =
+            self.git()
+                .arg("rebase")
+                .arg("--exec")
+                .arg(format!(
+                    "cp .git/rebase-merge/rewritten-list {}",
+                    tmpfile.path().to_str().with_context(
+                        || "Could not convert tempfile path to string. {tempfile:?}"
+                    )?
+                ))
+                .arg("--empty=keep")
+                .arg("--strategy=ort")
+                .arg("--strategy-option=theirs")
+                .arg("--rebase-merges")
+                .arg("--no-update-refs")
+                .arg("--onto")
+                .arg(onto)
+                .arg(from)
+                .run_with_context(|| format!("Could not rebase --onto={onto} {from} in {self:?}"));
         match rebase_result {
-            Ok(()) => Ok(()),
+            Ok(()) => {
+                // This is a hack to preserve the mapping between old an replayed commits during the rebase.
+                // The rewritten-list is not a documented part of git.
+                //
+                // See https://stackoverflow.com/a/78997351
+                let mut rewritten_commits_buf = String::new();
+                let mut hashes = HashMap::new();
+                tmpfile
+                    .as_file()
+                    .read_to_string(&mut rewritten_commits_buf)?;
+                for rewrite in rewritten_commits_buf.lines() {
+                    let Some(from_commit) = rewrite.split_ascii_whitespace().next() else {
+                        bail!("Malformed rewritten-list from rebase in {self:?}.");
+                    };
+                    let Some(to_commit) = rewrite.split_ascii_whitespace().next() else {
+                        bail!("Malformed rewritten-list from rebase in {self:?}.");
+                    };
+                    hashes.insert(from_commit.to_string(), to_commit.to_string());
+                }
+                Ok(hashes)
+            }
             Err(err) => {
                 self.git()
                     .arg("rebase")

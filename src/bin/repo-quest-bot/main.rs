@@ -571,15 +571,15 @@ async fn set_current_chapter(
     local_repo.switch_branch(scaffolding)?;
     let remote_prev_solution_branch = format!("refs/remotes/quest/{prev_task_solution_branch}");
     // TODO: return list of original/new commit hashes for later use in aligning PR comments
-    if local_repo
-        .rebase("main", &remote_prev_solution_branch)
-        .is_err()
-    {
-        // If the rebase fails, first reset to the previous reference solution branch and then
-        // rebase onto that.
-        local_repo.restore_from(&remote_prev_solution_branch)?;
-        local_repo.commit("Reset to the reference solution")?;
-        local_repo.rebase("main", &remote_prev_solution_branch)?
+    let hashes = match local_repo.rebase("main", &remote_prev_solution_branch) {
+        Err(_) => {
+            // If the rebase fails, first reset to the previous reference solution branch and then
+            // rebase onto that.
+            local_repo.restore_from(&remote_prev_solution_branch)?;
+            local_repo.commit("Reset to the reference solution")?;
+            local_repo.rebase("main", &remote_prev_solution_branch)?
+        }
+        Ok(res) => res,
     };
     local_repo.push("origin", scaffolding, scaffolding)?;
     local_repo.switch_branch("main")?;
@@ -593,7 +593,7 @@ async fn set_current_chapter(
     }
 
     let task = forgejo
-        .create_task(&quest.owner, &quest.repo, task_template, task_info)
+        .create_task(&quest.owner, &quest.repo, task_template, task_info, hashes)
         .await?;
 
     let mut quest = quests
