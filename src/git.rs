@@ -40,7 +40,7 @@ impl GitRepo {
             .arg("init")
             .arg("--bare")
             .arg(&dir)
-            .run_with_context(|| format!("Could not initilize git repo in {dir:?}"))?;
+            .run_with_context(|| format!("Could not initilize git repo in {dir:?}."))?;
 
         Ok(GitRepo { dir })
     }
@@ -52,14 +52,14 @@ impl GitRepo {
             .arg("--initial-branch")
             .arg("main")
             .arg(&dir)
-            .run_with_context(|| format!("Could not initilize git repo in {dir:?}"))?;
+            .run_with_context(|| format!("Could not initilize git repo in {dir:?}."))?;
 
         Ok(GitRepo { dir })
     }
 
     /// Adds a remote to this git repository.
     pub fn add_remote(&self, remote_name: &str, remote_url: &str) -> Result<()> {
-        debug!("Adding remote named {remote_name} with url {remote_url} to {self:?}");
+        debug!("Adding remote named {remote_name} with url {remote_url} to {self:?}.");
         self.git()
             .arg("remote")
             .arg("add")
@@ -84,7 +84,7 @@ impl GitRepo {
             .arg("--worktree")
             .arg("--staged")
             .arg(".")
-            .run_with_context(|| format!("Could not restore from {source} in {self:?}"))
+            .run_with_context(|| format!("Could not restore from {source} in {self:?}."))
     }
 
     /// Squash merges the given source reference into the current branch. Uses
@@ -194,7 +194,7 @@ impl GitRepo {
             .arg("-p")
             .arg(&parent_oid)
             .arg(&tree_oid)
-            .line_with_context(|| format!("Could not create commit for {self:?} tree object {tree_oid} with parent {parent_oid} and message {message:?}"))?;
+            .line_with_context(|| format!("Could not create commit for {self:?} tree object {tree_oid} with parent {parent_oid} and message {message:?}."))?;
 
         self.git()
             .arg("update-ref")
@@ -223,7 +223,7 @@ impl GitRepo {
                 .arg(format!(
                     "cp .git/rebase-merge/rewritten-list {}",
                     tmpfile.path().to_str().with_context(
-                        || "Could not convert tempfile path to string. {tempfile:?}"
+                        || "Could not convert tempfile path to string. {tempfile:?}."
                     )?
                 ))
                 .arg("--empty=keep")
@@ -234,7 +234,7 @@ impl GitRepo {
                 .arg("--onto")
                 .arg(onto)
                 .arg(from)
-                .run_with_context(|| format!("Could not rebase --onto={onto} {from} in {self:?}"));
+                .run_with_context(|| format!("Could not rebase --onto={onto} {from} in {self:?}."));
         match rebase_result {
             Ok(()) => {
                 // This is a hack to preserve the mapping between old an replayed commits during the rebase.
@@ -262,7 +262,7 @@ impl GitRepo {
                     .arg("rebase")
                     .arg("--abort")
                     .run_with_context(|| {
-                        format!("Could not abort failed rebase --onto={onto} {from} in {self:?}")
+                        format!("Could not abort failed rebase --onto={onto} {from} in {self:?}.")
                     })?;
                 Err(err)
             }
@@ -275,7 +275,7 @@ impl GitRepo {
             .arg("reset")
             .arg("--hard")
             .arg(branch)
-            .run_with_context(|| format!("Could not reset to {branch} in {self:?}"))?;
-        Ok(())
+            .run_with_context(|| format!("Could not reset to {branch} in {self:?}."))
+    }
     }
 }
