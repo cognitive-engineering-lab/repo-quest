@@ -18,8 +18,9 @@ use repo_quest::{
     git::GitRepo,
     quest::definition::{
         Comment, GitCommitHash, IssueTemplate, PullRequestComment, PullRequestTemplate,
-        QuestDefinitionMetadata, ReviewLineSubject, ReviewSubject, TaskTemplate, Template,
+        QuestDefinitionMetadata, ReviewLineSubject, ReviewSubject, TaskTemplate,
     },
+    template::Template,
 };
 use serde::{Deserialize, Serialize};
 
