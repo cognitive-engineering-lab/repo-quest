@@ -16,37 +16,13 @@ use octocrab::{
 };
 use repo_quest::{
     git::GitRepo,
+    github::meta::{Chapter, QuestConfig},
     quest::definition::{
         Comment, GitCommitHash, IssueTemplate, PullRequestComment, PullRequestTemplate,
         QuestDefinitionMetadata, ReviewLineSubject, ReviewSubject, TaskTemplate,
     },
     template::Template,
 };
-use serde::{Deserialize, Serialize};
-
-// This is the metadata given for Quests defined on GitHub.
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
-pub struct QuestConfig {
-    pub title: String,
-    pub author: String,
-    pub repo: String,
-    pub chapters: Vec<Chapter>,
-    pub read_only: Option<Vec<PathBuf>>,
-    pub r#final: Option<serde_json::Value>,
-    pub final_url: Option<String>,
-    pub rq_version: String,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub struct Chapter {
-    pub label: String,
-    pub name: String,
-    #[serde(default)]
-    pub no_starter: bool,
-}
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
