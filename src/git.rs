@@ -277,5 +277,11 @@ impl GitRepo {
             .arg(branch)
             .run_with_context(|| format!("Could not reset to {branch} in {self:?}."))
     }
+
+    pub fn add_all(&self) -> Result<()> {
+        self.git()
+            .arg("add")
+            .arg(".")
+            .run_with_context(|| format!("Could not add all files in {self:?}."))
     }
 }
