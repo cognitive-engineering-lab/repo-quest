@@ -1,8 +1,11 @@
 use anyhow::Context as _;
 use clap::Parser;
 use env_logger::Env;
-use repo_quest::command::RunCommand as _;
-use repo_quest::git::GitRepo;
+use repo_quest::{
+    command::RunCommand as _,
+    git::GitRepo,
+    github::meta::{Chapter, QuestConfig},
+};
 use std::{
     path::{Path, PathBuf},
     process::Command,
@@ -19,13 +22,22 @@ struct Args {
     /// Where to create the git repository.
     #[arg(short, long)]
     output: PathBuf,
+    #[arg(short, long, default_value = "Tutorial Name")]
+    title: String,
+    #[arg(short, long, default_value = "Author Name")]
+    author: String,
 }
 
 type Result<A> = anyhow::Result<A>;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let Args { input, output } = Args::parse();
+    let Args {
+        input,
+        output,
+        title,
+        author,
+    } = Args::parse();
 
     #[cfg(not(debug_assertions))]
     env_logger::Builder::from_env(Env::default().default_filter_or("warn")).init();
@@ -45,29 +57,57 @@ async fn main() -> Result<()> {
     }
     dirs.sort();
 
+    let mut chapters = Vec::new();
+
     repo.commit("Initial commit")?;
     let initial_commit = repo.rev_parse("HEAD")?;
     for dir in dirs {
-        let dir_path = dir
+        let dir_name = dir
             .file_name()
             .with_context(|| format!("Could not get string for filename of {dir:?}"))?
             .to_str()
             .with_context(|| format!("Could not get string for path of filename of {dir:?}"))?;
 
-        let problem_label = dir_path.to_string() + "-a";
+        let problem_label = dir_name.to_string() + "-a";
         rsync(&dir.join("scaffold"), &output)?;
         repo.add_all()?;
         repo.commit(&problem_label)?;
         repo.create_branch("main", &problem_label)?;
 
-        let solution_label = dir_path.to_string() + "-b";
+        let solution_label = dir_name.to_string() + "-b";
         rsync(&dir.join("solution"), &output)?;
         repo.add_all()?;
         repo.commit(&solution_label)?;
         repo.create_branch("main", &solution_label)?;
+
+        let chapter = Chapter {
+            label: dir_name.to_string(),
+            name: dir_name.to_string() + " name",
+            no_starter: false,
+        };
+        chapters.push(chapter);
     }
     repo.switch_branch("main")?;
     repo.hard_reset(&initial_commit)?;
+
+    let qc = QuestConfig {
+        title,
+        author,
+        repo: "".to_string(),
+        chapters,
+        read_only: None,
+        r#final: None,
+        final_url: None,
+        rq_version: "0.3.0".to_string(),
+    };
+    repo.switch_orphan_branch("meta")?;
+    let qc_toml = toml::ser::to_string(&qc)
+        .with_context(|| format!("Could not serialize QuestConfig {qc:?}"))?;
+    std::fs::write(output.join("meta.toml"), qc_toml)?;
+    repo.add_all()?;
+    repo.commit("Initial commit of quest metadata")?;
+
+    repo.switch_branch("main")?;
 
     Ok(())
 }

@@ -172,6 +172,10 @@ directory names. The resulting git repository will have the following structure:
 The initial commit is empty. The `-a` suffixed branches are the scaffolding and
 the `-b` suffixed branches are the reference solutions.
 
+Additionally there will be a separate `meta` branch created with an initial
+minimal `meta.toml` file, following the format [described
+above](#quest-development).
+
 ## RepoQuest development
 
 In addition to ports 3000 and 2222 for HTTP and SSH, port 8000 (on which runs
