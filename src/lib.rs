@@ -1,3 +1,4 @@
+pub mod command;
 pub mod forgejo;
 pub mod git;
 pub mod quest;
