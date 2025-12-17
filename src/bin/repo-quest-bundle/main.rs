@@ -72,7 +72,6 @@ type Result<A> = anyhow::Result<A>;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // take GitHub slug as argument
     let Args {
         token,
         base_uri,
@@ -80,6 +79,7 @@ async fn main() -> Result<()> {
         repo: repo_name,
         output,
     } = Args::parse();
+
     #[cfg(not(debug_assertions))]
     env_logger::Builder::from_env(Env::default().default_filter_or("warn")).init();
     #[cfg(debug_assertions)]
