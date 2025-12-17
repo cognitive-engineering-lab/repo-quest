@@ -132,6 +132,46 @@ repository, a fine-grained access token with no permissions can be used.
 The resulting bundle is independent of GitHub and can be installed as a quest
 definition in RepoQuest.
 
+### Converting directories to RepoQuest
+
+A pre-existing tutorial where the code for the steps are defined in a sequence
+of directories can be converted to a RepoQuest quest definition repository using
+`repo-quest-dirs-to-repo`. The resulting repository can be pushed to GitHub
+so that issues and pull requests can be created in the format defined
+[above](#quest-development) and used with `repo-quest-bundle`.
+
+```sh
+cargo run --bin repo-quest-dirs-to-repo -- \
+    --input ./rqst-async-bundle/tutorial-dirs/ \
+    --output ./rqst-async-bundle/quest-repo
+```
+
+The directories must be in the format:
+
+```text
+.
+├── 00-chat-route
+│   ├── scaffold
+│   └── solution
+└── 01-async-await
+    ├── scaffold
+    └── solution
+```
+
+The sequence of chapters is assumed to match the lexical ordering of the
+directory names. The resulting git repository will have the following structure:
+
+```text
+* (01-async-await-b) 01-async-await-b
+* (01-async-await-a) 01-async-await-a
+* (00-chat-route-b) 00-chat-route-b
+* (00-chat-route-a) 00-chat-route-a
+* (main) Initial commit
+```
+
+The initial commit is empty. The `-a` suffixed branches are the scaffolding and
+the `-b` suffixed branches are the reference solutions.
+
 ## RepoQuest development
 
 In addition to ports 3000 and 2222 for HTTP and SSH, port 8000 (on which runs
