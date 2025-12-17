@@ -284,4 +284,14 @@ impl GitRepo {
             .arg(".")
             .run_with_context(|| format!("Could not add all files in {self:?}."))
     }
+
+    pub fn switch_orphan_branch(&self, branch_name: &str) -> Result<()> {
+        self.git()
+            .arg("switch")
+            .arg("--orphan")
+            .arg(branch_name)
+            .run_with_context(|| {
+                format!("Could not switch to new orphan branch {branch_name} for repo {self:?}.")
+            })
+    }
 }
