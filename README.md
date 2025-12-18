@@ -140,6 +140,8 @@ of directories can be converted to a RepoQuest quest definition repository using
 so that issues and pull requests can be created in the format defined
 [above](#quest-development) and used with `repo-quest-bundle`.
 
+`repo-quest-dirs-to-repo` requires that `rsync` be available on your path.
+
 ```sh
 cargo run --bin repo-quest-dirs-to-repo -- \
     --input ./rqst-async-bundle/tutorial-dirs/ \
