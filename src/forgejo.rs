@@ -192,6 +192,7 @@ impl ForgejoBackend {
         template: &TaskTemplate,
         mut task_info: HashMap<String, String>,
         hashes: HashMap<String, String>,
+        initial_scaffolding_hash: String,
     ) -> Result<Task> {
         let issue = self
             .forgejo
@@ -376,6 +377,7 @@ impl ForgejoBackend {
                     format!("No issue URL for {username}/{repo_name}#{pr_number}")
                 })?,
             },
+            initial_scaffolding_hash,
         })
     }
 

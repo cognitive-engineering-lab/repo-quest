@@ -594,8 +594,17 @@ async fn set_current_chapter(
         }
     }
 
+    let initial_scaffolding_hash = local_repo.rev_parse(scaffolding)?;
+
     let task = forgejo
-        .create_task(&quest.owner, &quest.repo, task_template, task_info, hashes)
+        .create_task(
+            &quest.owner,
+            &quest.repo,
+            task_template,
+            task_info,
+            hashes,
+            initial_scaffolding_hash,
+        )
         .await?;
 
     let mut quest = quests

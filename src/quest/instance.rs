@@ -37,6 +37,8 @@ pub struct Issue {
 pub struct Task {
     pub issue: Issue,
     pub pr: PullRequest,
+    /// The git hash of the scaffolding branch at the time when the PR was created.
+    pub initial_scaffolding_hash: String,
 }
 
 /// An instantiated quest.
