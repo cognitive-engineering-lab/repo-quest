@@ -14,15 +14,19 @@ use url::Url;
 
 use crate::git::GitRepo;
 
-/// A newtype wrapper for Forgejo issue IDs.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct IssueId(pub u64);
+pub struct PullRequest {
+    pub number: u64,
+    pub url: Url,
+}
 
-/// A newtype wrapper for Forgejo PR IDs.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PullRequestId(pub u64);
+pub struct Issue {
+    pub number: u64,
+    pub url: Url,
+}
 
 /// An instantiated task in a quest.
 ///
@@ -31,14 +35,8 @@ pub struct PullRequestId(pub u64);
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Task {
-    /// issue ID
-    pub issue: IssueId,
-    /// URL for issue on Forgejo instance
-    pub issue_url: Url,
-    /// PR ID
-    pub pr: PullRequestId,
-    /// URL for PR on Forgejo instance
-    pub pr_url: Url,
+    pub issue: Issue,
+    pub pr: PullRequest,
 }
 
 /// An instantiated quest.

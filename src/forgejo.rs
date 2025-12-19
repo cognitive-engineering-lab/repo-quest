@@ -5,7 +5,7 @@ use std::{
 
 use crate::quest::{
     definition::{QuestDefinitionMetadata, TaskTemplate},
-    instance::{IssueId, PullRequestId, Task},
+    instance::{Issue, PullRequest, Task},
 };
 use anyhow::{Context as _, Result, anyhow};
 use forgejo_api::{
@@ -364,14 +364,18 @@ impl ForgejoBackend {
         }
 
         Ok(Task {
-            issue: IssueId(issue_number),
-            issue_url: issue.html_url.ok_or(anyhow!(
-                "No issue URL for {username}/{repo_name}#{issue_number}"
-            ))?,
-            pr: PullRequestId(pr_number),
-            pr_url: pr.html_url.ok_or(anyhow!(
-                "No issue URL for {username}/{repo_name}#{pr_number}"
-            ))?,
+            issue: Issue {
+                number: issue_number,
+                url: issue.html_url.with_context(|| {
+                    format!("No issue URL for {username}/{repo_name}#{issue_number}")
+                })?,
+            },
+            pr: PullRequest {
+                number: pr_number,
+                url: pr.html_url.with_context(|| {
+                    format!("No issue URL for {username}/{repo_name}#{pr_number}")
+                })?,
+            },
         })
     }
 

@@ -388,7 +388,7 @@ async fn start_quest(
         // TODO: don't return from repo creation until the repo is fully created.
         std::thread::sleep(Duration::from_secs(2));
         let task = set_current_chapter(&mut state, id, 0).await?;
-        url = task.issue_url;
+        url = task.issue.url;
     };
 
     Ok(Json(StartQuestResponse { id, url }))
@@ -476,8 +476,8 @@ async fn get_current_chapter(
         let cur_task = &quest.tasks[cur_task_id];
         Some(ChapterInfo {
             id: cur_task_id,
-            issue_url: cur_task.issue_url.clone(),
-            pr_url: cur_task.pr_url.clone(),
+            issue_url: cur_task.issue.url.clone(),
+            pr_url: cur_task.pr.url.clone(),
         })
     } else {
         None
@@ -533,14 +533,14 @@ async fn set_current_chapter(
     // Confirm that previous task is complete.
     if let Some(task) = quest.tasks.last()
         && !forgejo
-            .is_pull_request_merged(&quest.owner, &quest.repo, task.pr.0)
+            .is_pull_request_merged(&quest.owner, &quest.repo, task.pr.number)
             .await?
     {
         return Err(anyhow!(
             "Pull request {}/{}#{} not merged.",
             &quest.owner,
             &quest.repo,
-            task.pr.0
+            task.pr.number
         )
         .into());
     }
@@ -586,8 +586,11 @@ async fn set_current_chapter(
     let mut task_info = HashMap::new();
     for (task_id, chapter_num) in quest_definition.metadata.task_ids {
         if let Some(task) = quest.tasks.get(chapter_num) {
-            task_info.insert(format!("{} pr", task_id), format!("#{}", task.pr.0));
-            task_info.insert(format!("{} issue", task_id), format!("#{}", task.issue.0));
+            task_info.insert(format!("{} pr", task_id), format!("#{}", task.pr.number));
+            task_info.insert(
+                format!("{} issue", task_id),
+                format!("#{}", task.issue.number),
+            );
         }
     }
 

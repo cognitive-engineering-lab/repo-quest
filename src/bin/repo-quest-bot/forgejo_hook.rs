@@ -45,7 +45,7 @@ pub async fn handler(
 
         let quest = state.quest_instances.quest(quest_id)?;
         let corresponding_pr = match quest.metadata.tasks.last() {
-            Some(cur_task) => cur_task.pr.0 == pr.number,
+            Some(cur_task) => cur_task.pr.number == pr.number,
             None => pr.number == 0,
         };
         if corresponding_pr {
