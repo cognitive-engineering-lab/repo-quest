@@ -20,7 +20,7 @@ use axum::{
 };
 use env_logger::Env;
 use flate2::read::GzDecoder;
-use log::{debug, error, info};
+use log::{debug, info};
 use serde::{Deserialize, Serialize};
 use tar::Archive;
 use thiserror::Error;
