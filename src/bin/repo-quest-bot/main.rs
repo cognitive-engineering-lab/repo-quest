@@ -487,7 +487,6 @@ async fn get_current_chapter(
 
 /// Sets the current chapter to the requested chapter, if the requested chapter
 /// is the next chapter.
-#[axum::debug_handler]
 async fn post_set_current_chapter(
     State(state): State<Arc<Mutex<AppState>>>,
     Path(quest_id): Path<i64>,
