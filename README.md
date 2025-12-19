@@ -25,13 +25,14 @@ To run RepoQuest using Podman, run
 The run scripts will make use of a Docker or Podman volume called
 `repo-quest-data` if it exists, and if not, will create it.
 
-Once you have done that, you can access RepoQuest at [https://localhost:3000/].
-You will need to register so that RepoQuest knows your email address (for
-correctly associating commits). To clone from and push to the RepoQuest
-instance, you can either use the username and password you registered with
-(e.g., `git clone http://username:password@localhost:3000/username/repo.git`) or
-you can register an SSH with RepoQuest key in the user preferences section of
-the UI (e.g., `git clone ssh://git@localhost:2222/username/repo.git`).
+Once you have done that, you can access RepoQuest at
+[https://localhost:3000/](https://localhost:3000/). You will need to register so
+that RepoQuest knows your email address (for correctly associating commits). To
+clone from and push to the RepoQuest instance, you can either use the username
+and password you registered with (e.g., `git clone
+http://username:password@localhost:3000/username/repo.git`) or you can register
+an SSH with RepoQuest key in the user preferences section of the UI (e.g., `git
+clone ssh://git@localhost:2222/username/repo.git`).
 
 To start a quest after registering, first [upload a quest
 definition bundle](http://localhost:3000) (such as [rqst-async.tgz]()), and then start the
