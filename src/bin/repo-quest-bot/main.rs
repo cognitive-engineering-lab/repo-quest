@@ -146,14 +146,14 @@ async fn main() -> Result<()> {
         // issue IDs and PR IDs, if there are any. The chapter ID is the index
         // in the list and if there are no issue IDs or PRs, the chapter hasn't
         // been started yet.
-        .route("/quest/{quest_id}/chapter", get(get_chapters))
+        .route("/quest/{questId}/chapter", get(get_chapters))
         // GET: Gets the current chapter of the given quest along with the
         // corresponding issue ID and PR ID.
         //
         // POST: Sets the quest chapter to the requested chapter, if the
         // requested chapter is next and the current chapter is finished.
         .route(
-            "/quest/{quest_id}/chapter/current",
+            "/quest/{questId}/chapter/current",
             get(get_current_chapter).post(post_set_current_chapter),
         )
         // GET: Gets the PR ID for the reference solution for the given chapter
@@ -162,7 +162,7 @@ async fn main() -> Result<()> {
         // POST: Creates the reference solution for the given chapter and
         // returns the PR ID, if the given chapter is current.
         .route(
-            "/quest/{quest_id}/chapter/{chapter}/reference_solution",
+            "/quest/{questId}/chapter/{chapterId}/reference_solution",
             get(get_reference_solution).post(create_reference_solution),
         )
         .with_state(state)
