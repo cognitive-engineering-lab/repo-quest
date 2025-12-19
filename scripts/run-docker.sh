@@ -34,16 +34,16 @@ while getopts ":hrvs:" o; do
     esac
 done
 
-if [ -n "$recreate_volume" ] && docker volume exists "$volume"; then
+if [ -n "$recreate_volume" ] && docker volume inspect "$volume" >/dev/null 2>&1; then
     echo "Removing volume $volume"
     docker volume rm "$volume"
 fi
 
 if ! docker volume exists "$volume"; then
-    echo "Creating new podman volume $volume"
+    echo "Creating new docker volume $volume"
     docker volume create "$volume"
 else
-    echo "Using existing podman volume $volume"
+    echo "Using existing docker volume $volume"
 fi
 
 docker run \
@@ -54,7 +54,6 @@ docker run \
     --publish 127.0.0.1:2222:2222/tcp \
     --mount=type=volume,source="$volume",destination=/var/lib/gitea \
     --mount=type=bind,source="$socket",destination=/var/run/docker.sock \
-    --userns keep-id:uid=1000,gid=1000 \
     --name repoquest \
     --env RUST_LOG \
     repoquest:latest
