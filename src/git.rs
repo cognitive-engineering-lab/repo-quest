@@ -147,6 +147,7 @@ impl GitRepo {
             })
     }
 
+    /// Switch to an existing branch.
     pub fn switch_branch(&self, branch_name: &str) -> Result<()> {
         self.git()
             .arg("switch")
