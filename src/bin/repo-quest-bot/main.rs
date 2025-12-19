@@ -523,14 +523,28 @@ async fn get_current_reference_solution(
 async fn get_reference_solution(
     State(state): State<Arc<Mutex<AppState>>>,
     Path(query): Path<ReferenceSolutionQuery>,
-) -> Result<Json<PullRequest>> {
-    let mut _state = state.lock().await;
+) -> Result<Json<Option<PullRequest>>> {
+    let state = state.lock().await;
     let ReferenceSolutionQuery {
-        quest_id: _,
-        chapter_id: _,
+        quest_id,
+        chapter_id,
     } = query;
 
-    todo!()
+    let quest = state.quest_instances.metadata(quest_id)?;
+    let chapter_id = chapter_id.unwrap_or(
+        quest
+            .tasks
+            .len()
+            .checked_sub(1)
+            .with_context(|| format!("Quest instance {quest_id} has no chapters."))?,
+    );
+
+    let task = quest
+        .tasks
+        .get(chapter_id)
+        .with_context(|| format!("Quest instance {quest_id} has no chapter {chapter_id}."))?;
+
+    Ok(Json(task.reference_solution.clone()))
 }
 
 #[derive(Debug, Clone, Deserialize)]
