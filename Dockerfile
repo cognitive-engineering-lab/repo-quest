@@ -1,4 +1,4 @@
-FROM rust:alpine as rq-bot-build
+FROM rust:alpine AS rq-bot-build
 
 RUN apk add --no-cache \
     openssl-dev \
