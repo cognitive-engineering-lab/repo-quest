@@ -378,6 +378,45 @@ impl ForgejoBackend {
                 })?,
             },
             initial_scaffolding_hash,
+            reference_solution: None,
+        })
+    }
+
+    pub async fn create_pr(
+        &self,
+        username: &str,
+        repo_name: &str,
+        base: String,
+        head: String,
+        pr_title: String,
+        body: String,
+    ) -> Result<PullRequest> {
+        let pr = self
+            .forgejo
+            .repo_create_pull_request(
+                username,
+                repo_name,
+                CreatePullRequestOption {
+                    assignee: Some(username.to_string()),
+                    assignees: None,
+                    base: Some(base),
+                    body: Some(body),
+                    due_date: None,
+                    head: Some(head),
+                    labels: None,
+                    milestone: None,
+                    title: Some(pr_title),
+                },
+            )
+            .await
+            .with_context(|| "Couldn't create PR.")?;
+        let pr_number = pr.number.context("No PR id.")? as u64;
+        let pr_url = pr.url.context("No PR url.")?;
+        debug!("Created pull request {username}/{repo_name}/{pr_number}.");
+
+        Ok(PullRequest {
+            number: pr_number,
+            url: pr_url,
         })
     }
 

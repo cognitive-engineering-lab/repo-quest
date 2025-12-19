@@ -394,12 +394,98 @@ async fn start_quest(
     Ok(Json(StartQuestResponse { id, url }))
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReferenceSolutionQuery {
+    quest_id: i64,
+    chapter_id: Option<usize>,
+}
+
 async fn create_reference_solution(
-    State(_state): State<Arc<Mutex<AppState>>>,
-    Path(_quest_id): Path<String>,
-    Path(_chapter_id): Path<String>,
-) -> Result<()> {
-    todo!()
+    State(state): State<Arc<Mutex<AppState>>>,
+    Path(query): Path<ReferenceSolutionQuery>,
+) -> Result<Json<PullRequest>> {
+    let mut state = state.lock().await;
+    let ReferenceSolutionQuery {
+        quest_id,
+        chapter_id,
+    } = query;
+
+    let AppState {
+        ref forgejo,
+        quest_instances: ref mut quests,
+        quest_definitions: ref defns,
+        ..
+    } = *state;
+
+    let Quest {
+        metadata: ref mut quest,
+        repo: local_repo,
+        ..
+    } = quests.quest(quest_id)?;
+
+    let quest_definition_id = quest.definition_id;
+
+    let quest_definition = defns.definition(quest_definition_id)?;
+
+    let current_chapter = quest.tasks.len().checked_sub(1);
+    let chapter_id = chapter_id
+        .or(current_chapter)
+        .context("No chapter for which to get reference solution.")?;
+
+    let requested_task_instance = quest
+        .tasks
+        .get_mut(chapter_id)
+        .with_context(|| format!("Quest instance {quest_id} has no chapter {chapter_id}."))?;
+
+    let requested_task = quest_definition
+        .metadata
+        .tasks
+        .get(chapter_id)
+        .with_context(|| {
+            format!(
+                "Quest {quest_id} for definition {quest_definition_id} has no chapter {chapter_id}."
+            )
+        })?;
+
+    // TODO: Figure out how to open the PR for various circumstances, such as
+    // for a previously-completed chapter where the scaffolding branch has been
+    // deleted.
+    let remote_solution_branch = format!(
+        "refs/remotes/quest/{}",
+        &requested_task.reference_solution.0
+    );
+    let local_solution_branch = &requested_task.reference_solution.0;
+    let remote_scaffold_branch = format!("refs/remotes/quest/{}", &requested_task.scaffolding.0);
+    let local_scaffold_branch = &requested_task.scaffolding.0;
+
+    let initial_scaffold_hash = &requested_task_instance.initial_scaffolding_hash;
+
+    local_repo.create_branch(&remote_solution_branch, local_solution_branch)?;
+    local_repo.switch_branch(local_solution_branch)?;
+    local_repo.rebase(initial_scaffold_hash, &remote_scaffold_branch)?;
+    local_repo.push("origin", local_solution_branch, local_solution_branch)?;
+    local_repo.switch_branch("main")?;
+
+    let pr_title = format!(
+        "Reference solution for {}",
+        &requested_task.issue_template.title,
+    );
+    let pr = forgejo
+        .create_pr(
+            &quest.owner,
+            &quest.repo,
+            local_scaffold_branch.to_string(),
+            local_solution_branch.to_string(),
+            pr_title,
+            "".to_string(),
+        )
+        .await?;
+
+    requested_task_instance.reference_solution = Some(pr.clone());
+    quests.store_quest(quest_id, quest)?;
+
+    Ok(Json(pr))
 }
 
 async fn get_reference_solution(

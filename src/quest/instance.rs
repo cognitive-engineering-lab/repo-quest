@@ -39,6 +39,7 @@ pub struct Task {
     pub pr: PullRequest,
     /// The git hash of the scaffolding branch at the time when the PR was created.
     pub initial_scaffolding_hash: String,
+    pub reference_solution: Option<PullRequest>,
 }
 
 /// An instantiated quest.
