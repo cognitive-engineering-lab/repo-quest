@@ -88,10 +88,7 @@ async fn main() -> Result<()> {
     let mut prev_scaffolding_branch = "main".to_string();
     repo.create_tracking_branch("origin/main", "main")?;
     for Chapter {
-        name,
-        label,
-        no_starter,
-        ..
+        label, no_starter, ..
     } in &meta.chapters
     {
         let scaffolding_branch = format!("{label}-a");
@@ -99,11 +96,6 @@ async fn main() -> Result<()> {
             repo.create_tracking_branch(&format!("origin/{label}-a"), &scaffolding_branch)?;
         } else {
             repo.create_branch(&prev_scaffolding_branch, &format!("{label}-a"))?;
-            // create empty commit so that a PR can be created from the branch
-            repo.create_empty_commit(
-                &scaffolding_branch,
-                &format!("Initial commit for chapter {name}"),
-            )?;
         }
         prev_scaffolding_branch = scaffolding_branch;
         repo.create_tracking_branch(&format!("origin/{label}-b"), &format!("{label}-b"))?;
