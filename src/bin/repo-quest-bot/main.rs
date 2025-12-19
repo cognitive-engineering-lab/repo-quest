@@ -489,10 +489,15 @@ async fn create_reference_solution(
 }
 
 async fn get_reference_solution(
-    State(_state): State<Arc<Mutex<AppState>>>,
-    Path(_quest_id): Path<i64>,
-    Path(_chapter_id): Path<String>,
-) -> Result<Json<i64>> {
+    State(state): State<Arc<Mutex<AppState>>>,
+    Path(query): Path<ReferenceSolutionQuery>,
+) -> Result<Json<PullRequest>> {
+    let mut _state = state.lock().await;
+    let ReferenceSolutionQuery {
+        quest_id: _,
+        chapter_id: _,
+    } = query;
+
     todo!()
 }
 
