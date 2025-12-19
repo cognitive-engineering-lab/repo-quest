@@ -1,6 +1,6 @@
 {{ if .IsSigned }}
 <a id="current-task-link" class="right item">Current Task</a>
-<button class="right button ui">Add Solution</button>
+<span id="solution-button-span"></span>
 
 <script>
  fetch("http:///localhost:8000/quest/{{.Repository.ID}}/chapter/current", {
@@ -8,14 +8,58 @@
      headers: { "Content-Type": "application/json" },
  }).then(function(response) {
      if (!response.ok) {
-         throw new Error(`Error starting quest: ${response.status} ${response.body}`);
+         throw new Error(`Error getting current quest chapter: ${response.status} ${response.body}`);
      }
      return response.json();
  }).then(function(response) {
      const currentTaskLink = document.getElementById("current-task-link");
-     console.log(response);
      currentTaskLink.href = response.issueUrl;
  });
+
+
+ function createSolution(event) {
+     fetch("http:///localhost:8000/quest/{{.Repository.ID}}/chapter/current/reference_solution", {
+         method: "POST",
+         headers: { "Content-Type": "application/json" },
+     }).then(function(response) {
+         if (!response.ok) {
+             throw new Error(`Error starting quest: ${response.status} ${response.body}`);
+         }
+         return response.json();
+     }).then(function(response) {
+         window.location.href = response.url;
+     });
+ }
+
+ fetch("http:///localhost:8000/quest/{{.Repository.ID}}/chapter/current/reference_solution", {
+     method: "GET",
+     headers: { "Content-Type": "application/json" },
+ }).then(function(response) {
+     if (!response.ok) {
+         throw new Error(`Error checking reference solution status: ${response.status} ${response.body}`);
+     }
+     return response.json();
+ }).then(function(response) {
+     const solnButtonSpan = document.getElementById("solution-button-span");
+     if (response == null) {
+         const button = document.createElement("a");
+         button.type = "button";
+         button.classList.add("right");
+         button.classList.add("button");
+         button.classList.add("ui");
+         button.addEventListener("click", createSolution);
+         button.append("Add Solution PR");
+         solnButtonSpan.append(button)
+     } else {
+         const link = document.createElement("a");
+         link.href = response.url;
+         link.classList.add("right");
+         link.classList.add("item");
+         link.append("View Solution PR");
+         solnButtonSpan.append(link)
+     }
+ });
+ // <button class="right button ui">Add Solution</button>
 </script>
 
 {{ end }}
