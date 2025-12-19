@@ -165,6 +165,10 @@ async fn main() -> Result<()> {
             "/quest/{questId}/chapter/{chapterId}/reference_solution",
             get(get_reference_solution).post(create_reference_solution),
         )
+        .route(
+            "/quest/{questId}/chapter/current/reference_solution",
+            get(get_current_reference_solution).post(create_current_reference_solution),
+        )
         .with_state(state)
         .layer(cors);
     let app = NormalizePathLayer::trim_trailing_slash().layer(app);
@@ -401,6 +405,20 @@ pub struct ReferenceSolutionQuery {
     chapter_id: Option<usize>,
 }
 
+async fn create_current_reference_solution(
+    state: State<Arc<Mutex<AppState>>>,
+    Path(quest_id): Path<i64>,
+) -> Result<Json<PullRequest>> {
+    create_reference_solution(
+        state,
+        Path(ReferenceSolutionQuery {
+            quest_id,
+            chapter_id: None,
+        }),
+    )
+    .await
+}
+
 async fn create_reference_solution(
     State(state): State<Arc<Mutex<AppState>>>,
     Path(query): Path<ReferenceSolutionQuery>,
@@ -486,6 +504,20 @@ async fn create_reference_solution(
     quests.store_quest(quest_id, quest)?;
 
     Ok(Json(pr))
+}
+
+async fn get_current_reference_solution(
+    state: State<Arc<Mutex<AppState>>>,
+    Path(quest_id): Path<i64>,
+) -> Result<Json<Option<PullRequest>>> {
+    get_reference_solution(
+        state,
+        Path(ReferenceSolutionQuery {
+            quest_id,
+            chapter_id: None,
+        }),
+    )
+    .await
 }
 
 async fn get_reference_solution(
