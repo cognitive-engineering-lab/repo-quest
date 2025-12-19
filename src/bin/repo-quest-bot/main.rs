@@ -456,7 +456,10 @@ async fn create_reference_solution(
         .get_mut(chapter_id)
         .with_context(|| format!("Quest instance {quest_id} has no chapter {chapter_id}."))?;
 
-    let requested_task = quest_definition
+    let pr = if let Some(pr) = &requested_task_instance.reference_solution {
+        pr.clone()
+    } else {
+        let requested_task = quest_definition
         .metadata
         .tasks
         .get(chapter_id)
@@ -466,42 +469,46 @@ async fn create_reference_solution(
             )
         })?;
 
-    // TODO: Figure out how to open the PR for various circumstances, such as
-    // for a previously-completed chapter where the scaffolding branch has been
-    // deleted.
-    let remote_solution_branch = format!(
-        "refs/remotes/quest/{}",
-        &requested_task.reference_solution.0
-    );
-    let local_solution_branch = &requested_task.reference_solution.0;
-    let remote_scaffold_branch = format!("refs/remotes/quest/{}", &requested_task.scaffolding.0);
-    let local_scaffold_branch = &requested_task.scaffolding.0;
+        // TODO: Figure out how to open the PR for various circumstances, such as
+        // for a previously-completed chapter where the scaffolding branch has been
+        // deleted.
+        let remote_solution_branch = format!(
+            "refs/remotes/quest/{}",
+            &requested_task.reference_solution.0
+        );
+        let local_solution_branch = &requested_task.reference_solution.0;
+        let remote_scaffold_branch =
+            format!("refs/remotes/quest/{}", &requested_task.scaffolding.0);
+        let local_scaffold_branch = &requested_task.scaffolding.0;
 
-    let initial_scaffold_hash = &requested_task_instance.initial_scaffolding_hash;
+        let initial_scaffold_hash = &requested_task_instance.initial_scaffolding_hash;
 
-    local_repo.create_branch(&remote_solution_branch, local_solution_branch)?;
-    local_repo.switch_branch(local_solution_branch)?;
-    local_repo.rebase(initial_scaffold_hash, &remote_scaffold_branch)?;
-    local_repo.push("origin", local_solution_branch, local_solution_branch)?;
-    local_repo.switch_branch("main")?;
+        local_repo.create_branch(&remote_solution_branch, local_solution_branch)?;
+        local_repo.switch_branch(local_solution_branch)?;
+        local_repo.rebase(initial_scaffold_hash, &remote_scaffold_branch)?;
+        local_repo.push("origin", local_solution_branch, local_solution_branch)?;
+        local_repo.switch_branch("main")?;
 
-    let pr_title = format!(
-        "Reference solution for {}",
-        &requested_task.issue_template.title,
-    );
-    let pr = forgejo
-        .create_pr(
-            &quest.owner,
-            &quest.repo,
-            local_scaffold_branch.to_string(),
-            local_solution_branch.to_string(),
-            pr_title,
-            "".to_string(),
-        )
-        .await?;
+        let pr_title = format!(
+            "Reference solution for {}",
+            &requested_task.issue_template.title,
+        );
+        let pr = forgejo
+            .create_pr(
+                &quest.owner,
+                &quest.repo,
+                local_scaffold_branch.to_string(),
+                local_solution_branch.to_string(),
+                pr_title,
+                "".to_string(),
+            )
+            .await?;
 
-    requested_task_instance.reference_solution = Some(pr.clone());
-    quests.store_quest(quest_id, quest)?;
+        requested_task_instance.reference_solution = Some(pr.clone());
+        quests.store_quest(quest_id, quest)?;
+
+        pr
+    };
 
     Ok(Json(pr))
 }
