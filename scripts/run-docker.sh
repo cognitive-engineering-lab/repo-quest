@@ -39,7 +39,7 @@ if [ -n "$recreate_volume" ] && docker volume inspect "$volume" >/dev/null 2>&1;
     docker volume rm "$volume"
 fi
 
-if ! docker volume exists "$volume"; then
+if ! docker volume inspect "$volume" >/dev/null 2>&1; then
     echo "Creating new docker volume $volume"
     docker volume create "$volume"
 else
