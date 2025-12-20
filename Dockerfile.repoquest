@@ -11,26 +11,23 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     cargo build --release && \
     cp target/release/repo-quest-bot /root/app/repo-quest-bot
 
-FROM codeberg.org/forgejo/forgejo:13-rootless
+FROM alpine:latest
 
-# Set up the CI runner
-USER root
 RUN apk add \
-    podman \
-    podman-docker \
-    nodejs \
-    npm \
+    dumb-init \
     openssl \
-    forgejo-runner
-RUN mkdir -p /data && \
-    chown -R 1000:1000 /data
-
-# Switch back to git user
-USER 1000:1000
+    curl \
+    git \
+    tar \
+    gzip
 
 COPY --from=rq-bot-build /root/app/repo-quest-bot /usr/local/bin/repo-quest-bot
-ADD --chmod=644 app.ini /etc/templates/app.ini
 ADD --chmod=755 run-repoquest.sh /usr/local/bin/run-repoquest.sh
-ADD --chown=1000:1000 custom/templates "$GITEA_CUSTOM/templates"
+
+RUN adduser -S -D -h /srv/repoquest repoquest
+USER repoquest
+
+RUN git config --global user.name "repoquest"
+RUN git config --global user.email "repoquest@example.com"
 
 ENTRYPOINT ["run-repoquest.sh"]

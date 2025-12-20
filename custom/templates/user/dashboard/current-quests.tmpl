@@ -6,7 +6,7 @@
 
     <script>
      function populateQuests() {
-         fetch('http://localhost:8000/quest')
+         fetch('{{AppSubUrl}}/repoquest/quest')
              .then(function(response) {
                  if (!response.ok) {
                      throw new Error("Error starting quest: {response.status} {response.body}");

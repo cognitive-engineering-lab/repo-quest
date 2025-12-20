@@ -11,31 +11,29 @@ explain programming concepts.
 To run RepoQuest using Docker, run
 
 ```
-./scripts/build-docker.sh
-./scripts/run-docker.sh
+docker compose up --build
 ```
 
 To run RepoQuest using Podman, run
 
 ```
-./scripts/build-podman.sh
-./scripts/run-podman.sh
+podman compose up --build
 ```
 
-The run scripts will make use of a Docker or Podman volume called
-`repo-quest-data` if it exists, and if not, will create it.
-
-Once you have done that, you can access RepoQuest at
-[https://localhost:3000/](https://localhost:3000/). You will need to register so
-that RepoQuest knows your email address (for correctly associating commits). To
-clone from and push to the RepoQuest instance, you can either use the username
-and password you registered with (e.g., `git clone
+Once you have run that command and the `reverse-proxy` service has started, you
+can access RepoQuest at [https://localhost:8085/](https://localhost:8085/). You
+will need to register so that RepoQuest knows your email address (for correctly
+associating commits). To clone from and push to the RepoQuest instance, you can
+either use the username and password you registered with (e.g., `git clone
 http://username:password@localhost:3000/username/repo.git`) or you can register
 an SSH with RepoQuest key in the user preferences section of the UI (e.g., `git
 clone ssh://git@localhost:2222/username/repo.git`).
 
-To start a quest after registering, first [upload a quest
-definition bundle](http://localhost:3000) (such as [rqst-async.tgz]()), and then start the
+Docker or Podman volumes associated with the compose service will persist your
+configuration and the quest data.
+
+To start a quest after registering, first [upload a quest definition
+bundle](http://localhost:8085) (such as [rqst-async.tgz]()), and then start the
 quest.
 
 > [!NOTE]
@@ -181,5 +179,8 @@ above](#quest-development).
 
 ## RepoQuest development
 
-In addition to ports 3000 and 2222 for HTTP and SSH, port 8000 (on which runs
-the RepoQuest bot) is also exposed from the Docker container.
+Unless overridden by command line options, ports 8085 and 2222 are published
+from the container. 8085 is managed by an nginx reverse proxy that redirects
+requests to paths beginning with /repoquest/ to port 8000 internally, which the
+RepoQuest bot listens on. The remaining requests are redirected to port 3000
+internally, which Forgejo listens on. Port 2222 is used for SSH.

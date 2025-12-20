@@ -2,8 +2,9 @@ mod forgejo_hook;
 
 use std::{
     collections::HashMap,
-    env, fs,
+    fs,
     io::{Seek, Write as _},
+    net::{IpAddr, Ipv6Addr, SocketAddr},
     path::PathBuf,
     sync::Arc,
     time::Duration,
@@ -18,6 +19,7 @@ use axum::{
     response::IntoResponse,
     routing::{get, post},
 };
+use clap::Parser;
 use env_logger::Env;
 use flate2::read::GzDecoder;
 use log::{debug, info};
@@ -43,6 +45,7 @@ use repo_quest::{
 #[derive(Clone)]
 struct AppState {
     forgejo: ForgejoBackend,
+    forgejo_url: Url,
     quest_definitions: QuestDefinitionIndex,
     quest_instances: QuestInstanceIndex,
 }
@@ -67,16 +70,34 @@ impl IntoResponse for AppError {
 
 type Result<T> = std::result::Result<T, AppError>;
 
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    /// Directory where RepoQuest bot state is stored
+    #[arg(long)]
+    state_dir: PathBuf,
+    /// Base URL for the Forgejo instance
+    #[arg(long, default_value = "http://forgejo:3000")]
+    forgejo_url: Url,
+    /// Base URL for Forgejo to access this bot's hook
+    #[arg(long, default_value = "http://repoquest:8000")]
+    hook_url: Url,
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
+    let Args {
+        state_dir,
+        forgejo_url,
+        hook_url,
+    } = Args::parse();
+
     #[cfg(not(debug_assertions))]
     env_logger::Builder::from_env(Env::default().default_filter_or("warn")).init();
     #[cfg(debug_assertions)]
     env_logger::Builder::from_env(Env::default().default_filter_or("debug")).init();
 
-    let args: Vec<String> = env::args().collect();
-
-    let given_quest_dir = PathBuf::from(args.get(1).unwrap());
+    let given_quest_dir = state_dir;
     if !given_quest_dir.is_dir() {
         fs::create_dir_all(&given_quest_dir)
             .with_context(|| format!("Could not create dir {given_quest_dir:?}"))?;
@@ -92,15 +113,19 @@ async fn main() -> Result<()> {
             password: "repoquest",
             mfa: None,
         };
-        let url = Url::parse("http://localhost:3000").unwrap();
-        ForgejoBackend::new(auth, url)
+        ForgejoBackend::new(auth, forgejo_url.clone())
     };
     let quest_definitions = QuestDefinitionIndex::load_or_init(quest_dir.join("definitions"))?;
     let quest_instances = QuestInstanceIndex::load_or_init(quest_dir.join("instances"))?;
 
     // register to receive webhooks
+
     forgejo
-        .register_webhook(Url::parse("http://localhost:8000/hook").unwrap())
+        .register_webhook(
+            hook_url
+                .join("hook")
+                .context("Could not append to hook URL.")?,
+        )
         .await?;
 
     // A note on concurrency:
@@ -114,6 +139,7 @@ async fn main() -> Result<()> {
     // them in parallel.
     let state = Arc::new(Mutex::new(AppState {
         forgejo,
+        forgejo_url,
         quest_definitions,
         quest_instances,
     }));
@@ -174,7 +200,8 @@ async fn main() -> Result<()> {
     let app = NormalizePathLayer::trim_trailing_slash().layer(app);
 
     // run our app with hyper, listening globally on port 8000
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:8000").await.unwrap();
+    let addr = &SocketAddr::new(IpAddr::from(Ipv6Addr::UNSPECIFIED), 8000);
+    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, ServiceExt::<Request>::into_make_service(app))
         .await
         .unwrap();
@@ -379,6 +406,12 @@ async fn start_quest(
     remote_url
         .set_password(Some("repoquest"))
         .map_err(|_| anyhow!("Can't set remote password"))?;
+    remote_url
+        .set_host(state.forgejo_url.host_str())
+        .map_err(|_| anyhow!("Can't set remote host."))?;
+    remote_url
+        .set_port(state.forgejo_url.port())
+        .map_err(|_| anyhow!("Can't set remote port."))?;
 
     local_repo.add_remote("origin", remote_url.as_str())?;
 

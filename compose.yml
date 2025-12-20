@@ -1,0 +1,51 @@
+volumes:
+  repoquest-forgejo:
+  repoquest-bot:
+services:
+  forgejo:
+    image: repoquest-forgejo
+    build: 
+      dockerfile: Dockerfile.forgejo
+    healthcheck:
+      test: '[ -f "$(dirname "$${GITEA_APP_INI}")"/configured ] && curl -s http://localhost:3000/healthz'
+      start_period: 10s
+      start_interval: 2s
+    ports:
+      - 2222:2222
+    volumes:
+      - type: volume
+        source: repoquest-forgejo
+        target: /var/lib/gitea
+        # volume:
+        #   subpath: gitea
+  forgejo-runner:
+    image: repoquest-forgejo-runner
+    build:
+      dockerfile: Dockerfile.forgejo-runner
+    depends_on:
+      forgejo:
+        condition: service_healthy
+  repoquest:
+    image: repoquest
+    build:
+      dockerfile: Dockerfile.repoquest
+    depends_on:
+      forgejo:
+        condition: service_healthy
+    env:
+      - RUST_LOG
+    volumes:
+      - type: volume
+        source: repoquest-bot
+        target: /srv/repoquest
+        # volume:
+        #   subpath: repoquest
+  reverse-proxy:
+    image: repoquest-reverse-proxy
+    build:
+       dockerfile: Dockerfile.reverse-proxy
+    ports:
+      - 8085:8085
+    depends_on:
+      - forgejo
+      - repoquest

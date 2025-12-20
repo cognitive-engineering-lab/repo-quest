@@ -69,7 +69,7 @@
  function submitInstallQuest(event) {
      event.submitter.disabled = true;
      const formData = new FormData(event.target);
-     fetch("http:///localhost:8000/quest_definition", {
+     fetch("{{AppSubUrl}}/repoquest/quest_definition", {
          method: "POST",
          body: formData,
      }).then(function(response) {
@@ -96,7 +96,7 @@
          "username": formData.get("username"),
          "questTemplateId": Number(formData.get("questTemplateId")),
      };
-     fetch("http:///localhost:8000/quest", {
+     fetch("{{AppSubUrl}}/repoquest/quest", {
          method: "POST",
          headers: { "Content-Type": "application/json" },
          body: JSON.stringify(data),
@@ -116,7 +116,7 @@
  installQuestForm.addEventListener("submit", submitInstallQuest);
 
  // Populate quest templates
- fetch("http://localhost:8000/quest_definition")
+ fetch("{{AppSubUrl}}/repoquest/quest_definition")
      .then(function(response) {
          if (!response.ok) {
              throw new Error(`Error starting quest: ${response.status} ${response.body}`);
