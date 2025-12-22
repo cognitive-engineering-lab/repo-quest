@@ -11,24 +11,24 @@ explain programming concepts.
 To run RepoQuest using Docker, in the root of this repository run
 
 ```sh
-docker compose up --build --detatch
+docker compose up --build --detach
 ```
 
 To run RepoQuest using Podman, in the root of this repository run
 
 ```sh
-podman compose up --build --detatch
+podman compose up --build --detach
 ```
 
 You can control the port that RepoQuest uses for its HTTP server with the
 `RQ_PORT` environment variable. For example,
 
 ```sh
-RQ_PORT=8000 docker compose up --build --detatch
+RQ_PORT=8000 docker compose up --build --detach
 ```
 
 Once that command returns successfully, you can access RepoQuest at
-[https://localhost:8085/](https://localhost:8085/). You will need to register so
+[http://localhost:8085/](http://localhost:8085/). You will need to register so
 that RepoQuest knows your email address (for correctly associating commits). To
 clone from and push to the RepoQuest instance, you can either use the username
 and password you registered with (e.g., `git clone
