@@ -4,7 +4,7 @@ volumes:
 services:
   forgejo:
     image: repoquest-forgejo
-    build: 
+    build:
       dockerfile: Dockerfile.forgejo
     healthcheck:
       test: '[ -f "$(dirname "$${GITEA_APP_INI}")"/configured ] && curl -s http://localhost:3000/healthz'
