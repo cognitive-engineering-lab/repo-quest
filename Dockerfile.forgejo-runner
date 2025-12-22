@@ -1,0 +1,12 @@
+FROM data.forgejo.org/forgejo/runner:12
+
+USER root
+RUN apk add \
+    dumb-init \
+    curl
+ADD --chmod=755 run-forgejo-runner.sh /usr/local/bin/run-forgejo-runner.sh
+
+USER 1000
+
+ENV RQ_PORT=8085
+ENTRYPOINT ["run-forgejo-runner.sh"]

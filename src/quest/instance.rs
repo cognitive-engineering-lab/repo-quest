@@ -10,22 +10,23 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
-use url::Url;
 
 use crate::git::GitRepo;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PullRequest {
+    pub owner: String,
+    pub repo: String,
     pub number: u64,
-    pub url: Url,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Issue {
+    pub owner: String,
+    pub repo: String,
     pub number: u64,
-    pub url: Url,
 }
 
 /// An instantiated task in a quest.
@@ -52,8 +53,6 @@ pub struct QuestMetadata {
     pub owner: String,
     /// The Forgejo repo for this quest.
     pub repo: String,
-    /// The Forgejo repo URL for this quest
-    pub repo_url: Url,
     /// The instantiated tasks for this quest, in the same order as the
     /// `task_order` field in the `QuestDefinition`.
     pub tasks: Vec<Task>,

@@ -187,8 +187,8 @@ impl ForgejoBackend {
 
     pub async fn create_task(
         &self,
-        username: &str,
-        repo_name: &str,
+        username: String,
+        repo_name: String,
         template: &TaskTemplate,
         mut task_info: HashMap<String, String>,
         hashes: HashMap<String, String>,
@@ -197,8 +197,8 @@ impl ForgejoBackend {
         let issue = self
             .forgejo
             .issue_create_issue(
-                username,
-                repo_name,
+                &username,
+                &repo_name,
                 CreateIssueOption {
                     assignee: Some(username.to_string()),
                     assignees: None,
@@ -223,8 +223,8 @@ impl ForgejoBackend {
         let pr = self
             .forgejo
             .repo_create_pull_request(
-                username,
-                repo_name,
+                &username,
+                &repo_name,
                 CreatePullRequestOption {
                     assignee: Some(username.to_string()),
                     assignees: None,
@@ -256,8 +256,8 @@ impl ForgejoBackend {
             .context("Couldn't instantiate issue template")?;
         self.forgejo
             .issue_edit_issue(
-                username,
-                repo_name,
+                &username,
+                &repo_name,
                 issue_number,
                 EditIssueOption {
                     assignee: None,
@@ -288,8 +288,8 @@ impl ForgejoBackend {
         };
         self.forgejo
             .repo_edit_pull_request(
-                username,
-                repo_name,
+                &username,
+                &repo_name,
                 pr_number,
                 EditPullRequestOption {
                     assignee: None,
@@ -315,7 +315,7 @@ impl ForgejoBackend {
                 updated_at: None,
             };
             self.forgejo
-                .issue_create_comment(username, repo_name, issue_number, body)
+                .issue_create_comment(&username, &repo_name, issue_number, body)
                 .await?;
         }
 
@@ -349,7 +349,7 @@ impl ForgejoBackend {
                         event: Some("COMMENT".to_string()),
                     };
                     self.forgejo
-                        .repo_create_pull_review(username, repo_name, pr_number, review)
+                        .repo_create_pull_review(&username, &repo_name, pr_number, review)
                         .await?;
                     // Reviews with event type COMMENT are not separately submitted.
                 } else {
@@ -358,7 +358,7 @@ impl ForgejoBackend {
                         updated_at: None,
                     };
                     self.forgejo
-                        .issue_create_comment(username, repo_name, pr_number, body)
+                        .issue_create_comment(&username, &repo_name, pr_number, body)
                         .await?;
                 }
             }
@@ -366,16 +366,14 @@ impl ForgejoBackend {
 
         Ok(Task {
             issue: Issue {
+                owner: username.clone(),
+                repo: repo_name.clone(),
                 number: issue_number,
-                url: issue.html_url.with_context(|| {
-                    format!("No issue URL for {username}/{repo_name}#{issue_number}")
-                })?,
             },
             pr: PullRequest {
+                owner: username.clone(),
+                repo: repo_name.clone(),
                 number: pr_number,
-                url: pr.html_url.with_context(|| {
-                    format!("No issue URL for {username}/{repo_name}#{pr_number}")
-                })?,
             },
             initial_scaffolding_hash,
             reference_solution: None,
@@ -384,8 +382,8 @@ impl ForgejoBackend {
 
     pub async fn create_pr(
         &self,
-        username: &str,
-        repo_name: &str,
+        username: String,
+        repo_name: String,
         base: String,
         head: String,
         pr_title: String,
@@ -394,8 +392,8 @@ impl ForgejoBackend {
         let pr = self
             .forgejo
             .repo_create_pull_request(
-                username,
-                repo_name,
+                &username,
+                &repo_name,
                 CreatePullRequestOption {
                     assignee: Some(username.to_string()),
                     assignees: None,
@@ -411,12 +409,12 @@ impl ForgejoBackend {
             .await
             .with_context(|| "Couldn't create PR.")?;
         let pr_number = pr.number.context("No PR id.")? as u64;
-        let pr_url = pr.url.context("No PR url.")?;
         debug!("Created pull request {username}/{repo_name}/{pr_number}.");
 
         Ok(PullRequest {
+            owner: username,
+            repo: repo_name,
             number: pr_number,
-            url: pr_url,
         })
     }
 
