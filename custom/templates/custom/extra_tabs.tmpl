@@ -3,7 +3,7 @@
 <span id="solution-button-span"></span>
 
 <script>
- fetch("{{AppSubUrl}}/repoquest/quest/{{.Repository.ID}}/chapter/current", {
+ fetch("{{AppSubUrl}}/rq/quest/{{.Repository.ID}}/chapter/current", {
      method: "GET",
      headers: { "Content-Type": "application/json" },
  }).then(function(response) {
@@ -23,7 +23,7 @@
 
 
  function createSolution(event) {
-     fetch("{{AppSubUrl}}/repoquest/quest/{{.Repository.ID}}/chapter/current/reference_solution", {
+     fetch("{{AppSubUrl}}/rq/quest/{{.Repository.ID}}/chapter/current/reference_solution", {
          method: "POST",
          headers: { "Content-Type": "application/json" },
      }).then(function(response) {
@@ -36,7 +36,7 @@
      });
  }
 
- fetch("{{AppSubUrl}}/repoquest/quest/{{.Repository.ID}}/chapter/current/reference_solution", {
+ fetch("{{AppSubUrl}}/rq/quest/{{.Repository.ID}}/chapter/current/reference_solution", {
      method: "GET",
      headers: { "Content-Type": "application/json" },
  }).then(function(response) {
