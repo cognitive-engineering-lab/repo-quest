@@ -8,33 +8,41 @@ explain programming concepts.
 
 ## Running RepoQuest
 
-To run RepoQuest using Docker, run
+To run RepoQuest using Docker, in the root of this repository run
 
-```
-docker compose up --build
-```
-
-To run RepoQuest using Podman, run
-
-```
-podman compose up --build
+```sh
+docker compose up --build --detatch
 ```
 
-Once you have run that command and the `reverse-proxy` service has started, you
-can access RepoQuest at [https://localhost:8085/](https://localhost:8085/). You
-will need to register so that RepoQuest knows your email address (for correctly
-associating commits). To clone from and push to the RepoQuest instance, you can
-either use the username and password you registered with (e.g., `git clone
+To run RepoQuest using Podman, in the root of this repository run
+
+```sh
+podman compose up --build --detatch
+```
+
+You can control the port that RepoQuest uses for its HTTP server with the
+`RQ_PORT` environment variable. For example,
+
+```sh
+RQ_PORT=8000 docker compose up --build --detatch
+```
+
+Once that command returns successfully, you can access RepoQuest at
+[https://localhost:8085/](https://localhost:8085/). You will need to register so
+that RepoQuest knows your email address (for correctly associating commits). To
+clone from and push to the RepoQuest instance, you can either use the username
+and password you registered with (e.g., `git clone
 http://username:password@localhost:3000/username/repo.git`) or you can register
 an SSH with RepoQuest key in the user preferences section of the UI (e.g., `git
 clone ssh://git@localhost:2222/username/repo.git`).
 
-Docker or Podman volumes associated with the compose service will persist your
+To shut down RepoQuest, run `podman compose down` in the same directory. Docker
+or Podman volumes associated with the compose service will persist your
 configuration and the quest data.
 
 To start a quest after registering, first [upload a quest definition
-bundle](http://localhost:8085) (such as [rqst-async.tgz]()), and then start the
-quest.
+bundle](http://localhost:8085) (such as [rqst-async.tgz](#TODO)), and then start
+the quest.
 
 > [!NOTE]
 >
