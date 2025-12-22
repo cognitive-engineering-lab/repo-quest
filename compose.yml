@@ -10,6 +10,8 @@ services:
       test: '[ -f "$(dirname "$${GITEA_APP_INI}")"/configured ] && curl -s http://localhost:3000/healthz'
       start_period: 10s
       start_interval: 2s
+    environment:
+      - RQ_PORT
     ports:
       - 2222:2222
     volumes:
@@ -32,7 +34,7 @@ services:
     depends_on:
       forgejo:
         condition: service_healthy
-    env:
+    environment:
       - RUST_LOG
     volumes:
       - type: volume
@@ -40,12 +42,14 @@ services:
         target: /srv/repoquest
         # volume:
         #   subpath: repoquest
+    environment:
+      - RQ_PORT
   reverse-proxy:
     image: repoquest-reverse-proxy
     build:
        dockerfile: Dockerfile.reverse-proxy
     ports:
-      - 8085:8085
+      - "${RQ_PORT}:8085"
     depends_on:
       - forgejo
       - repoquest
