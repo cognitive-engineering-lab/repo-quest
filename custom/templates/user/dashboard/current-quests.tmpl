@@ -21,18 +21,20 @@
                          const li = document.createElement('li');
 
                          const repoLink = document.createElement('a');
-                         repoLink.href = quest.repoUrl;
+                         repoLink.href = `{{AppSubUrl}}/${quest.owner}/${quest.repo}`;
                          repoLink.textContent = quest.name;
 
                          li.append(repoLink);
 
                          if (quest.taskInfo) {
+                             const issue = quest.taskInfo.issue;
                              const issueLink = document.createElement('a');
-                             issueLink.href = quest.taskInfo.issueUrl;
+                             issueLink.href = `{{AppSubUrl}}/${issue.owner}/${issue.repo}/issues/${issue.number}`;
                              issueLink.textContent = "issue"
 
+                             const pr = quest.taskInfo.pr;
                              const prLink = document.createElement('a');
-                             prLink.href = quest.taskInfo.prUrl;
+                             prLink.href = `{{AppSubUrl}}/${pr.owner}/${pr.repo}/pulls/${pr.number}`;
                              prLink.textContent = "PR"
                              li.append(" (", issueLink, " | ", prLink, ")");
                          }

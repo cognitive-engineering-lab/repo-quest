@@ -13,7 +13,12 @@
      return response.json();
  }).then(function(response) {
      const currentTaskLink = document.getElementById("current-task-link");
-     currentTaskLink.href = response.issueUrl;
+     if (!response) {
+         currentTaskLink.remove();
+     } else {
+         const issue = response.task.issue;
+         currentTaskLink.href = `{{AppSubUrl}}/${issue.owner}/${issue.repo}/issues/${issue.number}`;
+     }
  });
 
 
@@ -26,8 +31,8 @@
              throw new Error(`Error starting quest: ${response.status} ${response.body}`);
          }
          return response.json();
-     }).then(function(response) {
-         window.location.href = response.url;
+     }).then(function(pr) {
+         window.location.href = `{{AppSubUrl}}/${pr.owner}/${pr.repo}/pulls/${pr.number}`;
      });
  }
 
@@ -39,9 +44,9 @@
          throw new Error(`Error checking reference solution status: ${response.status} ${response.body}`);
      }
      return response.json();
- }).then(function(response) {
+ }).then(function(pr) {
      const solnButtonSpan = document.getElementById("solution-button-span");
-     if (response == null) {
+     if (!pr) {
          const button = document.createElement("a");
          button.type = "button";
          button.classList.add("right");
@@ -52,7 +57,7 @@
          solnButtonSpan.append(button)
      } else {
          const link = document.createElement("a");
-         link.href = response.url;
+         link.href = `{{AppSubUrl}}/${pr.owner}/${pr.repo}/pulls/${pr.number}`;
          link.classList.add("right");
          link.classList.add("item");
          link.append("View Solution PR");

@@ -106,7 +106,12 @@
          }
          return response.json();
      }).then(function(response) {
-         window.location.href = response.url;
+         if (response.task) {
+             const issue = response.task.issue;
+             window.location.href = `{{AppSubUrl}}/${issue.owner}/${issue.repo}/issues/${issue.number}`;
+         } else {
+             window.location.href = response.repo_url;
+         }
      });
      event.preventDefault();
  }

@@ -303,10 +303,12 @@ async fn add_quest_definition(
 #[serde(rename_all = "camelCase")]
 struct QuestInfo {
     name: String,
-    repo_url: Url,
+    owner: String,
+    repo: String,
     task_info: Option<Task>,
 }
 
+// TODO: switch to list for consistent ordering
 async fn get_quests(
     State(state): State<Arc<Mutex<AppState>>>,
 ) -> Result<Json<HashMap<i64, QuestInfo>>> {
@@ -319,7 +321,8 @@ async fn get_quests(
         let quest_defn = quest_defns.definition(quest.definition_id)?;
         let quest_info = QuestInfo {
             name: quest_defn.metadata.title.clone(),
-            repo_url: quest.repo_url.clone(),
+            owner: quest.owner.clone(),
+            repo: quest.repo.clone(),
             task_info: quest.tasks.last().cloned(),
         };
         quests_info.insert(id, quest_info);
@@ -339,8 +342,10 @@ struct StartQuestQuery {
 struct StartQuestResponse {
     /// RepoQuest ID for the quest
     id: i64,
-    /// HTML location for the next step of the quest
-    url: Url,
+    /// Location of the just-created repo
+    repo_url: Url,
+    /// First task information. `None` if the quest has no tasks.
+    task: Option<Task>,
 }
 
 async fn start_quest(
@@ -367,7 +372,6 @@ async fn start_quest(
     // define quest instance
     let quest = QuestMetadata {
         definition_id: query.quest_template_id,
-        repo_url: repo_url.clone(),
         owner: query.username,
         repo: forgejo_repo.name.context("No repo name")?,
         tasks: Vec::new(),
@@ -418,17 +422,17 @@ async fn start_quest(
     // push starter code to upstream main
     local_repo.push("origin", "main", "main")?;
 
-    let mut url = repo_url;
     // start first chapter, if there are chapters
-    if !template.tasks.is_empty() {
+    let task = if !template.tasks.is_empty() {
         // Forgejo can't accept PRs right away... this works around that.
         // TODO: don't return from repo creation until the repo is fully created.
         std::thread::sleep(Duration::from_secs(2));
-        let task = set_current_chapter(&mut state, id, 0).await?;
-        url = task.issue.url;
+        Some(set_current_chapter(&mut state, id, 0).await?)
+    } else {
+        None
     };
 
-    Ok(Json(StartQuestResponse { id, url }))
+    Ok(Json(StartQuestResponse { id, repo_url, task }))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -528,8 +532,8 @@ async fn create_reference_solution(
         );
         let pr = forgejo
             .create_pr(
-                &quest.owner,
-                &quest.repo,
+                quest.owner.clone(),
+                quest.repo.clone(),
                 local_scaffold_branch.to_string(),
                 local_solution_branch.to_string(),
                 pr_title,
@@ -634,8 +638,7 @@ async fn get_chapters(
 #[serde(rename_all = "camelCase")]
 struct ChapterInfo {
     id: usize,
-    issue_url: Url,
-    pr_url: Url,
+    task: Task,
 }
 
 async fn get_current_chapter(
@@ -653,8 +656,7 @@ async fn get_current_chapter(
         let cur_task = &quest.tasks[cur_task_id];
         Some(ChapterInfo {
             id: cur_task_id,
-            issue_url: cur_task.issue.url.clone(),
-            pr_url: cur_task.pr.url.clone(),
+            task: cur_task.clone(),
         })
     } else {
         None
@@ -775,8 +777,8 @@ async fn set_current_chapter(
 
     let task = forgejo
         .create_task(
-            &quest.owner,
-            &quest.repo,
+            quest.owner.clone(),
+            quest.repo.clone(),
             task_template,
             task_info,
             hashes,
