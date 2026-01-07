@@ -18,8 +18,6 @@ services:
       - type: volume
         source: repoquest-forgejo
         target: /var/lib/gitea
-        # volume:
-        #   subpath: gitea
   forgejo-runner:
     image: repoquest-forgejo-runner
     build:
@@ -47,8 +45,6 @@ services:
       - type: volume
         source: repoquest-bot
         target: /srv/repoquest
-        # volume:
-        #   subpath: repoquest
     environment:
       - RQ_PORT
   reverse-proxy:
