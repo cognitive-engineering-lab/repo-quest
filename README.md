@@ -56,7 +56,7 @@ conventions. The [rqst-async quest
 definition](https://github.com/cognitive-engineering-lab/rqst-async/) is a good
 example of a quest definition.
 
-The quest structure is defined by a file called `meta.toml` on the `meta` branch
+The quest structure is defined by a file called `rqst.toml` on the `meta` branch
 of the repository. For example,
 
 ```toml
