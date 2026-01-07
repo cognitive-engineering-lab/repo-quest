@@ -10,10 +10,9 @@ register() {
             --password repoquest \
             --email repoquest@example.com
     echo "Registered admin user 'repoquest' with Forgejo."
-    #token=$(forgejo forgejo-cli actions generate-runner-token)
+    # The runner labels will be set by the runner when it connects.
     forgejo forgejo-cli actions register \
-            --secret "0123456789012345678901234567890123456789" \
-            --labels ubuntu-latest
+            --secret "0123456789012345678901234567890123456789"
     echo "Pre-registered runner with Forgejo."
 
     touch "$(dirname ${GITEA_APP_INI})/configured"

@@ -27,6 +27,13 @@ services:
     depends_on:
       forgejo:
         condition: service_healthy
+    # Let forgejo-runner attempt to kill containers it started before killing
+    # it.
+    stop_grace_period: 30s
+    volumes:
+      - type: bind
+        source: "${RQ_DOCKER_HOST:-/var/run/docker.sock}"
+        target: /var/run/docker.sock
   repoquest:
     image: repoquest
     build:

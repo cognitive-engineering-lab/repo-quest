@@ -5,8 +5,13 @@ RUN apk add \
     dumb-init \
     curl
 ADD --chmod=755 run-forgejo-runner.sh /usr/local/bin/run-forgejo-runner.sh
+ADD --chmod=644 forgejo-runner.yml /etc/forgejo-runner.yml
 
-USER 1000
+# Note that there is no USER directive.
+#
+# The docker socket required for starting sibling containers gets mounted in as
+# root, and there is no straightforward way to change ownership of the socket.
+# As a workaround, we just run forgejo as root.
 
 ENV RQ_PORT=8085
 ENTRYPOINT ["run-forgejo-runner.sh"]

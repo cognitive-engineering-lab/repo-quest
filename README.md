@@ -49,6 +49,23 @@ the quest.
 > rqst-async does not currently distribute a quest bundle, but you can
 > create one by following [the bundling steps below](#bundling-a-quest).
 
+### Forgejo Actions CI support
+
+In order to support Forgejo Actions, the socket for communicating with Docker or
+Podman must be made available to the Forgejo Runner container. For Docker the
+default configuration should work with no changes. For rootless Podman, you will
+have to start the service that provides the socket and then specify the path to
+the socket via the environment variable `RQ_DOCKER_HOST`.
+
+For example,
+
+```sh
+systemctl --user start podman.socket
+RQ_DOCKER_HOST="$XDG_RUNTIME_DIR/podman/podman.sock" \
+    RQ_PORT=3000 \
+    podman compose up --build --detach
+```
+
 ## Quest development
 
 RepoQuest quest definitions are GitHub repositories that follow certain
