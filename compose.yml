@@ -41,12 +41,11 @@ services:
         condition: service_healthy
     environment:
       - RUST_LOG
+      - RQ_PORT
     volumes:
       - type: volume
         source: repoquest-bot
         target: /srv/repoquest
-    environment:
-      - RQ_PORT
   reverse-proxy:
     image: repoquest-reverse-proxy
     build:
