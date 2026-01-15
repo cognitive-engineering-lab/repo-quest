@@ -29,9 +29,30 @@ impl RunCommand for Command {
         C: Display + Debug + Send + Sync + 'static,
         F: FnOnce() -> C,
     {
-        if self.spawn()?.wait()?.success() {
+        let output = self.output()?;
+        if output.status.success() {
+            log::info!(
+                "{:?} stdout: {}",
+                self,
+                String::from_utf8_lossy(&output.stdout)
+            );
+            log::info!(
+                "{:?} stderr: {}",
+                self,
+                String::from_utf8_lossy(&output.stderr)
+            );
             Ok(())
         } else {
+            log::error!(
+                "{:?} stdout: {}",
+                self,
+                String::from_utf8_lossy(&output.stdout)
+            );
+            log::error!(
+                "{:?} stderr: {}",
+                self,
+                String::from_utf8_lossy(&output.stderr)
+            );
             Err(anyhow!(f()))
         }
     }
@@ -41,11 +62,31 @@ impl RunCommand for Command {
         C: Display + Debug + Send + Sync + 'static,
         F: FnOnce() -> C,
     {
-        let output = self.stdout(std::process::Stdio::piped()).output()?;
+        let output = self.output()?;
         if output.status.success() {
+            log::info!(
+                "{:?} stdout: {}",
+                self,
+                String::from_utf8_lossy(&output.stdout)
+            );
+            log::info!(
+                "{:?} stderr: {}",
+                self,
+                String::from_utf8_lossy(&output.stderr)
+            );
             let output_content = String::from_utf8(output.stdout)?;
             Ok(output_content)
         } else {
+            log::error!(
+                "{:?} stdout: {}",
+                self,
+                String::from_utf8_lossy(&output.stdout)
+            );
+            log::error!(
+                "{:?} stderr: {}",
+                self,
+                String::from_utf8_lossy(&output.stderr)
+            );
             Err(anyhow!(
                 "Child process exited with non-success exit code {}.",
                 output.status
@@ -59,8 +100,18 @@ impl RunCommand for Command {
         C: Display + Debug + Send + Sync + 'static,
         F: FnOnce() -> C,
     {
-        let output = self.stdout(std::process::Stdio::piped()).output()?;
+        let output = self.output()?;
         if output.status.success() {
+            log::info!(
+                "{:?} stdout: {}",
+                self,
+                String::from_utf8_lossy(&output.stdout)
+            );
+            log::info!(
+                "{:?} stderr: {}",
+                self,
+                String::from_utf8_lossy(&output.stderr)
+            );
             let output_content = String::from_utf8(output.stdout)?;
             Ok(output_content
                 .lines()
@@ -69,6 +120,16 @@ impl RunCommand for Command {
                 .with_context(f)?
                 .to_string())
         } else {
+            log::error!(
+                "{:?} stdout: {}",
+                self,
+                String::from_utf8_lossy(&output.stdout)
+            );
+            log::error!(
+                "{:?} stderr: {}",
+                self,
+                String::from_utf8_lossy(&output.stderr)
+            );
             Err(anyhow!(
                 "Child process exited with non-success exit code {}.",
                 output.status
