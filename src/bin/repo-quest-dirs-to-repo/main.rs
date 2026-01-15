@@ -110,7 +110,7 @@ async fn main() -> Result<()> {
     repo.add_all()?;
     repo.commit("Initial commit of quest metadata")?;
 
-    repo.switch_branch("main")?;
+    repo.switch_branch("meta")?;
 
     Ok(())
 }
