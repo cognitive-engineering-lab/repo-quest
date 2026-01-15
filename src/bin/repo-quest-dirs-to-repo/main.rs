@@ -69,8 +69,11 @@ async fn main() -> Result<()> {
             .with_context(|| format!("Could not get string for path of filename of {dir:?}"))?;
 
         let problem_label = dir_name.to_string() + "-a";
-        rsync(&dir.join("scaffold"), &output)?;
-        repo.add_all()?;
+        let scaffold_dir = &dir.join("scaffold");
+        if scaffold_dir.is_dir() {
+            rsync(scaffold_dir, &output)?;
+            repo.add_all()?;
+        }
         repo.commit(&problem_label)?;
         repo.create_branch("main", &problem_label)?;
 
