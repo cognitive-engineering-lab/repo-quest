@@ -6,9 +6,7 @@ use axum::{Json, extract::State};
 use log::debug;
 use serde::Deserialize;
 
-use crate::{AppState, set_current_chapter};
-
-type Result<T> = std::result::Result<T, crate::AppError>;
+use crate::bot::{AppState, Result, set_current_chapter};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct RepositoryHookData {
