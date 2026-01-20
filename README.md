@@ -21,10 +21,11 @@ podman compose up --build --detach
 ```
 
 You can control the port that RepoQuest uses for its HTTP server with the
-`RQ_PORT` environment variable. For example,
+`RQ_PORT` environment variable and the port used for its SSH server with the
+`RQ_SSH_PORT` environment variable. For example,
 
 ```sh
-RQ_PORT=8000 docker compose up --build --detach
+RQ_PORT=8000 RQ_SSH_PORT=2022 docker compose up --build --detach
 ```
 
 Once that command returns successfully, you can access RepoQuest at

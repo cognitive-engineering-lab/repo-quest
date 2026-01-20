@@ -12,8 +12,9 @@ services:
       start_interval: 2s
     environment:
       - RQ_PORT
+      - RQ_SSH_PORT
     ports:
-      - 2222:2222
+      - "${RQ_SSH_PORT:-2222}:2222"
     volumes:
       - type: volume
         source: repoquest-forgejo

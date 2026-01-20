@@ -29,4 +29,6 @@ fi
 
 RQ_PORT="${RQ_PORT:-8085}"
 export GITEA__SERVER__ROOT_URL="http://localhost:$RQ_PORT"
+RQ_SSH_PORT="${RQ_SSH_PORT:-2222}"
+export GITEA__SERVER__SSH_PORT="$RQ_SSH_PORT"
 exec /usr/local/bin/docker-entrypoint.sh
