@@ -143,6 +143,7 @@ be done using the `repo-quest-bundle` binary. For example,
 
 ```sh
 cargo run --bin repo-quest-bundle -- \
+    github \
     --owner cognitive-engineering-lab \
     --repo rqst-async \
     --output rqst-async.tgz \
