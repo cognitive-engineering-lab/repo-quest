@@ -1,7 +1,9 @@
+mod dir;
 mod github;
 
 use std::path::PathBuf;
 
+use crate::dir::*;
 use crate::github::*;
 
 use anyhow::Result;
