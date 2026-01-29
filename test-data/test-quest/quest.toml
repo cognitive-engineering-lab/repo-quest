@@ -1,0 +1,4 @@
+title = "Async Rust"
+author = "cognitive-engineering-lab"
+repo = "rqst-async"
+rq-version = "0.3.0"
