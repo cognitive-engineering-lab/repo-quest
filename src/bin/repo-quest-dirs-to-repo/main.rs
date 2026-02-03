@@ -106,7 +106,7 @@ async fn main() -> Result<()> {
     repo.switch_orphan_branch("meta")?;
     let qc_toml = toml::ser::to_string(&qc)
         .with_context(|| format!("Could not serialize QuestConfig {qc:?}"))?;
-    std::fs::write(output.join("meta.toml"), qc_toml)?;
+    std::fs::write(output.join("rqst.toml"), qc_toml)?;
     repo.add_all()?;
     repo.commit("Initial commit of quest metadata")?;
 
