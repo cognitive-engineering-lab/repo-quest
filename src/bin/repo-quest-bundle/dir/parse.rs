@@ -10,6 +10,9 @@ use regex::Regex;
 
 use super::*;
 
+/// Parse a directory into a [`QuestDefinition`].
+///
+/// See [the parent module][super] for a description of the format.
 pub fn parse(dir: &Path) -> Result<QuestDefinition> {
     let meta: Meta = toml::from_str(&fs::read_to_string(dir.join("quest.toml"))?)?;
     let chapters = parse_chapters(dir)?;
