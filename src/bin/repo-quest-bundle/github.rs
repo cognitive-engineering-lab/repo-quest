@@ -238,7 +238,7 @@ pub async fn bundle_github(
                 }
                 for github_comment in github_pr_comments {
                     let quote = ReviewSubject {
-                        commit: GitCommitHash(github_comment.commit_id),
+                        commit: Some(GitCommitHash(github_comment.commit_id)),
                         file: github_comment.path,
                         old_line: match github_comment.original_line {
                             Some(line) => Some(ReviewLineSubject {

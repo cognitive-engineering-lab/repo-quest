@@ -277,10 +277,13 @@ impl ForgejoBackend {
         debug!("Updated issue {username}/{repo_name}/{issue_number}.");
 
         let pr_body = if let Some(pr_template) = template.pr_template.as_ref() {
-            pr_template
-                .body
-                .instantiate(&task_info)
-                .context("Couldn't instantiate PR template")?
+            format!(
+                "This PR resolves #{issue_number}. (Don't merge until you've added your solution!)\n\n{}",
+                pr_template
+                    .body
+                    .instantiate(&task_info)
+                    .context("Couldn't instantiate PR template")?
+            )
         } else {
             format!(
                 "This PR resolves #{issue_number}. (Don't merge until you've added your solution!)"
@@ -343,7 +346,10 @@ impl ForgejoBackend {
                     let review = CreatePullReviewOptions {
                         body: None,
                         comments: Some(vec![body]),
-                        commit_id: hashes.get(&quote.commit.0).cloned(),
+                        commit_id: quote
+                            .commit
+                            .as_ref()
+                            .and_then(|commit| hashes.get(&commit.0).cloned()),
                         // This event type is needed to avoid having a review
                         // body and makes it submit the given comment directly.
                         event: Some("COMMENT".to_string()),

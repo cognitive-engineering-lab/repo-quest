@@ -3,7 +3,6 @@ mod github;
 
 use std::path::PathBuf;
 
-use crate::dir::*;
 use crate::github::*;
 
 use anyhow::Result;
@@ -59,7 +58,10 @@ async fn main() -> Result<()> {
             owner,
             repo,
         } => bundle_github(output, token, base_uri, owner, repo).await?,
-        Command::Dir { .. } => {}
+        Command::Dir { input } => {
+            let quest = dir::parse(&input)?;
+            dir::bundle(quest, &output)?;
+        }
     };
 
     Ok(())

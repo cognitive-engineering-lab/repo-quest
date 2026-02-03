@@ -162,9 +162,9 @@ fn parse_pull_request(chapter_dir: &Path) -> Result<PullRequest> {
     })
 }
 
-fn parse_pull_request_comments(comments_dir: &Path) -> Result<Vec<PullRequestComment>> {
-    let mut comments = Vec::new();
+fn parse_pull_request_comments(comments_dir: &Path) -> Result<Option<Vec<PullRequestComment>>> {
     if comments_dir.exists() {
+        let mut comments = Vec::new();
         for path in read_dir_sorted_paths(comments_dir)? {
             if path.is_file() && path.extension().is_some_and(|extension| extension == "md") {
                 let comment = parse_pull_request_comment(&path)?;
@@ -175,15 +175,17 @@ fn parse_pull_request_comments(comments_dir: &Path) -> Result<Vec<PullRequestCom
                 comments_dir, path
             );
         }
+        Ok(Some(comments))
+    } else {
+        Ok(None)
     }
-
-    Ok(comments)
 }
 
 fn parse_pull_request_comment(comment_path: &Path) -> Result<PullRequestComment> {
     let comment_file_content = fs::read_to_string(comment_path)?;
     let (frontmatter, content) = split_frontmatter(&comment_file_content);
 
+    // TODO: validate filename in frontmatter
     if let Some(frontmatter) = frontmatter {
         Ok(PullRequestComment {
             meta: Some(toml::from_str(frontmatter)?),
@@ -198,7 +200,7 @@ fn parse_pull_request_comment(comment_path: &Path) -> Result<PullRequestComment>
 }
 
 fn parse_commits_dir(commits_dir: &Path) -> Result<Vec<Commit>> {
-    let paths = read_dir_paths(commits_dir)?;
+    let paths = read_dir_sorted_paths(commits_dir)?;
 
     let dirs = paths.iter().filter(|path| path.is_dir());
     let commits = dirs.map(|dir| {

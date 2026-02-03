@@ -76,7 +76,8 @@ pub struct ReviewLineSubject {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReviewSubject {
-    pub commit: GitCommitHash,
+    /// `None` means the PR as a whole, rather than a specific commit.
+    pub commit: Option<GitCommitHash>,
     pub file: String,
     pub old_line: Option<ReviewLineSubject>,
     pub new_line: Option<ReviewLineSubject>,

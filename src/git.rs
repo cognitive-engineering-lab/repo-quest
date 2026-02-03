@@ -295,4 +295,12 @@ impl GitRepo {
                 format!("Could not switch to new orphan branch {branch_name} for repo {self:?}.")
             })
     }
+
+    pub fn make_bare(&self) -> Result<()> {
+        self.git()
+            .arg("config")
+            .arg("core.bare")
+            .arg("true")
+            .run_with_context(|| format!("Could not convert repo to bare repo for {self:?}."))
+    }
 }

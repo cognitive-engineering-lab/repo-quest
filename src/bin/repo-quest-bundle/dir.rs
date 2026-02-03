@@ -84,6 +84,7 @@
 //!
 //!   ```
 //!   +++
+//!   file = "path/to/filename.rs"
 //!   end-line-side = "right"
 //!   end-line = 42
 //!   +++
@@ -135,7 +136,7 @@ pub use self::parse::parse;
 mod bundle;
 pub use self::bundle::bundle;
 
-#[derive(Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct Meta {
     pub title: String,
@@ -144,13 +145,13 @@ pub struct Meta {
     pub rq_version: String,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct QuestDefinition {
     meta: Meta,
     chapters: Vec<Chapter>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Chapter {
     pub branch_name: String,
     pub issue: Issue,
@@ -161,51 +162,52 @@ pub struct Chapter {
     pub solution: Vec<Commit>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Issue {
     pub primary_issue: PrimaryIssue,
     pub comments: Vec<String>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PrimaryIssue {
     pub meta: Option<IssueMeta>,
     pub content: String,
 }
 
-#[derive(Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct IssueMeta {
     pub title: String,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PullRequest {
     pub primary_issue: Option<PrimaryIssue>,
-    pub comments: Vec<PullRequestComment>,
+    pub comments: Option<Vec<PullRequestComment>>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PullRequestComment {
     pub meta: Option<PullRequestCommentMeta>,
     pub content: String,
 }
 
-#[derive(Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub enum LineSide {
     Right,
     Left,
 }
 
-#[derive(Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct PullRequestCommentMeta {
+    pub file: String,
     pub end_line_side: LineSide,
-    pub end_line: usize,
+    pub end_line: i64,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Commit {
     pub path: PathBuf,
     pub message: Option<String>,
