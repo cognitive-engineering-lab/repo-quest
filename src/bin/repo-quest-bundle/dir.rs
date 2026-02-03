@@ -14,11 +14,11 @@ Example file layout:
 │   ├── scaffold
 │   │   ├── 00-prepare-interfaces
 │   │   │   └── header
-│   │   ├── 00-prepare-interfaces.md
+│   │   ├── 00-prepare-interfaces.txt
 │   │   ├── 01-add-placeholders
 │   │   │   ├── header
 │   │   │   └── user
-│   │   └── 01-add-placeholders.md
+│   │   └── 01-add-placeholders.txt
 │   └── solution
 │       └── 00-implement-functions
 │           ├── header
@@ -334,16 +334,16 @@ fn parse_commits_dir(commits_dir: &Path) -> Result<Vec<Commit>> {
 
     let dirs = paths.iter().filter(|path| path.is_dir());
     let commits = dirs.map(|dir| {
-        let md = dir.with_extension("md");
-        if md.is_file() {
-            (dir, Some(md))
+        let txt = dir.with_extension("txt");
+        if txt.is_file() {
+            (dir, Some(txt))
         } else {
             (dir, None)
         }
     });
 
-    // TODO warn about non-.md files
-    // TODO warn about md files with no corresponding directories
+    // TODO warn about non-txt files
+    // TODO warn about txt files with no corresponding directories
 
     let mut parsed_commits = Vec::new();
     for commit in commits {
