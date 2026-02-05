@@ -49,7 +49,7 @@
 
      const questName = document.createElement("span");
      questName.classList.add("quest-name");
-     questName.append(name);
+     questName.append(name, ` (${id})`);
      const header = document.createElement("div");
      header.classList.add("ui");
      header.classList.add("top");
