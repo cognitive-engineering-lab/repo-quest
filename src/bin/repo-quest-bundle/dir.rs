@@ -6,6 +6,7 @@
 //!
 //! ```
 //! .
+//! ├── .git
 //! ├── 00-first
 //! │   ├── issue
 //! │   │   ├── 00-comment-about-foo.md
@@ -16,25 +17,35 @@
 //! │   ├── pr.md
 //! │   ├── scaffold
 //! │   │   ├── 00-prepare-interfaces
-//! │   │   │   └── header
+//! │   │   │   ├── header
+//! │   │   │   ├── other
+//! │   │   │   └── README.md
 //! │   │   ├── 00-prepare-interfaces.txt
 //! │   │   ├── 01-add-placeholders
 //! │   │   │   ├── header
+//! │   │   │   ├── other
+//! │   │   │   ├── README.md
 //! │   │   │   └── user
 //! │   │   └── 01-add-placeholders.txt
 //! │   └── solution
 //! │       └── 00-implement-functions
 //! │           ├── header
+//! │           ├── other
+//! │           ├── README.md
 //! │           └── user
 //! ├── 01-second
 //! │   ├── issue.md
 //! │   ├── scaffold
 //! │   │   └── 00
 //! │   │       ├── fixed-header
+//! │   │       ├── other
+//! │   │       ├── README.md
 //! │   │       └── user
 //! │   └── solution
 //! │       └── 00
 //! │           ├── fixed-header
+//! │           ├── other
+//! │           ├── README.md
 //! │           └── user
 //! ├── 02-third
 //! │   ├── issue.md
@@ -42,16 +53,43 @@
 //! │   └── solution
 //! │       └── 00
 //! │           ├── fixed-header
+//! │           ├── other
+//! │           ├── README.md
 //! │           └── user
-//! └── quest.toml
+//! ├── main
+//! │   ├── 00
+//! │   │   └── README.md
+//! │   ├── 00.txt
+//! │   ├── 01
+//! │   │   ├── other
+//! │   │   └── README.md
+//! │   └── 01.txt
+//! └── quest.txt
 //! ```
 //!
-//! The `quest.toml` file containing metadata about the quest definitoin is
+//! The `quest.md` file containing metadata about the quest definition is
 //! required. Otherwise the root quest directory holds only directories, each of
-//! which corresponds to a quest chapter. The chapters are ordered lexicographically
-//! by directory name. Prefixing the directory names with the chapter numbers is not
-//! required, but is our recommended way to ensure the chapters are in the desired
-//! order.
+//! which corresponds to a quest chapter. The chapters are ordered
+//! lexicographically by directory name. Prefixing the directory names with the
+//! chapter numbers is not required, but is our recommended way to ensure the
+//! chapters are in the desired order. Directories with names beginning with a
+//! `.` (for exmaple, `.git`) are ignored, rather than treated as chapters.
+//!
+//! `quest.txt` begins with TOML block defining the title, author, repo-name
+//! template (for the repository created for the learner), and the compatible
+//! RepoQuest version. The body of the file contains a description of the quest
+//! which will be displayed to the user after installing the quest. The
+//! description is in plain-text, not Markdown.
+//!
+//! ```txt
+//! +++
+//! title = "My Test Quest"
+//! author = "cognitive-engineering-lab"
+//! repo = "my-test-quest"
+//! rq-version = "0.3.0"
+//! +++
+//! Some description of my quest.
+//! ```
 //!
 //! The following entries may appear in each chapter, but only the `issue.md` file
 //! and `soulution` directory are required:
@@ -96,6 +134,8 @@
 //!   `end-line` is the final line of the quote. Codeberg (which provides the
 //!   frontend for RepoQuest) does not support specifying the start line of the
 //!   quote and instead uses some heuristic to determine what to include.
+//! - `main/`: The initial commits for the quest, before the first chapter.
+//!   The format is described below.
 //! - `scaffold/`: The scaffolding or set-up for the chapter. This forms the content
 //!   of the initial pull request. If omitted, an empty pull request will be
 //!   created. The format is described below.
@@ -104,10 +144,10 @@
 //!   and the basis from which the diffs to scaffolding for the next chapter are
 //!   determined. The format is described below.
 //!
-//! Both the `scaffold/` and `solution/` directories represent sequences of commits.
-//! Each commit is defined by a directory giving a snapshot of the repository at
-//! that point and (optionally) a file (with the same name as the directory
-//! but with a `.txt` suffix) whose content is the commit message.
+//! The `main/`, `scaffold/`, and `solution/` directories represent sequences of
+//! commits. Each commit is defined by a directory giving a snapshot of the
+//! repository at that point and (optionally) a file (with the same name as the
+//! directory but with a `.txt` suffix) whose content is the commit message.
 //!
 //! # Implementation Notes
 //!
@@ -148,6 +188,8 @@ pub struct Meta {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct QuestDefinition {
     meta: Meta,
+    description: String,
+    main: Option<Vec<Commit>>,
     chapters: Vec<Chapter>,
 }
 

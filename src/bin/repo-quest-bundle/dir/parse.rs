@@ -14,15 +14,36 @@ use super::*;
 ///
 /// See [the parent module][super] for a description of the format.
 pub fn parse(dir: &Path) -> Result<QuestDefinition> {
-    let meta: Meta = toml::from_str(&fs::read_to_string(dir.join("quest.toml"))?)?;
+    let quest_file_content = fs::read_to_string(dir.join("quest.txt"))?;
+    let (front, description) = split_frontmatter(&quest_file_content);
+    let meta: Meta =
+        toml::from_str(front.context("quest.txt requires frontmatter with quest metadata.")?)?;
     let chapters = parse_chapters(dir)?;
-    Ok(QuestDefinition { meta, chapters })
+    let main_dir = dir.join("main");
+    let main = if main_dir.is_dir() {
+        Some(parse_commits_dir(&main_dir)?)
+    } else {
+        None
+    };
+    Ok(QuestDefinition {
+        meta,
+        description: description.to_string(),
+        main,
+        chapters,
+    })
 }
 
 fn parse_chapters(dir: &Path) -> Result<Vec<Chapter>> {
     let chapter_dirs: Vec<PathBuf> = read_dir_sorted_paths(dir)?
         .into_iter()
-        .filter(|path| path.is_dir())
+        .filter(|path| {
+            path.is_dir()
+                && !path.ends_with("main")
+                && !path
+                    .file_name()
+                    .and_then(|path| path.to_str())
+                    .is_some_and(|path| path.starts_with("."))
+        })
         .collect();
     debug!("Chapters dirs: {:?}", chapter_dirs);
 

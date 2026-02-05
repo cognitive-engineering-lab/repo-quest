@@ -329,7 +329,6 @@ async fn start_quest(
     // fetch and initialize
     local_repo.fetch("quest")?;
     local_repo.hard_reset("quest/main")?;
-    local_repo.commit("Initial commit")?;
 
     // set repo upstream to forgejo
     let mut remote_url = repo_url.clone();

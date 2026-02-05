@@ -1,4 +1,7 @@
++++
 title = "My Test Quest"
 author = "cognitive-engineering-lab"
 repo = "my-test-quest"
 rq-version = "0.3.0"
++++
+Some description of my quest.

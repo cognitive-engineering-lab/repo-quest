@@ -26,8 +26,14 @@ pub fn bundle(quest: QuestDefinition, output: &Path) -> Result<()> {
     fs::create_dir_all(&git_dir_path)?;
     let repo = GitRepo::init(git_dir_path.clone())?;
 
-    repo.commit("Initial commit")?;
-    let initial_commit = repo.rev_parse("HEAD")?;
+    debug!("Creating initial main branch commits.");
+    match quest.main {
+        Some(commits) if !commits.is_empty() => {
+            create_commits(&git_dir_path, &repo, commits.iter())?;
+        }
+        _ => repo.commit("Initial commit")?,
+    }
+    let main_commit = repo.rev_parse("HEAD")?;
 
     // Bundle each chapter
     let mut task_ids = HashMap::<String, usize>::new();
@@ -71,9 +77,8 @@ pub fn bundle(quest: QuestDefinition, output: &Path) -> Result<()> {
         task_ids.insert(branch_name, task_id);
     }
 
-    debug!("Resetting main to initial commit");
-    // Reset main back to the initial commit
-    repo.hard_reset(&initial_commit)?;
+    debug!("Resetting main to main commit");
+    repo.hard_reset(&main_commit)?;
     // Convert .git in repo to a bare repo
     repo.make_bare()?;
 
@@ -81,7 +86,7 @@ pub fn bundle(quest: QuestDefinition, output: &Path) -> Result<()> {
     let quest = QuestDefinitionMetadata {
         title: quest.meta.title,
         author: quest.meta.author,
-        description: "".to_string(),
+        description: quest.description,
         generated_repo_name: quest.meta.repo,
         tasks,
         task_ids,
