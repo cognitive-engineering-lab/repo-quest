@@ -207,7 +207,7 @@ pub struct Chapter {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Issue {
     pub primary_issue: PrimaryIssue,
-    pub comments: Vec<String>,
+    pub comments: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

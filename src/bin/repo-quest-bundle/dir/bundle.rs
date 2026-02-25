@@ -180,6 +180,7 @@ fn bundle_issue(branch_name: &String, issue: Issue) -> IssueTemplate {
         comments: issue
             .comments
             .into_iter()
+            .flatten()
             .map(|comment| Comment {
                 body: Template(comment),
             })

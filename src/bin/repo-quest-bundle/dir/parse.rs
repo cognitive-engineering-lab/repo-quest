@@ -149,21 +149,40 @@ fn read_dir_paths(dir: &Path) -> io::Result<Vec<PathBuf>> {
         .collect())
 }
 
-fn parse_issue_comments(comments_dir: &Path) -> Result<Vec<String>> {
-    let mut comments = Vec::new();
+fn comment_files(comments_dir: &Path) -> Result<Option<Vec<PathBuf>>> {
     if comments_dir.exists() {
+        let mut comment_files = Vec::new();
         for path in read_dir_sorted_paths(comments_dir)? {
-            if path.is_file() && path.extension().is_some_and(|extension| extension == "md") {
-                comments.push(fs::read_to_string(path)?);
-            } else {
+            if !path.is_file() {
                 warn!(
-                    "Issue comments directory {:?} contains non-.md file {:?}",
+                    "Comments directory {:?} contains non-file {:?}",
                     comments_dir, path
                 );
+            } else if !path.extension().is_some_and(|extension| extension == "md") {
+                warn!(
+                    "Comments directory {:?} contains non-.md file {:?}",
+                    comments_dir, path
+                );
+            } else {
+                comment_files.push(path);
             }
         }
+        Ok(Some(comment_files))
+    } else {
+        Ok(None)
     }
-    Ok(comments)
+}
+
+fn parse_issue_comments(comments_dir: &Path) -> Result<Option<Vec<String>>> {
+    if let Some(comment_files) = comment_files(comments_dir)? {
+        let mut comments = Vec::with_capacity(comment_files.len());
+        for path in comment_files {
+            comments.push(fs::read_to_string(path)?);
+        }
+        Ok(Some(comments))
+    } else {
+        Ok(None)
+    }
 }
 
 fn parse_pull_request(chapter_dir: &Path) -> Result<PullRequest> {
@@ -184,17 +203,10 @@ fn parse_pull_request(chapter_dir: &Path) -> Result<PullRequest> {
 }
 
 fn parse_pull_request_comments(comments_dir: &Path) -> Result<Option<Vec<PullRequestComment>>> {
-    if comments_dir.exists() {
-        let mut comments = Vec::new();
-        for path in read_dir_sorted_paths(comments_dir)? {
-            if path.is_file() && path.extension().is_some_and(|extension| extension == "md") {
-                let comment = parse_pull_request_comment(&path)?;
-                comments.push(comment);
-            }
-            warn!(
-                "Issue comments directory {:?} contains non-.md file {:?}",
-                comments_dir, path
-            );
+    if let Some(comment_files) = comment_files(comments_dir)? {
+        let mut comments = Vec::with_capacity(comment_files.len());
+        for path in comment_files {
+            comments.push(parse_pull_request_comment(&path)?);
         }
         Ok(Some(comments))
     } else {
@@ -397,10 +409,10 @@ Content line 2
                     }),
                     content: "Issue content referencing #{{ chapter.pr }}.\n".to_string()
                 },
-                comments: vec![
+                comments: Some(vec![
                     "First comment on an issue\n".to_string(),
                     "Second comment on an issue.\n".to_string()
-                ]
+                ])
             }
         );
     }
