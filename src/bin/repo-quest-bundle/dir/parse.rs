@@ -33,6 +33,23 @@ pub fn parse(dir: &Path) -> Result<QuestDefinition> {
 }
 
 fn parse_chapters(dir: &Path) -> Result<Vec<Chapter>> {
+    let chapter_dirs = chapter_dirs(dir)?;
+    debug!("Chapters dirs: {:?}", chapter_dirs);
+
+    let mut chapters = Vec::with_capacity(chapter_dirs.len());
+    for chapter_dir in chapter_dirs {
+        chapters.push(parse_chapter(chapter_dir)?);
+    }
+
+    Ok(chapters)
+}
+
+/// Gets all potential chapter directories at the given path, sorted by name in
+/// lexicographical order.
+///
+/// A potential chapter directory is a directory that is not named `main` and
+/// that does not begin with a `.`.
+fn chapter_dirs(dir: &Path) -> Result<Vec<PathBuf>, anyhow::Error> {
     let chapter_dirs: Vec<PathBuf> = read_dir_sorted_paths(dir)?
         .into_iter()
         .filter(|path| {
@@ -44,24 +61,14 @@ fn parse_chapters(dir: &Path) -> Result<Vec<Chapter>> {
                     .is_some_and(|path| path.starts_with("."))
         })
         .collect();
-    debug!("Chapters dirs: {chapter_dirs:?}");
 
-    let mut chapters = Vec::with_capacity(chapter_dirs.len());
-    for chapter_dir in chapter_dirs {
-        chapters.push(parse_chapter(chapter_dir)?);
-    }
-
-    Ok(chapters)
+    Ok(chapter_dirs)
 }
 
 fn parse_chapter(chapter_dir: PathBuf) -> Result<Chapter> {
     debug!("Parsing chapters dir: {chapter_dir:?}");
 
-    let branch_name = chapter_dir
-        .file_name()
-        .with_context(|| format!("Could not extract branchanme from {chapter_dir:?}."))?
-        .to_string_lossy()
-        .into_owned();
+    let branch_name = parse_branch_name(&chapter_dir)?;
     let issue = parse_issue(&chapter_dir)?;
     let pull_request = parse_pull_request(&chapter_dir)?;
     info!("Processing chapter {chapter_dir:?}");
@@ -80,6 +87,14 @@ fn parse_chapter(chapter_dir: PathBuf) -> Result<Chapter> {
         scaffold,
         solution,
     })
+}
+
+fn parse_branch_name(chapter_dir: &Path) -> Result<String, anyhow::Error> {
+    Ok(chapter_dir
+        .file_name()
+        .with_context(|| format!("Could not extract branchname from {:?}.", chapter_dir))?
+        .to_string_lossy()
+        .into_owned())
 }
 
 fn parse_issue(chapter_dir: &Path) -> Result<Issue> {
@@ -252,7 +267,37 @@ fn parse_pull_request_comment(comment_path: &Path) -> Result<PullRequestComment>
     }
 }
 
-fn parse_commits_dir(commits_dir: &Path) -> Result<Vec<Commit>> {
+/// Produces all of the commit information for a quest. Does not validate other
+/// quest definition requirements, such as the presence of `issue.md`.
+pub fn parse_quest_commits(dir: &Path) -> Result<QuestCommits> {
+    let chapter_dirs = chapter_dirs(dir)?;
+    let main_dir = dir.join("main");
+    let main = if main_dir.is_dir() {
+        Some(parse_commits_dir(&main_dir)?)
+    } else {
+        None
+    };
+    let mut chapters = Vec::with_capacity(chapter_dirs.len());
+    for chapter_dir in chapter_dirs {
+        let branch_name = parse_branch_name(&chapter_dir)?;
+        let scaffold_dir = &dir.join("scaffold");
+        let scaffold = if scaffold_dir.is_dir() {
+            Some(parse_commits_dir(scaffold_dir)?)
+        } else {
+            None
+        };
+        let solution = parse_commits_dir(&dir.join("solution"))?;
+        let chapter = ChapterCommits {
+            branch_name,
+            scaffold,
+            solution,
+        };
+        chapters.push(chapter);
+    }
+    Ok(QuestCommits { main, chapters })
+}
+
+pub fn parse_commits_dir(commits_dir: &Path) -> Result<Vec<Commit>> {
     let paths = read_dir_sorted_paths(commits_dir)?;
 
     let dirs = paths.iter().filter(|path| path.is_dir());
@@ -440,7 +485,7 @@ Content line 2
     }
 
     #[test]
-    fn test_parse_commit_dir() {
+    fn test_parse_commits_dir() {
         let res =
             parse_commits_dir(&PathBuf::from("test-data/test-quest/00-first/scaffold")).unwrap();
         assert_eq!(

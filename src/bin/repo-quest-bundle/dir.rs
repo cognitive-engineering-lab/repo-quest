@@ -194,10 +194,25 @@ pub struct QuestDefinition {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct QuestCommits {
+    main: Option<Vec<Commit>>,
+    chapters: Vec<ChapterCommits>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Chapter {
     pub branch_name: String,
     pub issue: Issue,
     pub pull_request: PullRequest,
+    /// May be empty.
+    pub scaffold: Option<Vec<Commit>>,
+    /// Must have at least one commit.
+    pub solution: Vec<Commit>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ChapterCommits {
+    pub branch_name: String,
     /// May be empty.
     pub scaffold: Option<Vec<Commit>>,
     /// Must have at least one commit.
@@ -254,3 +269,7 @@ pub struct Commit {
     pub path: PathBuf,
     pub message: Option<String>,
 }
+
+// idea
+// - create temp dir for storing specific versions of dirs representation
+// - build repo directly in target folder
