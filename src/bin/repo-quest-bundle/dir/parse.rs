@@ -439,17 +439,17 @@ Content line 2
             vec![
                 Commit {
                     path: PathBuf::from(
+                        "test-data/test-quest/00-first/scaffold/00-prepare-interfaces"
+                    ),
+                    message: Some("commit message\n".to_string())
+                },
+                Commit {
+                    path: PathBuf::from(
                         "test-data/test-quest/00-first/scaffold/01-add-placeholders"
                     ),
                     message: Some(
                         "commit message for final commit in scaffold branch\n".to_string()
                     )
-                },
-                Commit {
-                    path: PathBuf::from(
-                        "test-data/test-quest/00-first/scaffold/00-prepare-interfaces"
-                    ),
-                    message: Some("commit message\n".to_string())
                 }
             ]
         );
