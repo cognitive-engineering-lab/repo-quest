@@ -1,11 +1,10 @@
 use std::{
-    fs::{self, File},
-    io::{self, Read},
+    fs,
     path::{Path, PathBuf},
 };
 
 use anyhow::{Context as _, Result};
-use log::{debug, warn};
+use log::{debug, info, warn};
 use regex::Regex;
 
 use super::*;
@@ -45,7 +44,7 @@ fn parse_chapters(dir: &Path) -> Result<Vec<Chapter>> {
                     .is_some_and(|path| path.starts_with("."))
         })
         .collect();
-    debug!("Chapters dirs: {:?}", chapter_dirs);
+    debug!("Chapters dirs: {chapter_dirs:?}");
 
     let mut chapters = Vec::with_capacity(chapter_dirs.len());
     for chapter_dir in chapter_dirs {
@@ -56,16 +55,16 @@ fn parse_chapters(dir: &Path) -> Result<Vec<Chapter>> {
 }
 
 fn parse_chapter(chapter_dir: PathBuf) -> Result<Chapter> {
-    debug!("Parsing chapters dir: {:?}", chapter_dir);
+    debug!("Parsing chapters dir: {chapter_dir:?}");
 
     let branch_name = chapter_dir
         .file_name()
-        .with_context(|| format!("Could not extract branchanme from {:?}.", chapter_dir))?
+        .with_context(|| format!("Could not extract branchanme from {chapter_dir:?}."))?
         .to_string_lossy()
         .into_owned();
     let issue = parse_issue(&chapter_dir)?;
     let pull_request = parse_pull_request(&chapter_dir)?;
-    println!("{:?}", chapter_dir);
+    info!("Processing chapter {chapter_dir:?}");
     let scaffold_dir = chapter_dir.join("scaffold");
     let scaffold = if scaffold_dir.exists() {
         Some(parse_commits_dir(&scaffold_dir)?)
@@ -84,7 +83,7 @@ fn parse_chapter(chapter_dir: PathBuf) -> Result<Chapter> {
 }
 
 fn parse_issue(chapter_dir: &Path) -> Result<Issue> {
-    let primary_issue = parse_primary_issue(File::open(chapter_dir.join("issue.md"))?)?;
+    let primary_issue = parse_primary_issue(&chapter_dir.join("issue.md"))?;
     let comments = parse_issue_comments(&chapter_dir.join("issue"))?;
 
     Ok(Issue {
@@ -116,14 +115,34 @@ fn split_frontmatter(content: &str) -> (Option<&str>, &str) {
     }
 }
 
-fn parse_primary_issue(issue_data: impl Read) -> Result<PrimaryIssue> {
-    let issue_file_content = io::read_to_string(issue_data)?;
-
-    let (frontmatter, content) = split_frontmatter(&issue_file_content);
+/// If there is frontmatter, produces the parsed structure and the remaining
+/// string with the frontmatter removed.
+///
+/// If there is no frontmatter, produces `None`.
+///
+/// If the frontmatter can't be parsed, produces `Err`.
+fn parse_frontmatter<'a, T>(data: &'a str) -> Result<Option<(T, &'a str)>>
+where
+    T: Deserialize<'a>,
+{
+    let (frontmatter, content) = split_frontmatter(data);
 
     if let Some(frontmatter) = frontmatter {
+        Ok(Some((toml::from_str(frontmatter)?, content)))
+    } else {
+        Ok(None)
+    }
+}
+
+fn parse_primary_issue(issue_path: &Path) -> Result<PrimaryIssue> {
+    let issue_file_content = fs::read_to_string(issue_path)
+        .with_context(|| format!("Could not read issue file {issue_path:?}"))?;
+
+    if let Some((frontmatter, content)) = parse_frontmatter(&issue_file_content)
+        .with_context(|| format!("Could not parse frontmatter from {issue_path:?}"))?
+    {
         Ok(PrimaryIssue {
-            meta: Some(toml::from_str(frontmatter)?),
+            meta: Some(frontmatter),
             content: content.to_string(),
         })
     } else {
@@ -134,16 +153,18 @@ fn parse_primary_issue(issue_data: impl Read) -> Result<PrimaryIssue> {
     }
 }
 
-fn read_dir_sorted_paths(dir: &Path) -> io::Result<Vec<PathBuf>> {
+fn read_dir_sorted_paths(dir: &Path) -> Result<Vec<PathBuf>> {
     let mut paths = read_dir_paths(dir)?;
     paths.sort();
     Ok(paths)
 }
 
-fn read_dir_paths(dir: &Path) -> io::Result<Vec<PathBuf>> {
+fn read_dir_paths(dir: &Path) -> Result<Vec<PathBuf>> {
     Ok(dir
-        .read_dir()?
-        .collect::<Result<Vec<_>, _>>()?
+        .read_dir()
+        .with_context(|| format!("Could not read directory {dir:?}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .with_context(|| format!("Failure while reading directory {dir:?}"))?
         .iter()
         .map(|entry| entry.path())
         .collect())
@@ -154,15 +175,9 @@ fn comment_files(comments_dir: &Path) -> Result<Option<Vec<PathBuf>>> {
         let mut comment_files = Vec::new();
         for path in read_dir_sorted_paths(comments_dir)? {
             if !path.is_file() {
-                warn!(
-                    "Comments directory {:?} contains non-file {:?}",
-                    comments_dir, path
-                );
-            } else if !path.extension().is_some_and(|extension| extension == "md") {
-                warn!(
-                    "Comments directory {:?} contains non-.md file {:?}",
-                    comments_dir, path
-                );
+                warn!("Comments directory {comments_dir:?} contains non-file {path:?}");
+            } else if path.extension().is_none_or(|extension| extension != "md") {
+                warn!("Comments directory {comments_dir:?} contains non-.md file {path:?}");
             } else {
                 comment_files.push(path);
             }
@@ -177,7 +192,10 @@ fn parse_issue_comments(comments_dir: &Path) -> Result<Option<Vec<String>>> {
     if let Some(comment_files) = comment_files(comments_dir)? {
         let mut comments = Vec::with_capacity(comment_files.len());
         for path in comment_files {
-            comments.push(fs::read_to_string(path)?);
+            comments.push(
+                fs::read_to_string(&path)
+                    .with_context(|| format!("Could not read comment file {path:?}"))?,
+            );
         }
         Ok(Some(comments))
     } else {
@@ -189,7 +207,7 @@ fn parse_pull_request(chapter_dir: &Path) -> Result<PullRequest> {
     let pr_path = chapter_dir.join("pr.md");
     // PR primary issue is optional.
     let primary_issue = if pr_path.exists() {
-        Some(parse_primary_issue(File::open(pr_path)?)?)
+        Some(parse_primary_issue(&pr_path)?)
     } else {
         None
     };
@@ -215,13 +233,15 @@ fn parse_pull_request_comments(comments_dir: &Path) -> Result<Option<Vec<PullReq
 }
 
 fn parse_pull_request_comment(comment_path: &Path) -> Result<PullRequestComment> {
-    let comment_file_content = fs::read_to_string(comment_path)?;
-    let (frontmatter, content) = split_frontmatter(&comment_file_content);
+    let comment_file_content = fs::read_to_string(comment_path)
+        .with_context(|| format!("Could not read comment file {comment_path:?}"))?;
 
     // TODO: validate filename in frontmatter
-    if let Some(frontmatter) = frontmatter {
+    if let Some((frontmatter, content)) = parse_frontmatter(&comment_file_content)
+        .with_context(|| format!("Could not parse TOML frontmatter from {comment_path:?}"))?
+    {
         Ok(PullRequestComment {
-            meta: Some(toml::from_str(frontmatter)?),
+            meta: Some(frontmatter),
             content: content.to_string(),
         })
     } else {
@@ -249,11 +269,14 @@ fn parse_commits_dir(commits_dir: &Path) -> Result<Vec<Commit>> {
     // TODO warn about txt files with no corresponding directories
 
     let mut parsed_commits = Vec::new();
-    for commit in commits {
+    for (path, message_file) in commits {
         parsed_commits.push(Commit {
-            path: commit.0.to_path_buf(),
-            message: match commit.1 {
-                Some(path) => Some(fs::read_to_string(path)?),
+            path: path.to_path_buf(),
+            message: match message_file {
+                Some(path) => Some(
+                    fs::read_to_string(&path)
+                        .with_context(|| format!("Could not open commit message file {path:?}"))?,
+                ),
                 None => None,
             },
         });
@@ -263,8 +286,6 @@ fn parse_commits_dir(commits_dir: &Path) -> Result<Vec<Commit>> {
 
 #[cfg(test)]
 mod test {
-    use std::io::Cursor;
-
     use super::*;
 
     #[test]
@@ -296,22 +317,22 @@ mod test {
     }
 
     #[test]
-    fn test_parse_primary_issue() {
+    fn test_parse_frontmatter() {
         let data = r#"+++
 title = "My Title"
 +++
 Content line 1
 Content line 2
 "#;
-        let res = parse_primary_issue(Cursor::new(data)).unwrap();
+        let res = parse_frontmatter(data).unwrap();
         assert_eq!(
             res,
-            PrimaryIssue {
-                meta: Some(IssueMeta {
+            Some((
+                IssueMeta {
                     title: "My Title".to_string()
-                }),
-                content: "Content line 1\nContent line 2\n".to_string(),
-            }
+                },
+                "Content line 1\nContent line 2\n"
+            ))
         );
 
         let data = r#"
@@ -322,15 +343,15 @@ title = "My Title"
 Content line 1
 Content line 2
 "#;
-        let res = parse_primary_issue(Cursor::new(data)).unwrap();
+        let res = parse_frontmatter(data).unwrap();
         assert_eq!(
             res,
-            PrimaryIssue {
-                meta: Some(IssueMeta {
+            Some((
+                IssueMeta {
                     title: "My Title".to_string()
-                }),
-                content: "Content line 1\nContent line 2\n".to_string(),
-            }
+                },
+                "Content line 1\nContent line 2\n"
+            ))
         );
 
         let data = r#"
@@ -342,29 +363,23 @@ Content line 1
 Content line 2
 
 "#;
-        let res = parse_primary_issue(Cursor::new(data)).unwrap();
+        let res = parse_frontmatter(data).unwrap();
         assert_eq!(
             res,
-            PrimaryIssue {
-                meta: Some(IssueMeta {
+            Some((
+                IssueMeta {
                     title: "My Title".to_string()
-                }),
-                content: "\nContent line 1\nContent line 2\n\n".to_string(),
-            }
+                },
+                "\nContent line 1\nContent line 2\n\n"
+            ))
         );
 
         let data = r#"
 Content line 1
 Content line 2
 "#;
-        let res = parse_primary_issue(Cursor::new(data)).unwrap();
-        assert_eq!(
-            res,
-            PrimaryIssue {
-                meta: None,
-                content: data.to_string(),
-            }
-        );
+        let res = parse_frontmatter::<IssueMeta>(data).unwrap();
+        assert_eq!(res, None);
 
         let data = r#"
 title = "My Title"
@@ -374,14 +389,8 @@ Content line 1
 Content line 2
 
 "#;
-        let res = parse_primary_issue(Cursor::new(data)).unwrap();
-        assert_eq!(
-            res,
-            PrimaryIssue {
-                meta: None,
-                content: data.to_string(),
-            }
-        );
+        let res = parse_frontmatter::<IssueMeta>(data).unwrap();
+        assert_eq!(res, None);
 
         let data = r#"
 +++
@@ -393,7 +402,7 @@ Content line 1
 Content line 2
 
 "#;
-        let res = parse_primary_issue(Cursor::new(data));
+        let res = parse_frontmatter::<IssueMeta>(data);
         assert!(res.is_err(), "Expected parse error.");
     }
 
