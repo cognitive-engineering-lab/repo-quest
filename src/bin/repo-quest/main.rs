@@ -14,15 +14,14 @@ use env_logger::Env;
 struct Args {
     #[command(subcommand)]
     command: Command,
-    /// The path to which to write the bundle archive.
-    #[arg(short, long)]
-    output: PathBuf,
 }
 
 #[derive(Debug, clap::Subcommand)]
 pub enum Command {
-    #[command(name = "github")]
-    GitHub {
+    /// Bundles a GitHub-based quest definition for use with a RepoQuest Forgejo
+    /// instance.
+    #[command(name = "bundle-github")]
+    BundleGitHub {
         /// GitHub access token, e.g., `$GITHUB_TOKEN` in a GitHub action.
         #[arg(long)]
         token: Option<String>,
@@ -35,16 +34,24 @@ pub enum Command {
         /// The name of the repository.
         #[arg(long)]
         repo: String,
+        /// The path to which to write the bundle archive.
+        #[arg(short, long)]
+        output: PathBuf,
     },
-    Dir {
+    /// Bundles a quest definition for use with a RepoQuest Forgejo instance.
+    #[command(name = "bundle")]
+    BundleDir {
         #[arg(long)]
         input: PathBuf,
+        /// The path to which to write the bundle archive.
+        #[arg(short, long)]
+        output: PathBuf,
     },
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let Args { command, output } = Args::parse();
+    let Args { command } = Args::parse();
 
     #[cfg(not(debug_assertions))]
     env_logger::Builder::from_env(Env::default().default_filter_or("warn")).init();
@@ -52,13 +59,14 @@ async fn main() -> Result<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("debug")).init();
 
     match command {
-        Command::GitHub {
+        Command::BundleGitHub {
             token,
             base_uri,
             owner,
             repo,
+            output,
         } => bundle_github(output, token, base_uri, owner, repo).await?,
-        Command::Dir { input } => {
+        Command::BundleDir { input, output } => {
             let quest = dir::parse(&input)?;
             dir::bundle(quest, &output)?;
         }

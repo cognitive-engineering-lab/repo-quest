@@ -139,11 +139,11 @@ RepoQuest.
 ### Bundling a quest
 
 In order to use a quest definition with RepoQuest it has to be bundled. This can
-be done using the `repo-quest-bundle` binary. For example,
+be done using the `repo-quest bundle-github` command. For example,
 
 ```sh
-cargo run --bin repo-quest-bundle -- \
-    github \
+cargo run --bin repo-quest --
+    bundle-github \
     --owner cognitive-engineering-lab \
     --repo rqst-async \
     --output rqst-async.tgz \
