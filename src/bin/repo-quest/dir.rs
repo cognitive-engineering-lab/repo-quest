@@ -172,6 +172,7 @@ use serde::Deserialize;
 
 mod parse;
 pub use self::parse::parse;
+pub use self::parse::parse_quest_commits;
 
 mod bundle;
 pub use self::bundle::bundle;
@@ -187,16 +188,16 @@ pub struct Meta {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct QuestDefinition {
-    meta: Meta,
-    description: String,
-    main: Option<Vec<Commit>>,
-    chapters: Vec<Chapter>,
+    pub meta: Meta,
+    pub description: String,
+    pub main: Option<Vec<Commit>>,
+    pub chapters: Vec<Chapter>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct QuestCommits {
-    main: Option<Vec<Commit>>,
-    chapters: Vec<ChapterCommits>,
+    pub main: Option<Vec<Commit>>,
+    pub chapters: Vec<ChapterCommits>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

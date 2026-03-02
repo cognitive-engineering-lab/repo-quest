@@ -280,13 +280,13 @@ pub fn parse_quest_commits(dir: &Path) -> Result<QuestCommits> {
     let mut chapters = Vec::with_capacity(chapter_dirs.len());
     for chapter_dir in chapter_dirs {
         let branch_name = parse_branch_name(&chapter_dir)?;
-        let scaffold_dir = &dir.join("scaffold");
+        let scaffold_dir = &chapter_dir.join("scaffold");
         let scaffold = if scaffold_dir.is_dir() {
             Some(parse_commits_dir(scaffold_dir)?)
         } else {
             None
         };
-        let solution = parse_commits_dir(&dir.join("solution"))?;
+        let solution = parse_commits_dir(&chapter_dir.join("solution"))?;
         let chapter = ChapterCommits {
             branch_name,
             scaffold,

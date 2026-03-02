@@ -12,6 +12,8 @@ use repo_quest::{
     template::Template,
 };
 
+use crate::util::rsync;
+
 use super::*;
 
 /// Converts a `dir::QuestDefinition` into the bundle format on disk.
@@ -213,15 +215,4 @@ fn create_commit(git_dir_path: &Path, repo: &GitRepo, commit: &Commit) -> Result
     repo.add_all()?;
     repo.commit(message.as_ref())?;
     Ok(())
-}
-
-pub fn rsync(from: &Path, to: &Path) -> Result<()> {
-    Command::new("rsync")
-        .current_dir(from)
-        .arg("-a")
-        .arg("--delete")
-        .arg("--exclude=.git")
-        .arg(".")
-        .arg(to)
-        .run_with_context(|| format!("Could not rsync files from {from:?} to {to:?}."))
 }

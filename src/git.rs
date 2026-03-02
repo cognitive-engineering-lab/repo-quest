@@ -1,7 +1,14 @@
 use anyhow::{Context as _, Result, bail};
 use log::debug;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fmt::Debug, io::Read, path::PathBuf, process::Command};
+use std::{
+    collections::HashMap,
+    fmt::Debug,
+    io::Read,
+    os::unix::process::CommandExt,
+    path::{Path, PathBuf},
+    process::{Command, Stdio},
+};
 
 use crate::command::RunCommand as _;
 
@@ -302,5 +309,55 @@ impl GitRepo {
             .arg("core.bare")
             .arg("true")
             .run_with_context(|| format!("Could not convert repo to bare repo for {self:?}."))
+    }
+
+    pub fn archive(&self, gitref: &str, output: &Path) -> Result<()> {
+        self.git()
+            .arg("archive")
+            .arg(gitref)
+            .arg("--output")
+            .arg(output)
+            .run_with_context(|| format!("Could not archive {self:?} ref {gitref} to {output:?}."))
+    }
+
+    pub fn copy_tree(&self, gitref: &str, output: &Path) -> Result<()> {
+        let git = self
+            .git()
+            .arg("archive")
+            .arg("--format")
+            .arg("tar")
+            .arg(gitref)
+            .stdout(Stdio::piped())
+            .spawn()
+            .with_context(|| format!("Could not archive {self:?} ref {gitref}."))?;
+
+        Command::new("tar")
+            .current_dir(&self.dir)
+            .stdin(Stdio::from(git.stdout.unwrap()))
+            .arg("-C")
+            .arg(output)
+            .arg("-x")
+            .run_with_context(|| format!("Could not untar archive of {self:?} to {output:?}."))
+    }
+
+    /// git diff --quiet && git diff --cached --quiet
+    pub fn has_changes(&self) -> Result<bool> {
+        Ok(!self
+            .git()
+            .arg("diff")
+            .arg("--quiet")
+            .output()
+            .with_context(|| format!("Could not run git diff in {self:?}."))?
+            .status
+            .success()
+            || !self
+                .git()
+                .arg("diff")
+                .arg("--cached")
+                .arg("--quiet")
+                .output()
+                .with_context(|| format!("Could not run git diff --cached in {self:?}."))?
+                .status
+                .success())
     }
 }
