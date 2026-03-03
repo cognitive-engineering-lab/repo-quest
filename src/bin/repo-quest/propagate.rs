@@ -8,21 +8,6 @@ use tempfile::*;
 
 use crate::{dir::*, util::rsync};
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct QuestBranches {
-    pub main: Option<Vec<String>>,
-    pub chapters: Vec<ChapterBranches>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ChapterBranches {
-    pub branch_name: String,
-    /// May be empty.
-    pub scaffold: Option<Vec<String>>,
-    /// Must have at least one commit.
-    pub solution: Vec<String>,
-}
-
 /// Converts..
 ///
 /// Branch structure looks like
@@ -299,82 +284,38 @@ fn dirs_to_change_branches(
 /// Creates the commits represented by the sequence of directories.
 ///
 /// Each directory's commit has the previous directory's commit as its parent.
-fn dirs_to_repo(
-    quest_commits: QuestCommits,
-    rebase_repo: &GitRepo,
-) -> Result<QuestBranches, anyhow::Error> {
+fn dirs_to_repo(quest_commits: QuestCommits, rebase_repo: &GitRepo) -> Result<()> {
     let QuestCommits { main, chapters } = quest_commits;
 
-    let main_branches = if let Some(main) = main {
-        let mut main_branches = Vec::with_capacity(main.len());
+    if let Some(main) = main {
         for Commit { path, message } in main {
             let branch_name = gen_branch_name("old/main", &path);
             create_commit(rebase_repo, &branch_name, message, &path)?;
-            main_branches.push(branch_name);
         }
-        Some(main_branches)
-    } else {
-        None
-    };
+    }
 
-    // rebase_repo.create_branch("HEAD", "old/main-primary")?;
-
-    let mut chapters_branches = Vec::with_capacity(chapters.len());
     for ChapterCommits {
         branch_name,
         scaffold,
         solution,
     } in chapters
     {
-        let scaffold_branches = if let Some(scaffold) = scaffold {
+        if let Some(scaffold) = scaffold {
             let mut scaffold_branches = Vec::with_capacity(scaffold.len());
             for Commit { path, message } in scaffold {
                 let branch_name = gen_branch_name(&format!("old/{branch_name}/scaffold"), &path);
                 create_commit(rebase_repo, &branch_name, message, &path)?;
                 scaffold_branches.push(branch_name);
             }
-            // rebase_repo.create_branch("HEAD", &format!("old/{branch_name}/scaffold-primary"))?;
-            Some(scaffold_branches)
-        } else {
-            None
-        };
+        }
 
-        let mut solution_branches = Vec::with_capacity(solution.len());
         for Commit { path, message } in solution {
             let branch_name = gen_branch_name(&format!("old/{branch_name}/solution"), &path);
             create_commit(rebase_repo, &branch_name, message, &path)?;
-            solution_branches.push(branch_name);
         }
-        // rebase_repo.create_branch("HEAD", &format!("old/{branch_name}/solution-primary"))?;
-        chapters_branches.push(ChapterBranches {
-            branch_name,
-            scaffold: scaffold_branches,
-            solution: solution_branches,
-        });
     }
 
-    Ok(QuestBranches {
-        main: main_branches,
-        chapters: chapters_branches,
-    })
-}
-
-/// Replaces the prefix of `path`. Produces an `Err` if `old_root` is not a
-/// prefix of `path`.
-///
-/// # Examples
-///
-/// ```
-/// let res = reroot_path("/a","/b","/a/c");
-/// assert_eq!(res, Ok("/b/c"));
-/// ```
-///
-/// ```
-/// let res = reroot_path("/a","/b","/d/c");
-/// assert!(res.is_err());
-/// ```
-fn reroot_path(old_root: &Path, new_root: &Path, path: &Path) -> Result<PathBuf> {
-    Ok(new_root.join(path.strip_prefix(old_root)?))
+    Ok(())
 }
 
 /// Commits to current branch and creates a new branch pointing at commit.
