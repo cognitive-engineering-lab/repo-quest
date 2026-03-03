@@ -8,6 +8,9 @@ use tempfile::*;
 
 use crate::{dir::*, util::rsync};
 
+const OLD_BRANCH_PREFIX: &str = "old";
+const NEW_BRANCH_PREFIX: &str = "new";
+
 /// Converts..
 ///
 /// Branch structure looks like
@@ -215,9 +218,9 @@ fn dirs_to_change_branches(
 ) -> Result<Vec<String>> {
     let mut todo = Vec::new();
     for Commit { path, message } in new_quest_commits.main.into_iter().flatten() {
-        let old_branch_name = gen_branch_name("old/main", &path);
+        let old_branch_name = gen_branch_name(&format!("{OLD_BRANCH_PREFIX}/main"), &path);
         rebase_repo.switch_branch(&old_branch_name)?;
-        let new_branch_name = gen_branch_name("new/main", &path);
+        let new_branch_name = gen_branch_name(&format!("{NEW_BRANCH_PREFIX}/main"), &path);
         let has_changes = create_commit_if_changed(
             rebase_repo,
             &old_branch_name,
@@ -240,9 +243,15 @@ fn dirs_to_change_branches(
     } in new_quest_commits.chapters
     {
         for Commit { path, message } in scaffold.into_iter().flatten() {
-            let old_branch_name = gen_branch_name(&format!("old/{branch_name}/scaffold"), &path);
+            let old_branch_name = gen_branch_name(
+                &format!("{OLD_BRANCH_PREFIX}/{branch_name}/scaffold"),
+                &path,
+            );
             rebase_repo.switch_branch(&old_branch_name)?;
-            let new_branch_name = gen_branch_name(&format!("new/{branch_name}/scaffold"), &path);
+            let new_branch_name = gen_branch_name(
+                &format!("{NEW_BRANCH_PREFIX}/{branch_name}/scaffold"),
+                &path,
+            );
             let has_changes = create_commit_if_changed(
                 rebase_repo,
                 &old_branch_name,
@@ -259,9 +268,15 @@ fn dirs_to_change_branches(
             todo.push(format!("update-ref refs/heads/{old_branch_name}"));
         }
         for Commit { path, message } in solution {
-            let old_branch_name = gen_branch_name(&format!("old/{branch_name}/solution"), &path);
+            let old_branch_name = gen_branch_name(
+                &format!("{OLD_BRANCH_PREFIX}/{branch_name}/solution"),
+                &path,
+            );
             rebase_repo.switch_branch(&old_branch_name)?;
-            let new_branch_name = gen_branch_name(&format!("new/{branch_name}/solution"), &path);
+            let new_branch_name = gen_branch_name(
+                &format!("{NEW_BRANCH_PREFIX}/{branch_name}/solution"),
+                &path,
+            );
             let has_changes = create_commit_if_changed(
                 rebase_repo,
                 &old_branch_name,
@@ -303,14 +318,20 @@ fn dirs_to_repo(quest_commits: QuestCommits, rebase_repo: &GitRepo) -> Result<()
         if let Some(scaffold) = scaffold {
             let mut scaffold_branches = Vec::with_capacity(scaffold.len());
             for Commit { path, message } in scaffold {
-                let branch_name = gen_branch_name(&format!("old/{branch_name}/scaffold"), &path);
+                let branch_name = gen_branch_name(
+                    &format!("{OLD_BRANCH_PREFIX}/{branch_name}/scaffold"),
+                    &path,
+                );
                 create_commit(rebase_repo, &branch_name, message, &path)?;
                 scaffold_branches.push(branch_name);
             }
         }
 
         for Commit { path, message } in solution {
-            let branch_name = gen_branch_name(&format!("old/{branch_name}/solution"), &path);
+            let branch_name = gen_branch_name(
+                &format!("{OLD_BRANCH_PREFIX}/{branch_name}/solution"),
+                &path,
+            );
             create_commit(rebase_repo, &branch_name, message, &path)?;
         }
     }
