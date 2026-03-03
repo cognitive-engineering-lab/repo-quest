@@ -28,7 +28,11 @@ const NEW_BRANCH_PREFIX: &str = "new";
 ///
 /// The branch `main` is used for working on the tree, not for representing a
 /// chapter.
-pub fn propagate(quest_dir: &Path, original: &str, changed: &str) -> Result<GitTodoList> {
+pub fn prepare_propagate_repo(
+    quest_dir: &Path,
+    original: &str,
+    changed: &str,
+) -> Result<GitTodoList> {
     let quest_repo = GitRepo::open(quest_dir.to_path_buf())?;
 
     // Set up tempdirs for copying out the specified versions of the quest definition.

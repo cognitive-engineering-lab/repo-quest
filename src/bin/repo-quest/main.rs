@@ -129,7 +129,7 @@ async fn main() -> Result<()> {
             original,
             changed,
         } => {
-            let rebase_todo = propagate::propagate(&quest, &original, &changed)?;
+            let rebase_todo = propagate::prepare_propagate_repo(&quest, &original, &changed)?;
             println!("{rebase_todo}");
         }
         Command::Overlay { quest, rebase_repo } => propagate::overlay(&rebase_repo, &quest)?,
