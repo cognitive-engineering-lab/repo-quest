@@ -75,14 +75,14 @@ pub enum Command {
     /// - Amend the commit with the forward-propagated changes.
     Propagate {
         /// The quest definition that has a change that requires propagating.
-        #[arg(long)]
+        #[arg(long, value_name = "QUEST_REPO_ROOT")]
         quest: PathBuf,
         /// A git ref for the baseline quest definition. (Often `HEAD^`.)
-        #[arg(long)]
+        #[arg(long, value_name = "GIT_REF")]
         original: String,
         /// A git ref for the quest definition with the change needing
         /// propagation. (Often `HEAD`.)
-        #[arg(long)]
+        #[arg(long, value_name = "GIT_REF")]
         changed: String,
     },
     /// Overlay branches from a converted repository back onto the collection of
