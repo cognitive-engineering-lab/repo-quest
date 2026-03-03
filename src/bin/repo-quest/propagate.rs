@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::{Context as _, Result, bail};
 use itertools::{EitherOrBoth, Itertools as _};
@@ -7,6 +7,7 @@ use repo_quest::git::GitRepo;
 use tempfile::*;
 
 use crate::{dir::*, util::rsync};
+use repo_quest::git::todo::*;
 
 const OLD_BRANCH_PREFIX: &str = "old";
 const NEW_BRANCH_PREFIX: &str = "new";
@@ -24,7 +25,7 @@ const NEW_BRANCH_PREFIX: &str = "new";
 ///
 /// The branch main is used for working on the tree, not for representing a
 /// chapter.
-pub fn propagate(quest_dir: &Path, original: &str, changed: &str) -> Result<()> {
+pub fn propagate(quest_dir: &Path, original: &str, changed: &str) -> Result<GitTodoList> {
     let old_source_dir = TempDir::new()
         .context("Could not create directory for extracting old quest definition versions.")?;
     let new_source_dir = TempDir::new()
@@ -56,11 +57,7 @@ pub fn propagate(quest_dir: &Path, original: &str, changed: &str) -> Result<()> 
 
     rebase_repo.switch_branch("main")?;
 
-    for entry in todo {
-        println!("{entry}");
-    }
-
-    Ok(())
+    Ok(todo)
 }
 
 fn check_compatibility(
@@ -215,8 +212,8 @@ fn check_commits_aligned(
 fn dirs_to_change_branches(
     new_quest_commits: QuestCommits,
     rebase_repo: &GitRepo,
-) -> Result<Vec<String>> {
-    let mut todo = Vec::new();
+) -> Result<GitTodoList> {
+    let mut todo = GitTodoList::new();
     for Commit { path, message } in new_quest_commits.main.into_iter().flatten() {
         let old_branch_name = gen_branch_name(&format!("{OLD_BRANCH_PREFIX}/main"), &path);
         rebase_repo.switch_branch(&old_branch_name)?;
@@ -228,13 +225,13 @@ fn dirs_to_change_branches(
             message,
             &path,
         )?;
-        let old_rev = rebase_repo.rev_parse(&old_branch_name)?;
-        todo.push(format!("pick {old_rev} # {old_branch_name}"));
+        let old_rev = rebase_repo.rev_parse_short(&old_branch_name)?;
+        todo.pick(&old_rev, Some(&old_branch_name));
         if has_changes {
-            let new_rev = rebase_repo.rev_parse(&new_branch_name)?;
-            todo.push(format!("fixup {new_rev} # {new_branch_name}"));
+            let new_rev = rebase_repo.rev_parse_short(&new_branch_name)?;
+            todo.fixup(&new_rev, Some(&new_branch_name));
         }
-        todo.push(format!("update-ref refs/heads/{old_branch_name}"));
+        todo.update_branch(&old_branch_name);
     }
     for ChapterCommits {
         branch_name,
@@ -259,13 +256,13 @@ fn dirs_to_change_branches(
                 message,
                 &path,
             )?;
-            let old_rev = rebase_repo.rev_parse(&old_branch_name)?;
-            todo.push(format!("pick {old_rev} # {old_branch_name}"));
+            let old_rev = rebase_repo.rev_parse_short(&old_branch_name)?;
+            todo.pick(&old_rev, Some(&old_branch_name));
             if has_changes {
-                let new_rev = rebase_repo.rev_parse(&new_branch_name)?;
-                todo.push(format!("fixup {new_rev} # {new_branch_name}"));
+                let new_rev = rebase_repo.rev_parse_short(&new_branch_name)?;
+                todo.fixup(&new_rev, Some(&new_branch_name));
             }
-            todo.push(format!("update-ref refs/heads/{old_branch_name}"));
+            todo.update_branch(&old_branch_name);
         }
         for Commit { path, message } in solution {
             let old_branch_name = gen_branch_name(
@@ -284,15 +281,16 @@ fn dirs_to_change_branches(
                 message,
                 &path,
             )?;
-            let old_rev = rebase_repo.rev_parse(&old_branch_name)?;
-            todo.push(format!("pick {old_rev} # {old_branch_name}"));
+            let old_rev = rebase_repo.rev_parse_short(&old_branch_name)?;
+            todo.pick(&old_rev, Some(&old_branch_name));
             if has_changes {
-                let new_rev = rebase_repo.rev_parse(&new_branch_name)?;
-                todo.push(format!("fixup {new_rev} # {new_branch_name}"));
+                let new_rev = rebase_repo.rev_parse_short(&new_branch_name)?;
+                todo.fixup(&new_rev, Some(&new_branch_name));
             }
-            todo.push(format!("update-ref refs/heads/{old_branch_name}"));
+            todo.update_branch(&old_branch_name);
         }
     }
+
     Ok(todo)
 }
 

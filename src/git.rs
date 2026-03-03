@@ -5,12 +5,13 @@ use std::{
     collections::HashMap,
     fmt::Debug,
     io::Read,
-    os::unix::process::CommandExt,
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
 
 use crate::command::RunCommand as _;
+
+pub mod todo;
 
 /// Represents a local (i.e., on the filesystem) git repository and provides
 /// methods for manipulating it.
@@ -167,6 +168,14 @@ impl GitRepo {
     pub fn rev_parse(&self, rev: &str) -> Result<String> {
         self.git()
             .arg("rev-parse")
+            .arg(rev)
+            .line_with_context(|| format!("Could not parse rev {rev} for repo {self:?}."))
+    }
+
+    pub fn rev_parse_short(&self, rev: &str) -> Result<String> {
+        self.git()
+            .arg("rev-parse")
+            .arg("--short")
             .arg(rev)
             .line_with_context(|| format!("Could not parse rev {rev} for repo {self:?}."))
     }
