@@ -12,33 +12,43 @@ use repo_quest::git::todo::*;
 const OLD_BRANCH_PREFIX: &str = "old";
 const NEW_BRANCH_PREFIX: &str = "new";
 
-/// Converts..
+/// Converts two committed versions of a quest definition into a repository that
+/// can be used to propagate changes to one chapter of the quest forward into
+/// later chapters via a git rebase. Also produces the necessary git rebase
+/// todo-list for doing the propagation.
 ///
-/// Branch structure looks like
-/// - old/main/baz
-/// - old/foo/scaffold/bar
-/// - old/foo/solution/baz
-/// - new/main-primary
-/// - new/main/baz
-/// - new/foo/scaffold/bar
-/// - new/foo/solution/baz
+/// The basic branch structure looks like
+/// - old/main/00-foo
+/// - old/main/01-bar
+/// - old/foo/scaffold/00-baz
+/// - old/foo/solution/00-something
 ///
-/// The branch main is used for working on the tree, not for representing a
+/// Chapters with changes will result in additional branches under "new" instead
+/// of "old".
+///
+/// The branch `main` is used for working on the tree, not for representing a
 /// chapter.
 pub fn propagate(quest_dir: &Path, original: &str, changed: &str) -> Result<GitTodoList> {
+    let quest_repo = GitRepo::open(quest_dir.to_path_buf())?;
+
+    // Set up tempdirs for copying out the specified versions of the quest definition.
     let old_source_dir = TempDir::new()
         .context("Could not create directory for extracting old quest definition versions.")?;
     let new_source_dir = TempDir::new()
         .context("Could not create directory for extracting new quest definition versions.")?;
-    let working_dir = TempDir::new()
+
+    // Create a directory for the repository that will host the rebase and
+    // initialize the repository.
+    let rebase_repo_dir = TempDir::new()
         .context("Could not create directory for temporary rebase repository.")?
         .keep();
-    let quest_repo = GitRepo::open(quest_dir.to_path_buf())?;
-    let rebase_repo = GitRepo::init(working_dir.clone())?;
+    let rebase_repo = GitRepo::init(rebase_repo_dir.clone())?;
 
+    // Copy the specified versions of the quest definition
     quest_repo.copy_tree(original, old_source_dir.path())?;
     quest_repo.copy_tree(changed, new_source_dir.path())?;
 
+    // Parse out the commits of the quests.
     let old_quest_commits = parse_quest_commits(old_source_dir.path())?;
     let new_quest_commits = parse_quest_commits(new_source_dir.path())?;
     info!("{old_quest_commits:?}");
@@ -51,15 +61,20 @@ pub fn propagate(quest_dir: &Path, original: &str, changed: &str) -> Result<GitT
         &new_quest_commits,
     )?;
 
+    // Build the basic repo out of the "original" version of the quest.
     dirs_to_repo(old_quest_commits, &rebase_repo)?;
 
+    // Augment the repo with the chapters that have changes and produce the
+    // git rebase todo-list for propagating the changes.
     let todo = dirs_to_change_branches(new_quest_commits, &rebase_repo)?;
 
+    // Move the current branch back to main.
     rebase_repo.switch_branch("main")?;
 
     Ok(todo)
 }
 
+/// Checks to make sure that two quests have the same chapter structure.
 fn check_compatibility(
     old_source_dir: &Path,
     old_quest_commits: &QuestCommits,
@@ -208,7 +223,7 @@ fn check_commits_aligned(
 
 /// Assumes check_compatibility succeeded.
 ///
-/// Produces git-todo-list
+/// Produces git rebase todo-list
 fn dirs_to_change_branches(
     new_quest_commits: QuestCommits,
     rebase_repo: &GitRepo,
@@ -353,6 +368,13 @@ fn create_commit(
     Ok(())
 }
 
+/// Generate the branch name that corresponds to a chapter directory in a quest.
+///
+/// The branch name is prefixed with the section name.
+///
+/// ```
+/// assert_eq!(gen_branch_name("foo/bar", "/tmp/quest/chapter/scaffold/01-baz"), "foo/bar/01-baz")
+/// ```
 fn gen_branch_name(section_name: &str, dir: &Path) -> String {
     let branch_name = format!(
         "{}/{}",
