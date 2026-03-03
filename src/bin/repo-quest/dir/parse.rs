@@ -50,7 +50,7 @@ fn parse_chapters(dir: &Path) -> Result<Vec<Chapter>> {
 /// A potential chapter directory is a directory that is not named `main` and
 /// that does not begin with a `.`.
 fn chapter_dirs(dir: &Path) -> Result<Vec<PathBuf>, anyhow::Error> {
-    let chapter_dirs: Vec<PathBuf> = read_dir_sorted_paths(dir)?
+    let chapter_dirs: Vec<PathBuf> = read_dir_sorted_paths(&dir.join("chapters"))?
         .into_iter()
         .filter(|path| {
             path.is_dir()
