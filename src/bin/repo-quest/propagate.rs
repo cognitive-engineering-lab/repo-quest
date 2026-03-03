@@ -1,4 +1,7 @@
-use std::path::Path;
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Context as _, Result, bail};
 use itertools::{EitherOrBoth, Itertools as _};
@@ -32,21 +35,19 @@ pub fn prepare_propagate_repo(
     quest_dir: &Path,
     original: &str,
     changed: &str,
+    output_dir: PathBuf,
 ) -> Result<GitTodoList> {
     let quest_repo = GitRepo::open(quest_dir.to_path_buf())?;
+
+    // Initialize the repository that will host the rebase.
+    ensure_empty_dir(&output_dir)?;
+    let rebase_repo = GitRepo::init(output_dir)?;
 
     // Set up tempdirs for copying out the specified versions of the quest definition.
     let old_source_dir = TempDir::new()
         .context("Could not create directory for extracting old quest definition versions.")?;
     let new_source_dir = TempDir::new()
         .context("Could not create directory for extracting new quest definition versions.")?;
-
-    // Create a directory for the repository that will host the rebase and
-    // initialize the repository.
-    let rebase_repo_dir = TempDir::new()
-        .context("Could not create directory for temporary rebase repository.")?
-        .keep();
-    let rebase_repo = GitRepo::init(rebase_repo_dir.clone())?;
 
     // Copy the specified versions of the quest definition
     quest_repo.copy_tree(original, old_source_dir.path())?;
@@ -76,6 +77,24 @@ pub fn prepare_propagate_repo(
     rebase_repo.switch_branch("main")?;
 
     Ok(todo)
+}
+
+/// Creates the output dir if it does not exist. Fails with `Err` if the output
+/// dir exists but is not empty.
+fn ensure_empty_dir(output_dir: &Path) -> Result<()> {
+    if !output_dir.exists() {
+        fs::create_dir_all(output_dir)
+            .with_context(|| format!("Could not create output directory {output_dir:?}."))?;
+    } else if !output_dir.is_dir()
+        || output_dir
+            .read_dir()
+            .with_context(|| format!("Cannot read output directory {output_dir:?}."))?
+            .next()
+            .is_some()
+    {
+        bail!("Given output output path exists but is not an empty directory.")
+    }
+    Ok(())
 }
 
 /// Checks to make sure that two quests have the same chapter structure.

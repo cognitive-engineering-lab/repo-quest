@@ -3,7 +3,7 @@ mod github;
 mod propagate;
 mod util;
 
-use std::path::PathBuf;
+use std::path::{self, PathBuf};
 
 use crate::github::*;
 
@@ -54,10 +54,6 @@ pub enum Command {
     /// from one directory to later directories. After the rebase is complete,
     /// use the `overlay` command to convert the repository back.
     ///
-    /// Because the working directory for performing the rebase should only be
-    /// used for the rebase, it is created as a tempdir and the name of the
-    /// directory is printed to stdout.
-    ///
     /// In order to determine how to structure the rebase, this command requires
     /// two revesions of the full quest sequence, and so it operates on
     /// committed versions of a quest. A typical use would be:
@@ -84,6 +80,10 @@ pub enum Command {
         /// propagation. (Often `HEAD`.)
         #[arg(long, value_name = "GIT_REF")]
         changed: String,
+        /// The output directory. Will be created if it does not exist. If it
+        /// does exist, it must be empty.
+        #[arg(long, value_name = "OUTPUT_DIR")]
+        output: PathBuf,
     },
     /// Overlay branches from a converted repository back onto the collection of
     /// directories in a quest definition.
@@ -128,8 +128,14 @@ async fn main() -> Result<()> {
             quest,
             original,
             changed,
+            output,
         } => {
-            let rebase_todo = propagate::prepare_propagate_repo(&quest, &original, &changed)?;
+            let rebase_todo = propagate::prepare_propagate_repo(
+                &quest,
+                &original,
+                &changed,
+                path::absolute(output)?,
+            )?;
             println!("{rebase_todo}");
         }
         Command::Overlay { quest, rebase_repo } => propagate::overlay(&rebase_repo, &quest)?,
