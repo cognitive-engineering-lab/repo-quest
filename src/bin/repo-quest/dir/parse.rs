@@ -13,10 +13,9 @@ use super::*;
 ///
 /// See [the parent module][super] for a description of the format.
 pub fn parse(dir: &Path) -> Result<QuestDefinition> {
-    let quest_file_content = fs::read_to_string(dir.join("quest.txt"))?;
-    let (front, description) = split_frontmatter(&quest_file_content);
-    let meta: Meta =
-        toml::from_str(front.context("quest.txt requires frontmatter with quest metadata.")?)?;
+    let quest_file_content =
+        fs::read_to_string(dir.join("quest.toml")).with_context(|| "Could not read quest.toml.")?;
+    let meta: Meta = toml::from_str(&quest_file_content)?;
     let chapters = parse_chapters(dir)?;
     let main_dir = dir.join("main");
     let main = if main_dir.is_dir() {
@@ -26,7 +25,6 @@ pub fn parse(dir: &Path) -> Result<QuestDefinition> {
     };
     Ok(QuestDefinition {
         meta,
-        description: description.to_string(),
         main,
         chapters,
     })

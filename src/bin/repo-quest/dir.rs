@@ -184,12 +184,12 @@ pub struct Meta {
     pub author: String,
     pub repo: String,
     pub rq_version: String,
+    pub description: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct QuestDefinition {
     pub meta: Meta,
-    pub description: String,
     pub main: Option<Vec<Commit>>,
     pub chapters: Vec<Chapter>,
 }
