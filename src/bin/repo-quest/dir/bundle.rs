@@ -1,9 +1,8 @@
-use std::{borrow::Cow, collections::HashMap, fs, path::Path, process::Command};
+use std::{borrow::Cow, collections::HashMap, fs, path::Path};
 
 use anyhow::{Context as _, Result};
 use log::debug;
 use repo_quest::{
-    command::RunCommand as _,
     git::GitRepo,
     quest::definition::{
         Comment, IssueTemplate, PullRequestTemplate, QuestDefinitionMetadata, ReviewLineSubject,
