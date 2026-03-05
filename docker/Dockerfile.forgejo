@@ -1,0 +1,15 @@
+FROM codeberg.org/forgejo/forgejo:13-rootless
+
+USER root
+RUN apk add curl
+
+ADD --chmod=755 ./docker/run-forgejo.sh /usr/local/bin/run-forgejo.sh
+
+USER git
+
+ADD --chmod=644 ./docker/app.ini /etc/templates/app.ini
+ADD --chown=1000:1000 ./docker/custom/templates "$GITEA_CUSTOM/templates"
+
+ENV RQ_PORT=8085
+
+ENTRYPOINT ["run-forgejo.sh"]

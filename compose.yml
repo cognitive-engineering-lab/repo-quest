@@ -5,7 +5,7 @@ services:
   forgejo:
     image: repoquest-forgejo
     build:
-      dockerfile: Dockerfile.forgejo
+      dockerfile: docker/Dockerfile.forgejo
     healthcheck:
       test: '[ -f "$(dirname "$${GITEA_APP_INI}")"/configured ] && curl -s http://localhost:3000/healthz'
       start_period: 10s
@@ -22,7 +22,7 @@ services:
   forgejo-runner:
     image: repoquest-forgejo-runner
     build:
-      dockerfile: Dockerfile.forgejo-runner
+      dockerfile: docker/Dockerfile.forgejo-runner
     depends_on:
       forgejo:
         condition: service_healthy
@@ -36,7 +36,7 @@ services:
   repoquest:
     image: repoquest
     build:
-      dockerfile: Dockerfile.repoquest
+      dockerfile: docker/Dockerfile.repoquest
     depends_on:
       forgejo:
         condition: service_healthy
@@ -48,11 +48,11 @@ services:
         source: repoquest-bot
         target: /srv/repoquest
   reverse-proxy:
-    image: repoquest-reverse-proxy
-    build:
-       dockerfile: Dockerfile.reverse-proxy
+    image: docker.io/nginxinc/nginx-unprivileged:latest
     ports:
       - "${RQ_PORT:-8085}:8085"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf
     depends_on:
       - forgejo
       - repoquest

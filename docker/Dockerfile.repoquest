@@ -22,7 +22,7 @@ RUN apk add \
     gzip
 
 COPY --from=rq-bot-build /root/app/repo-quest-bot /usr/local/bin/repo-quest-bot
-ADD --chmod=755 run-repoquest.sh /usr/local/bin/run-repoquest.sh
+ADD --chmod=755 ./docker/run-repoquest.sh /usr/local/bin/run-repoquest.sh
 
 RUN adduser -S -D -h /srv/repoquest repoquest
 USER repoquest

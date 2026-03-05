@@ -4,8 +4,8 @@ USER root
 RUN apk add \
     dumb-init \
     curl
-ADD --chmod=755 run-forgejo-runner.sh /usr/local/bin/run-forgejo-runner.sh
-ADD --chmod=644 forgejo-runner.yml /etc/forgejo-runner.yml
+ADD --chmod=755 ./docker/run-forgejo-runner.sh /usr/local/bin/run-forgejo-runner.sh
+ADD --chmod=644 ./docker/forgejo-runner.yml /etc/forgejo-runner.yml
 
 # Note that there is no USER directive.
 #
