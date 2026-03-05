@@ -54,8 +54,8 @@ pub fn prepare_propagate_repo(
     quest_repo.copy_tree(changed, new_source_dir.path())?;
 
     // Parse out the commits of the quests.
-    let old_quest_commits = parse_quest_commits(old_source_dir.path())?;
-    let new_quest_commits = parse_quest_commits(new_source_dir.path())?;
+    let old_quest_commits = parse(old_source_dir.path())?;
+    let new_quest_commits = parse(new_source_dir.path())?;
     info!("{old_quest_commits:?}");
     info!("{new_quest_commits:?}");
 
@@ -100,9 +100,9 @@ fn ensure_empty_dir(output_dir: &Path) -> Result<()> {
 /// Checks to make sure that two quests have the same chapter structure.
 fn check_compatibility(
     old_source_dir: &Path,
-    old_quest_commits: &QuestCommits,
+    old_quest_commits: &QuestDefinition,
     new_source_dir: &Path,
-    new_quest_commits: &QuestCommits,
+    new_quest_commits: &QuestDefinition,
 ) -> Result<()> {
     let dirname = "main";
     check_optional_commit_dirs_aligned(
@@ -119,15 +119,17 @@ fn check_compatibility(
     {
         match chapter {
             EitherOrBoth::Both(
-                ChapterCommits {
+                Chapter {
                     branch_name: old_branch_name,
                     scaffold: old_scaffold,
                     solution: old_solution,
+                    ..
                 },
-                ChapterCommits {
+                Chapter {
                     branch_name: new_branch_name,
                     scaffold: new_scaffold,
                     solution: new_solution,
+                    ..
                 },
             ) => {
                 if old_branch_name < new_branch_name {
@@ -154,13 +156,13 @@ fn check_compatibility(
                     )?;
                 }
             }
-            EitherOrBoth::Left(ChapterCommits {
+            EitherOrBoth::Left(Chapter {
                 branch_name: old_branch_name,
                 ..
             }) => bail!(
                 "Propagate does not work with differing commit structures, only different commit content.\n\nOriginal has a {old_branch_name} branch, changed does not."
             ),
-            EitherOrBoth::Right(ChapterCommits {
+            EitherOrBoth::Right(Chapter {
                 branch_name: new_branch_name,
                 ..
             }) => bail!(
@@ -248,7 +250,7 @@ fn check_commits_aligned(
 ///
 /// Produces git rebase todo-list
 fn dirs_to_change_branches(
-    new_quest_commits: QuestCommits,
+    new_quest_commits: QuestDefinition,
     rebase_repo: &GitRepo,
 ) -> Result<GitTodoList> {
     let mut todo = GitTodoList::new();
@@ -271,10 +273,11 @@ fn dirs_to_change_branches(
         }
         todo.update_branch(&old_branch_name);
     }
-    for ChapterCommits {
+    for Chapter {
         branch_name,
         scaffold,
         solution,
+        ..
     } in new_quest_commits.chapters
     {
         for Commit { path, message } in scaffold.into_iter().flatten() {
@@ -335,8 +338,8 @@ fn dirs_to_change_branches(
 /// Creates the commits represented by the sequence of directories.
 ///
 /// Each directory's commit has the previous directory's commit as its parent.
-fn dirs_to_repo(quest_commits: QuestCommits, rebase_repo: &GitRepo) -> Result<()> {
-    let QuestCommits { main, chapters } = quest_commits;
+fn dirs_to_repo(quest_commits: QuestDefinition, rebase_repo: &GitRepo) -> Result<()> {
+    let QuestDefinition { main, chapters, .. } = quest_commits;
 
     if let Some(main) = main {
         for Commit { path, message } in main {
@@ -345,10 +348,11 @@ fn dirs_to_repo(quest_commits: QuestCommits, rebase_repo: &GitRepo) -> Result<()
         }
     }
 
-    for ChapterCommits {
+    for Chapter {
         branch_name,
         scaffold,
         solution,
+        ..
     } in chapters
     {
         if let Some(scaffold) = scaffold {

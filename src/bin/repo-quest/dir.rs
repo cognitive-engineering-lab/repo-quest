@@ -172,7 +172,6 @@ use serde::Deserialize;
 
 mod parse;
 pub use self::parse::parse;
-pub use self::parse::parse_quest_commits;
 
 mod bundle;
 pub use self::bundle::bundle;
@@ -195,25 +194,10 @@ pub struct QuestDefinition {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct QuestCommits {
-    pub main: Option<Vec<Commit>>,
-    pub chapters: Vec<ChapterCommits>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Chapter {
     pub branch_name: String,
     pub issue: Issue,
     pub pull_request: PullRequest,
-    /// May be empty.
-    pub scaffold: Option<Vec<Commit>>,
-    /// Must have at least one commit.
-    pub solution: Vec<Commit>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ChapterCommits {
-    pub branch_name: String,
     /// May be empty.
     pub scaffold: Option<Vec<Commit>>,
     /// Must have at least one commit.

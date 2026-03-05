@@ -265,36 +265,6 @@ fn parse_pull_request_comment(comment_path: &Path) -> Result<PullRequestComment>
     }
 }
 
-/// Produces all of the commit information for a quest. Does not validate other
-/// quest definition requirements, such as the presence of `issue.md`.
-pub fn parse_quest_commits(dir: &Path) -> Result<QuestCommits> {
-    let chapter_dirs = chapter_dirs(dir)?;
-    let main_dir = dir.join("main");
-    let main = if main_dir.is_dir() {
-        Some(parse_commits_dir(&main_dir)?)
-    } else {
-        None
-    };
-    let mut chapters = Vec::with_capacity(chapter_dirs.len());
-    for chapter_dir in chapter_dirs {
-        let branch_name = parse_branch_name(&chapter_dir)?;
-        let scaffold_dir = &chapter_dir.join("scaffold");
-        let scaffold = if scaffold_dir.is_dir() {
-            Some(parse_commits_dir(scaffold_dir)?)
-        } else {
-            None
-        };
-        let solution = parse_commits_dir(&chapter_dir.join("solution"))?;
-        let chapter = ChapterCommits {
-            branch_name,
-            scaffold,
-            solution,
-        };
-        chapters.push(chapter);
-    }
-    Ok(QuestCommits { main, chapters })
-}
-
 pub fn parse_commits_dir(commits_dir: &Path) -> Result<Vec<Commit>> {
     let paths = read_dir_sorted_paths(commits_dir)?;
 
