@@ -14,7 +14,7 @@ use forgejo_api::{
         AddCollaboratorOption, AddCollaboratorOptionPermission, CreateHookOptionConfig,
         CreateHookOptionType, CreateIssueCommentOption, CreateIssueOption, CreatePullRequestOption,
         CreatePullReviewComment, CreatePullReviewOptions, CreateRepoOption, EditIssueOption,
-        EditPullRequestOption, EditRepoOption, Hook, Repository, UserListReposQuery,
+        EditPullRequestOption, EditRepoOption, Repository,
     },
 };
 use log::debug;
@@ -32,7 +32,7 @@ impl ForgejoBackend {
         ForgejoBackend { forgejo }
     }
 
-    pub async fn is_pull_request_merged(&self, owner: &str, repo: &str, id: u64) -> Result<bool> {
+    pub async fn is_pull_request_merged(&self, owner: &str, repo: &str, id: i64) -> Result<bool> {
         let pr = self
             .forgejo
             .repo_get_pull_request(owner, repo, id)
@@ -43,41 +43,8 @@ impl ForgejoBackend {
         ))
     }
 
-    async fn all_pages<T, Fut>(&self, f: impl Fn(u32) -> Fut) -> Result<Vec<T>>
-    where
-        Fut: Future<Output = Result<(i64, Vec<T>)>>,
-    {
-        let mut page = 0;
-        let (total_count, mut res) = f(page).await?;
-        let mut current_count = res.len();
-        let mut items = res;
-        while current_count < total_count.try_into().unwrap_or(0) {
-            page += 1;
-            (_, res) = f(page).await?;
-            current_count += res.len();
-            items.append(&mut res);
-        }
-
-        Ok(items)
-    }
-
-    async fn user_repos_page(&self, username: &str, page: u32) -> Result<(i64, Vec<Repository>)> {
-        let res = self
-            .forgejo
-            .user_list_repos(
-                username,
-                UserListReposQuery {
-                    page: Some(page),
-                    ..Default::default()
-                },
-            )
-            .await?;
-        Ok((res.0.x_total_count.unwrap_or(0), res.1))
-    }
-
     async fn user_repos(&self, username: &str) -> Result<Vec<Repository>> {
-        self.all_pages(|page| self.user_repos_page(username, page))
-            .await
+        Ok(self.forgejo.user_list_repos(username).all().await?)
     }
 
     async fn fresh_repo_name(&self, username: &str, basename: String) -> Result<String> {
@@ -213,7 +180,7 @@ impl ForgejoBackend {
             )
             .await
             .with_context(|| "Couldn't create issue.")?;
-        let issue_number = issue.number.ok_or(anyhow!("No issue id."))? as u64;
+        let issue_number = issue.number.ok_or(anyhow!("No issue id."))?;
         debug!("Created issue {username}/{repo_name}/{issue_number}.");
 
         let pr_title = template
@@ -240,7 +207,7 @@ impl ForgejoBackend {
             )
             .await
             .with_context(|| "Couldn't create PR.")?;
-        let pr_number = pr.number.ok_or(anyhow!("No PR id."))? as u64;
+        let pr_number = pr.number.ok_or(anyhow!("No PR id."))?;
         debug!("Created pull request {username}/{repo_name}/{pr_number}.");
 
         task_info.insert(format!("{} pr", template.task_id), format!("#{pr_number}"));
@@ -414,7 +381,7 @@ impl ForgejoBackend {
             )
             .await
             .with_context(|| "Couldn't create PR.")?;
-        let pr_number = pr.number.context("No PR id.")? as u64;
+        let pr_number = pr.number.context("No PR id.")?;
         debug!("Created pull request {username}/{repo_name}/{pr_number}.");
 
         Ok(PullRequest {
@@ -424,19 +391,9 @@ impl ForgejoBackend {
         })
     }
 
-    async fn hooks_page(&self, page: u32) -> Result<(i64, Vec<Hook>)> {
-        let response = self
-            .forgejo
-            .admin_list_hooks(forgejo_api::structs::AdminListHooksQuery {
-                page: Some(page),
-                limit: Some(100),
-            })
-            .await?;
-        Ok((response.0.x_total_count.unwrap_or(0), response.1))
-    }
-
     pub async fn register_webhook(&self, url: Url) -> Result<()> {
-        let hooks = self.all_pages(|page| self.hooks_page(page)).await?;
+        // TODO: are hooks paginated? forgejo-api says no, swagger docs say yes.
+        let hooks = self.forgejo.admin_list_hooks().await?;
         if !hooks
             .iter()
             .any(|hook| hook.url.as_ref().is_some_and(|hook_url| hook_url == &url))

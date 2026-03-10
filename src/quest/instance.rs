@@ -18,7 +18,7 @@ use crate::git::GitRepo;
 pub struct PullRequest {
     pub owner: String,
     pub repo: String,
-    pub number: u64,
+    pub number: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -26,7 +26,7 @@ pub struct PullRequest {
 pub struct Issue {
     pub owner: String,
     pub repo: String,
-    pub number: u64,
+    pub number: i64,
 }
 
 /// An instantiated task in a quest.

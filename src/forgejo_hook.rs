@@ -15,7 +15,7 @@ pub struct RepositoryHookData {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct PullRequestHookData {
-    pub number: u64,
+    pub number: i64,
     pub merged: bool,
 }
 
