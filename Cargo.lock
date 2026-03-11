@@ -2142,6 +2142,7 @@ dependencies = [
  "tar",
  "tempfile",
  "tera",
+ "termtree",
  "thiserror 2.0.18",
  "tokio",
  "toml",
@@ -2724,6 +2725,12 @@ dependencies = [
  "slug",
  "unicode-segmentation",
 ]
+
+[[package]]
+name = "termtree"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d4d1330fe7f7f872cd05165130b10602d667b205fd85be09be2814b115d4ced9"
 
 [[package]]
 name = "thiserror"

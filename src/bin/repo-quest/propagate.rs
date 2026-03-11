@@ -1,19 +1,21 @@
 use std::{
+    collections::HashMap,
     fs,
+    io::Write as _,
     path::{Path, PathBuf},
 };
 
 use anyhow::{Context as _, Result, bail};
-use itertools::{EitherOrBoth, Itertools as _};
-use log::{info, warn};
+use itertools::{EitherOrBoth, Itertools};
+use log::{debug, info, warn};
 use repo_quest::git::GitRepo;
 use tempfile::*;
 
 use crate::{dir::*, util::rsync};
 use repo_quest::git::todo::*;
 
-const OLD_BRANCH_PREFIX: &str = "old";
-const NEW_BRANCH_PREFIX: &str = "new";
+const OLD_BRANCH_PREFIX: &str = "quest";
+const NEW_BRANCH_PREFIX: &str = "changes";
 
 /// Converts two committed versions of a quest definition into a repository that
 /// can be used to propagate changes to one chapter of the quest forward into
@@ -21,13 +23,13 @@ const NEW_BRANCH_PREFIX: &str = "new";
 /// todo-list for doing the propagation.
 ///
 /// The basic branch structure looks like
-/// - old/main/00-foo
-/// - old/main/01-bar
-/// - old/foo/scaffold/00-baz
-/// - old/foo/solution/00-something
+/// - quest/main/00-foo
+/// - quest/main/01-bar
+/// - quest/foo/scaffold/00-baz
+/// - quest/foo/solution/00-something
 ///
-/// Chapters with changes will result in additional branches under "new" instead
-/// of "old".
+/// Chapters with changes will result in additional branches under "changes" instead
+/// of "quest".
 ///
 /// The branch `main` is used for working on the tree, not for representing a
 /// chapter.
@@ -282,12 +284,12 @@ fn dirs_to_change_branches(
     {
         for Commit { path, message } in scaffold.into_iter().flatten() {
             let old_branch_name = gen_branch_name(
-                &format!("{OLD_BRANCH_PREFIX}/{branch_name}/scaffold"),
+                &format!("{OLD_BRANCH_PREFIX}/chapter/{branch_name}/scaffold"),
                 &path,
             );
             rebase_repo.switch_branch(&old_branch_name)?;
             let new_branch_name = gen_branch_name(
-                &format!("{NEW_BRANCH_PREFIX}/{branch_name}/scaffold"),
+                &format!("{NEW_BRANCH_PREFIX}/chapter/{branch_name}/scaffold"),
                 &path,
             );
             let has_changes = create_commit_if_changed(
@@ -307,12 +309,12 @@ fn dirs_to_change_branches(
         }
         for Commit { path, message } in solution {
             let old_branch_name = gen_branch_name(
-                &format!("{OLD_BRANCH_PREFIX}/{branch_name}/solution"),
+                &format!("{OLD_BRANCH_PREFIX}/chapter/{branch_name}/solution"),
                 &path,
             );
             rebase_repo.switch_branch(&old_branch_name)?;
             let new_branch_name = gen_branch_name(
-                &format!("{NEW_BRANCH_PREFIX}/{branch_name}/solution"),
+                &format!("{NEW_BRANCH_PREFIX}/chapter/{branch_name}/solution"),
                 &path,
             );
             let has_changes = create_commit_if_changed(
@@ -343,7 +345,7 @@ fn dirs_to_repo(quest_commits: QuestDefinition, rebase_repo: &GitRepo) -> Result
 
     if let Some(main) = main {
         for Commit { path, message } in main {
-            let branch_name = gen_branch_name("old/main", &path);
+            let branch_name = gen_branch_name("quest/main", &path);
             create_commit(rebase_repo, &branch_name, message, &path)?;
         }
     }
@@ -359,7 +361,7 @@ fn dirs_to_repo(quest_commits: QuestDefinition, rebase_repo: &GitRepo) -> Result
             let mut scaffold_branches = Vec::with_capacity(scaffold.len());
             for Commit { path, message } in scaffold {
                 let branch_name = gen_branch_name(
-                    &format!("{OLD_BRANCH_PREFIX}/{branch_name}/scaffold"),
+                    &format!("{OLD_BRANCH_PREFIX}/chapter/{branch_name}/scaffold"),
                     &path,
                 );
                 create_commit(rebase_repo, &branch_name, message, &path)?;
@@ -369,7 +371,7 @@ fn dirs_to_repo(quest_commits: QuestDefinition, rebase_repo: &GitRepo) -> Result
 
         for Commit { path, message } in solution {
             let branch_name = gen_branch_name(
-                &format!("{OLD_BRANCH_PREFIX}/{branch_name}/solution"),
+                &format!("{OLD_BRANCH_PREFIX}/chapter/{branch_name}/solution"),
                 &path,
             );
             create_commit(rebase_repo, &branch_name, message, &path)?;
@@ -437,6 +439,227 @@ fn create_commit_if_changed(
     }
 }
 
-pub fn overlay(rebase_repo: &Path, quest: &Path) -> Result<()> {
-    todo!()
+pub fn overlay(hist: PathBuf, dir: &Path) -> Result<()> {
+    // 1. make sure there's nothing uncommitted in dir
+    let dir_repo = GitRepo::open(dir.to_path_buf()).with_context(|| {
+        format!("Cannot overwrite the quest in {dir:?}: it is not a git repository.")
+    })?;
+    if dir_repo.has_changes()? {
+        bail!("Cannot overwrite quest in {dir:?}, there are uncommitted changes.");
+    }
+    // 2. parse quest from dir
+    let original_quest = parse(dir)?;
+
+    // 3. remove chapters and main folders.
+    let main_dir = dir.join("main");
+    fs::remove_dir_all(&main_dir).with_context(|| format!("Could not remove {dir:?}/main."))?;
+    fs::create_dir(&main_dir).with_context(|| format!("Could not recreate {dir:?}/main."))?;
+    let chapters_dir = dir.join("chapters");
+    fs::remove_dir_all(&chapters_dir)
+        .with_context(|| format!("Could not remove {dir:?}/chapters."))?;
+    fs::create_dir(&chapters_dir)
+        .with_context(|| format!("Could not recreate {dir:?}/chapters."))?;
+
+    // 4a. recreate folders based on hist format
+    // 4b. copy back in issues, etc., from matching chapters
+    let hist_repo = GitRepo::open(hist)?;
+    let branches = hist_repo.topo_branches()?;
+    debug!("Creating main commits.");
+    let main = dirify_branches(
+        &main_dir,
+        &hist_repo,
+        branches.iter().map(|s| s.as_str()),
+        "quest/main/",
+    )?;
+
+    let original_chapters: HashMap<_, _> = original_quest
+        .chapters
+        .iter()
+        .map(|chapter| (chapter.branch_name.as_str(), chapter))
+        .collect();
+    let mut chapters = Vec::new();
+    for (chapter_label, chapter_branches) in branches
+        .iter()
+        .filter(|b| b.starts_with("quest/chapter/"))
+        .chunk_by(|branch| branch.split("/").dropping(2).next())
+        .into_iter()
+    {
+        info!("Processing chapter {chapter_label:?}.");
+        let chapter_branches: Vec<_> = chapter_branches.collect();
+        let chapter_label = chapter_label.with_context(|| {
+            format!("Error getting chapter label from branch names: {chapter_branches:?}.")
+        })?;
+        let chapter_dir = chapters_dir.join(chapter_label);
+        fs::create_dir(&chapter_dir)
+            .with_context(|| format!("Could not create chapter dir {chapter_dir:?}."))?;
+
+        // if there is a matching original chapter, preserve the issue/pr
+        //
+        // TODO: would it be better to just save the files somewhere and copy them back?
+        if let Some(original_chapter) = original_chapters.get(chapter_label) {
+            debug!("Recreating issues.");
+            write_issue(&chapter_dir, &original_chapter.issue)?;
+            debug!("Recreating prs.");
+            write_pr(&chapter_dir, &original_chapter.pull_request)?;
+        }
+
+        debug!("Creating scaffold commits for {chapter_label}.");
+        let scaffold = dirify_branches(
+            &chapter_dir.join("scaffold"),
+            &hist_repo,
+            chapter_branches.iter().map(|s| s.as_str()),
+            &format!("quest/chapter/{chapter_label}/scaffold/"),
+        )?;
+
+        debug!("Creating solution commits for {chapter_label}.");
+        let solution = dirify_branches(
+            &chapter_dir.join("solution"),
+            &hist_repo,
+            chapter_branches.iter().map(|s| s.as_str()),
+            &format!("quest/chapter/{chapter_label}/solution/"),
+        )?;
+
+        // only add the directory to the metadata if the chapter is new or the
+        // directory existed before
+        let scaffold = if let Some(original_chapter) = original_chapters.get(&chapter_label)
+            && original_chapter.scaffold.is_none()
+            && scaffold.is_empty()
+        {
+            None
+        } else {
+            Some(scaffold)
+        };
+        chapters.push(ChapterMeta {
+            label: chapter_label.to_string(),
+            scaffold,
+            solution,
+        })
+    }
+
+    // 6. recreate quest.toml with update chapters/commits
+
+    debug!("Creating quest.toml.");
+    // only add the directory to the metadata if the chapter is new or the
+    // directory existed before
+    let main = if original_quest.main.is_none() && main.is_empty() {
+        None
+    } else {
+        Some(main)
+    };
+    let meta = QuestMeta {
+        main,
+        chapters,
+        ..original_quest.meta()
+    };
+
+    fs::write(
+        dir.join("quest.toml"),
+        &toml::ser::to_string(&meta)
+            .with_context(|| format!("Failed to serialize quest metadata {meta:?}."))?,
+    )
+    .context("Failed to write quest metadata.")?;
+
+    Ok(())
+}
+
+fn write_pr(chapter_dir: &Path, pull_request: &PullRequest) -> Result<()> {
+    let file = chapter_dir.join("pr.md");
+    if let Some(primary_issue) = &pull_request.primary_issue {
+        write!(
+            &fs::File::create_new(file)?,
+            "+++\n{}+++\n{}",
+            toml::ser::to_string(&primary_issue.meta)?,
+            primary_issue.content
+        )
+        .with_context(|| format!("Failed to write primary issue for {chapter_dir:?}."))?;
+    }
+
+    if let Some(comments) = &pull_request.comments {
+        let issue_comments_dir = chapter_dir.join("pr");
+        fs::create_dir_all(&issue_comments_dir).with_context(|| {
+            format!("Failed to create issue comments dir {issue_comments_dir:?}.")
+        })?;
+        for comment in comments {
+            write!(
+                &fs::File::create_new(&comment.path)?,
+                "+++\n{}+++\n{}",
+                toml::ser::to_string(&comment.meta)?,
+                comment.content
+            )
+            .with_context(|| format!("Failed to write comment {:?}.", &comment.path))?;
+        }
+    }
+
+    Ok(())
+}
+
+fn write_issue(chapter_dir: &Path, issue: &Issue) -> Result<()> {
+    let file = chapter_dir.join("issue.md");
+    write!(
+        &fs::File::create_new(file)?,
+        "+++\n{}+++\n{}",
+        toml::ser::to_string(&issue.primary_issue.meta)?,
+        issue.primary_issue.content
+    )
+    .with_context(|| format!("Failed to write primary issue for {chapter_dir:?}."))?;
+
+    if let Some(comments) = &issue.comments {
+        let issue_comments_dir = chapter_dir.join("issue");
+        fs::create_dir_all(&issue_comments_dir).with_context(|| {
+            format!("Failed to create issue comments dir {issue_comments_dir:?}.")
+        })?;
+        for comment in comments {
+            fs::write(&comment.path, &comment.content)
+                .with_context(|| format!("Failed to write comment {:?}.", &comment.path))?;
+        }
+    }
+
+    Ok(())
+}
+
+fn dirify_branches<'a>(
+    output_dir: &Path,
+    repo: &GitRepo,
+    branches: impl Iterator<Item = &'a str>,
+    branch_prefix: &str,
+) -> Result<Vec<PathBuf>, anyhow::Error> {
+    let mut main = Vec::new();
+    for branch in branches {
+        if let Some(commit_label) = branch.strip_prefix(branch_prefix) {
+            if commit_label.contains("/") {
+                bail!("Malformed commit branch name: {branch} contains / in label.");
+            }
+            fs::create_dir_all(output_dir.join(commit_label))
+                .with_context(|| format!("Failed to create chapter commit dir for {branch}."))?;
+            repo.copy_tree(branch, &output_dir.join(commit_label))?;
+            let msg = repo.commit_message(branch)?;
+            fs::write(output_dir.join(format!("{commit_label}.txt")), msg)
+                .with_context(|| format!("Failed to write commit message for {branch}."))?;
+            main.push(PathBuf::from(commit_label));
+        }
+    }
+
+    Ok(main)
+}
+
+pub fn dir_to_hist(quest_dir: &Path, output_dir: PathBuf) -> Result<()> {
+    // Parse out the commits of the quests.
+    let old_quest_commits = parse(quest_dir)?;
+
+    // Initialize the repository that will host the rebase.
+    if output_dir.is_dir() {
+        fs::remove_dir_all(&output_dir)?;
+    }
+    ensure_empty_dir(&output_dir)?;
+    let output_repo = GitRepo::init(output_dir)?;
+
+    info!("{old_quest_commits:?}");
+
+    // Build the basic repo out of the "original" version of the quest.
+    dirs_to_repo(old_quest_commits, &output_repo)?;
+
+    // Move the current branch back to main.
+    output_repo.switch_branch("main")?;
+
+    Ok(())
 }

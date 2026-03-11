@@ -3,8 +3,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context as _, Result};
-use log::{debug, info, warn};
+use anyhow::{Context as _, Result, bail};
+use log::{debug, warn};
 use regex::Regex;
 
 use super::*;
@@ -15,71 +15,60 @@ use super::*;
 pub fn parse(dir: &Path) -> Result<QuestDefinition> {
     let quest_file_content =
         fs::read_to_string(dir.join("quest.toml")).with_context(|| "Could not read quest.toml.")?;
-    let meta: Meta = toml::from_str(&quest_file_content)?;
-    let chapters = parse_chapters(dir)?;
+    let meta: QuestMeta = toml::from_str(&quest_file_content)?;
+
+    let chapters = parse_chapters(dir, meta.chapters)?;
+
     let main_dir = dir.join("main");
-    let main = if main_dir.is_dir() {
-        Some(parse_commits_dir(&main_dir)?)
+    let main = if let Some(main_commits) = meta.main {
+        Some(parse_commits_dir(&main_commits, &main_dir)?)
     } else {
         None
     };
     Ok(QuestDefinition {
-        meta,
+        title: meta.title,
+        author: meta.author,
         main,
         chapters,
+        repo: meta.repo,
+        rq_version: meta.rq_version,
+        description: meta.description,
     })
 }
 
-fn parse_chapters(dir: &Path) -> Result<Vec<Chapter>> {
-    let chapter_dirs = chapter_dirs(dir)?;
-    debug!("Chapters dirs: {:?}", chapter_dirs);
+fn parse_chapters(dir: &Path, chapter_metas: Vec<ChapterMeta>) -> Result<Vec<Chapter>> {
+    debug!("Parsing chapters: {:?}", chapter_metas);
 
-    let mut chapters = Vec::with_capacity(chapter_dirs.len());
-    for chapter_dir in chapter_dirs {
-        chapters.push(parse_chapter(chapter_dir)?);
+    let dir = dir.join("chapters");
+    let mut chapters = Vec::with_capacity(chapter_metas.len());
+    for chapter_meta in chapter_metas {
+        chapters.push(parse_chapter(&dir, chapter_meta)?);
     }
 
     Ok(chapters)
 }
 
-/// Gets all potential chapter directories at the given path, sorted by name in
-/// lexicographical order.
-///
-/// A potential chapter directory is a directory that is not named `main` and
-/// that does not begin with a `.`.
-fn chapter_dirs(dir: &Path) -> Result<Vec<PathBuf>, anyhow::Error> {
-    let chapter_dirs: Vec<PathBuf> = read_dir_sorted_paths(&dir.join("chapters"))?
-        .into_iter()
-        .filter(|path| {
-            path.is_dir()
-                && !path.ends_with("main")
-                && !path
-                    .file_name()
-                    .and_then(|path| path.to_str())
-                    .is_some_and(|path| path.starts_with("."))
-        })
-        .collect();
+fn parse_chapter(dir: &Path, chapter_meta: ChapterMeta) -> Result<Chapter> {
+    debug!("Parsing chapter: {chapter_meta:?}");
 
-    Ok(chapter_dirs)
-}
-
-fn parse_chapter(chapter_dir: PathBuf) -> Result<Chapter> {
-    debug!("Parsing chapters dir: {chapter_dir:?}");
-
-    let branch_name = parse_branch_name(&chapter_dir)?;
+    let chapter_dir = dir.join(&chapter_meta.label);
+    if !chapter_dir.exists() {
+        bail!("Chapter directory {chapter_dir:?} does not exist.");
+    } else if !chapter_dir.is_dir() {
+        bail!("Chapter directory {chapter_dir:?} exists, but is not a directory.");
+    }
     let issue = parse_issue(&chapter_dir)?;
     let pull_request = parse_pull_request(&chapter_dir)?;
-    info!("Processing chapter {chapter_dir:?}");
-    let scaffold_dir = chapter_dir.join("scaffold");
-    let scaffold = if scaffold_dir.exists() {
-        Some(parse_commits_dir(&scaffold_dir)?)
+
+    let scaffold = if let Some(scaffold) = chapter_meta.scaffold {
+        Some(parse_commits_dir(&scaffold, &chapter_dir.join("scaffold"))?)
     } else {
         None
     };
-    let solution = parse_commits_dir(&chapter_dir.join("solution"))?;
+    let solution = parse_commits_dir(&chapter_meta.solution, &chapter_dir.join("solution"))?;
 
     Ok(Chapter {
-        branch_name,
+        branch_name: chapter_meta.label,
         issue,
         pull_request,
         scaffold,
@@ -201,14 +190,13 @@ fn comment_files(comments_dir: &Path) -> Result<Option<Vec<PathBuf>>> {
     }
 }
 
-fn parse_issue_comments(comments_dir: &Path) -> Result<Option<Vec<String>>> {
+fn parse_issue_comments(comments_dir: &Path) -> Result<Option<Vec<IssueComment>>> {
     if let Some(comment_files) = comment_files(comments_dir)? {
         let mut comments = Vec::with_capacity(comment_files.len());
         for path in comment_files {
-            comments.push(
-                fs::read_to_string(&path)
-                    .with_context(|| format!("Could not read comment file {path:?}"))?,
-            );
+            let content = fs::read_to_string(&path)
+                .with_context(|| format!("Could not read comment file {path:?}"))?;
+            comments.push(IssueComment { path, content });
         }
         Ok(Some(comments))
     } else {
@@ -254,29 +242,35 @@ fn parse_pull_request_comment(comment_path: &Path) -> Result<PullRequestComment>
         .with_context(|| format!("Could not parse TOML frontmatter from {comment_path:?}"))?
     {
         Ok(PullRequestComment {
+            path: comment_path.to_path_buf(),
             meta: Some(frontmatter),
             content: content.to_string(),
         })
     } else {
         Ok(PullRequestComment {
+            path: comment_path.to_path_buf(),
             meta: None,
             content: comment_file_content,
         })
     }
 }
 
-pub fn parse_commits_dir(commits_dir: &Path) -> Result<Vec<Commit>> {
-    let paths = read_dir_sorted_paths(commits_dir)?;
-
-    let dirs = paths.iter().filter(|path| path.is_dir());
-    let commits = dirs.map(|dir| {
+pub fn parse_commits_dir(commit_paths: &[PathBuf], commits_dir: &Path) -> Result<Vec<Commit>> {
+    let mut commits = Vec::with_capacity(commit_paths.len());
+    for commit_path in commit_paths {
+        let dir = commits_dir.join(commit_path);
+        if !dir.exists() {
+            bail!("Chapter directory {dir:?} does not exist.");
+        } else if !dir.is_dir() {
+            bail!("Chapter directory {dir:?} exists, but is not a directory.");
+        }
         let txt = dir.with_extension("txt");
-        if txt.is_file() {
+        commits.push(if txt.is_file() {
             (dir, Some(txt))
         } else {
             (dir, None)
-        }
-    });
+        })
+    }
 
     // TODO warn about non-.txt files
     // TODO warn about txt files with no corresponding directories
@@ -295,6 +289,27 @@ pub fn parse_commits_dir(commits_dir: &Path) -> Result<Vec<Commit>> {
         });
     }
     Ok(parsed_commits)
+}
+
+/// Gets all potential chapter directories at the given path, sorted by name in
+/// lexicographical order.
+///
+/// A potential chapter directory is a directory that is not named `main` and
+/// that does not begin with a `.`.
+fn potential_chapter_dirs(dir: &Path) -> Result<Vec<PathBuf>, anyhow::Error> {
+    let chapter_dirs: Vec<PathBuf> = read_dir_sorted_paths(&dir.join("chapters"))?
+        .into_iter()
+        .filter(|path| {
+            path.is_dir()
+                && !path.ends_with("main")
+                && !path
+                    .file_name()
+                    .and_then(|path| path.to_str())
+                    .is_some_and(|path| path.starts_with("."))
+        })
+        .collect();
+
+    Ok(chapter_dirs)
 }
 
 #[cfg(test)]
@@ -432,8 +447,14 @@ Content line 2
                     content: "Issue content referencing #{{ chapter.pr }}.\n".to_string()
                 },
                 comments: Some(vec![
-                    "First comment on an issue\n".to_string(),
-                    "Second comment on an issue.\n".to_string()
+                    IssueComment {
+                        path: PathBuf::from("01.md"),
+                        content: "First comment on an issue\n".to_string()
+                    },
+                    IssueComment {
+                        path: PathBuf::from("02.md"),
+                        content: "Second comment on an issue.\n".to_string()
+                    }
                 ])
             }
         );
@@ -454,8 +475,14 @@ Content line 2
 
     #[test]
     fn test_parse_commits_dir() {
-        let res =
-            parse_commits_dir(&PathBuf::from("test-data/test-quest/00-first/scaffold")).unwrap();
+        let res = parse_commits_dir(
+            &[
+                PathBuf::from("00-prepare-interfaces"),
+                PathBuf::from("01-add-placeholders"),
+            ],
+            &PathBuf::from("test-data/test-quest/00-first/scaffold"),
+        )
+        .unwrap();
         assert_eq!(
             res,
             vec![

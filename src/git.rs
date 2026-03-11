@@ -341,10 +341,8 @@ impl GitRepo {
             .with_context(|| format!("Could not archive {self:?} ref {gitref}."))?;
 
         Command::new("tar")
-            .current_dir(&self.dir)
+            .current_dir(output)
             .stdin(Stdio::from(git.stdout.unwrap()))
-            .arg("-C")
-            .arg(output)
             .arg("-x")
             .run_with_context(|| format!("Could not untar archive of {self:?} to {output:?}."))
     }
@@ -367,6 +365,49 @@ impl GitRepo {
                 .output()
                 .with_context(|| format!("Could not run git diff --cached in {self:?}."))?
                 .status
-                .success())
+                .success()
+            || self
+                .git()
+                .arg("ls-files")
+                .arg("--others")
+                .arg("--directory")
+                .arg("--empty-directory")
+                .arg("--exclude-standard")
+                .stdout_with_context(|| format!("Could not run git ls-files in {self:?}."))?
+                .is_empty())
+    }
+
+    /// Returns the branches in the repository in topological order, based on
+    /// the ordering of `git log`.
+    pub fn topo_branches(&self) -> Result<Vec<String>> {
+        let out = self
+            .git()
+            .arg("log")
+            .arg("--simplify-by-decoration")
+            .arg("--pretty=format:%D")
+            .stdout_with_context(|| format!("Could not run git log in {self:?}."))?;
+
+        let mut branches = Vec::new();
+        for line in out.lines() {
+            for r in line.split_terminator(", ") {
+                let r = r.strip_prefix("HEAD -> ").unwrap_or(r);
+                branches.push(r.to_string());
+            }
+        }
+        branches.reverse();
+        Ok(branches)
+    }
+
+    pub fn commit_message(&self, rev: &str) -> Result<String> {
+        let out = self
+            .git()
+            .arg("log")
+            .arg("-n")
+            .arg("1")
+            .arg("--pretty=format:%B")
+            .arg(rev)
+            .stdout_with_context(|| format!("Could not run git log in {self:?}."))?;
+
+        Ok(out)
     }
 }

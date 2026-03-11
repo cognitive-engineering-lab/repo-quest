@@ -85,10 +85,10 @@ pub fn bundle(quest: QuestDefinition, output: &Path) -> Result<()> {
 
     // Assemble metadata
     let quest = QuestDefinitionMetadata {
-        title: quest.meta.title,
-        author: quest.meta.author,
-        description: quest.meta.description,
-        generated_repo_name: quest.meta.repo,
+        title: quest.title,
+        author: quest.author,
+        description: quest.description,
+        generated_repo_name: quest.repo,
         tasks,
         task_ids,
     };
@@ -183,7 +183,7 @@ fn bundle_issue(branch_name: &String, issue: Issue) -> IssueTemplate {
             .into_iter()
             .flatten()
             .map(|comment| Comment {
-                body: Template(comment),
+                body: Template(comment.content),
             })
             .collect(),
     }
