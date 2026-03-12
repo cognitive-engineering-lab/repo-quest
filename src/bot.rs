@@ -566,6 +566,7 @@ async fn get_chapters(
 #[serde(rename_all = "camelCase")]
 struct ChapterInfo {
     id: usize,
+    task_name: String,
     task: Task,
 }
 
@@ -579,11 +580,18 @@ async fn get_current_chapter(
     let quest = quests
         .metadata(quest_id)
         .with_context(|| format!("No quest with id {quest_id}."))?;
+    let quest_definition = state
+        .quest_definitions
+        .definition(quest.definition_id)
+        .with_context(|| format!("No quest definition with id {}.", quest.definition_id))?;
 
     let response = if let Some(cur_task_id) = quest.tasks.len().checked_sub(1) {
         let cur_task = &quest.tasks[cur_task_id];
+        let cur_task_definition = &quest_definition.metadata.tasks[cur_task_id];
+        let task_name = cur_task_definition.issue_template.title.clone();
         Some(ChapterInfo {
             id: cur_task_id,
+            task_name,
             task: cur_task.clone(),
         })
     } else {

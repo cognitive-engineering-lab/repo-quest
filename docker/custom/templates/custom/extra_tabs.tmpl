@@ -60,11 +60,12 @@
             </span>
         </div>
         <div class="ui list">
-            <!-- <span>Issue: <a id="current-task-link">Add chat/route</a></span> -->
+            <span id="current-task-name"></span>
+        </div>
+        <div class="ui list">
             <span><a id="current-task-link">Issue</a></span>
         </div>
         <div class="ui list">
-            <!-- <span>PR: <a id="current-pr-link">PR title</a></span> -->
             <span><a id="current-pr-link">Pull Request</a></span>
         </div>
         <div class="divider"></div>
@@ -125,6 +126,13 @@
          const pr = response.task.pr;
          currentPrLink.href = `{{AppSubUrl}}/${pr.owner}/${pr.repo}/pulls/${pr.number}`;
          /* currentPrLink.content = pr.title; */
+     }
+     const curTaskNameSpan = document.getElementById("current-task-name");
+     if (!response) {
+         curTaskNameSpan.remove();
+     } else {
+         console.log(response);
+         curTaskNameSpan.innerHTML = response.taskName;
      }
  });
 
