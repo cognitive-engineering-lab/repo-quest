@@ -1,6 +1,103 @@
 {{ if .IsSigned }}
-<a id="current-task-link" class="right item">Current Task</a>
-<span id="solution-button-span"></span>
+<style>
+ #rq-sidebar {
+     position:fixed;
+     height: calc(100dvh - 2 * 49px);
+     width: 20em;
+     top:49px;
+     right:0;
+     z-index:10000;
+     background: var(--color-box-body);
+     border: solid 1px var(--color-secondary);
+     border-right: none;
+     border-radius: var(--border-radius);
+     display: flex;
+     flex-direction: column;
+     padding-right: env(safe-area-inset-right, 0);
+     transition: width 0.2s ease, transform 0.2s ease;
+     -webkit-transition: width 0.2s ease, -webkit-transform 0.2s ease;
+ }
+
+ div.rq-sidebar-closed {
+     transform: translateX(17em);
+ }
+
+ div.rq-sidebar-closed .rq-sidebar-toggle {
+     transform: rotate(180deg);
+ }
+
+ #rq-sidebar-toggle {
+     position: absolute;
+     top: 50%;
+     width: 24px;
+     left: -24px;
+     background: var(--color-box-body);
+     border: solid 1px var(--color-secondary);
+     border-right: none;
+     border-radius: var(--border-radius);
+     height: 64px;
+     color: var(--color-text);
+     align-items: center;
+     justify-content: center;
+ }
+</style>
+
+<div id="rq-sidebar" class="ui container rq-sidebar-open">
+    <button id="rq-sidebar-toggle">
+        {{svg "octicon-chevron-right" 16 "rq-sidebar-toggle"}}
+    </button>
+
+    <div class="ui top attached header">
+        <h1 class="tw-break-anywhere" style="margin: 0px;">RepoQuest</h1>
+    </div>
+    <div class="ui attached segment">
+        <div class="ui floating">
+            <span class="text flex-text-block">
+                <strong>
+                    {{svg "octicon-tasklist" 16 "tw-text-placeholder-text"}}
+                    Current Task
+                </strong>
+            </span>
+        </div>
+        <div class="ui list">
+            <!-- <span>Issue: <a id="current-task-link">Add chat/route</a></span> -->
+            <span><a id="current-task-link">Issue</a></span>
+        </div>
+        <div class="ui list">
+            <!-- <span>PR: <a id="current-pr-link">PR title</a></span> -->
+            <span><a id="current-pr-link">Pull Request</a></span>
+        </div>
+        <div class="divider"></div>
+        <div class="ui floating">
+            <span class="text flex-text-block">
+                <strong>
+                    {{svg "octicon-git-pull-request" 16 "tw-text-placeholder-text"}}
+                    Reference Solution
+                </strong>
+            </span>
+        </div>
+        <div class="tw-mt-2">
+            <span id="solution-button-span"></span>
+        </div>
+    </div>
+</div>
+
+<script>
+ function toggleSidebar(event) {
+     const sidebar = document.getElementById("rq-sidebar");
+     if (sidebar.classList.contains("rq-sidebar-open")) {
+         sidebar.classList.remove("rq-sidebar-open");
+         sidebar.classList.add("rq-sidebar-closed");
+     } else {
+         sidebar.classList.remove("rq-sidebar-closed");
+         sidebar.classList.add("rq-sidebar-open");
+     }
+ }
+
+ const toggle = document.getElementById("rq-sidebar-toggle");
+ console.log(toggle);
+ toggle.addEventListener("click", toggleSidebar);
+</script>
 
 <script>
  fetch("{{AppSubUrl}}/rq/quest/{{.Repository.ID}}/chapter/current", {
@@ -12,12 +109,22 @@
      }
      return response.json();
  }).then(function(response) {
-     const currentTaskLink = document.getElementById("current-task-link");
+     const currentIssueLink = document.getElementById("current-task-link");
      if (!response) {
-         currentTaskLink.remove();
+         currentIssueLink.remove();
      } else {
          const issue = response.task.issue;
-         currentTaskLink.href = `{{AppSubUrl}}/${issue.owner}/${issue.repo}/issues/${issue.number}`;
+         currentIssueLink.href = `{{AppSubUrl}}/${issue.owner}/${issue.repo}/issues/${issue.number}`;
+         /* currentIssueLink.content = issue.title; */
+     }
+
+     const currentPrLink = document.getElementById("current-pr-link");
+     if (!response) {
+         currentPrLink.remove();
+     } else {
+         const pr = response.task.pr;
+         currentPrLink.href = `{{AppSubUrl}}/${pr.owner}/${pr.repo}/pulls/${pr.number}`;
+         /* currentPrLink.content = pr.title; */
      }
  });
 
@@ -49,19 +156,19 @@
      if (!pr) {
          const button = document.createElement("a");
          button.type = "button";
-         button.classList.add("right");
-         button.classList.add("button");
          button.classList.add("ui");
+         button.classList.add("fluid");
+         button.classList.add("button");
          button.addEventListener("click", createSolution);
          button.append("Add Solution PR");
-         solnButtonSpan.append(button)
+         solnButtonSpan.replaceWith(button)
      } else {
          const link = document.createElement("a");
          link.href = `{{AppSubUrl}}/${pr.owner}/${pr.repo}/pulls/${pr.number}`;
-         link.classList.add("right");
-         link.classList.add("item");
-         link.append("View Solution PR");
-         solnButtonSpan.append(link)
+         link.classList.add("text");
+         link.classList.add("flex-text-block");
+         link.append("Pull Request");
+         solnButtonSpan.replaceWith(link)
      }
  });
  // <button class="right button ui">Add Solution</button>
