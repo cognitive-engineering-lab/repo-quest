@@ -448,11 +448,15 @@ Content line 2
                 },
                 comments: Some(vec![
                     IssueComment {
-                        path: PathBuf::from("01.md"),
+                        path: PathBuf::from(
+                            "test-data/test-quest/00-first/issue/00-comment-about-foo.md"
+                        ),
                         content: "First comment on an issue\n".to_string()
                     },
                     IssueComment {
-                        path: PathBuf::from("02.md"),
+                        path: PathBuf::from(
+                            "test-data/test-quest/00-first/issue/01-other-comment.md"
+                        ),
                         content: "Second comment on an issue.\n".to_string()
                     }
                 ])
