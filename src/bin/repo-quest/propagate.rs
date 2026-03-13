@@ -16,6 +16,7 @@ use repo_quest::git::todo::*;
 
 const OLD_BRANCH_PREFIX: &str = "quest";
 const NEW_BRANCH_PREFIX: &str = "changes";
+const QUEST_FILES: [&str; 3] = ["main", "chapters", "quest.toml"];
 
 /// Converts two committed versions of a quest definition into a repository that
 /// can be used to propagate changes to one chapter of the quest forward into
@@ -425,7 +426,11 @@ fn create_commit_if_changed(
 ) -> Result<bool> {
     info!("Processing {:?}", dir);
     rsync(dir, &rebase_repo.dir)?;
-    if rebase_repo.has_changes()? {
+    let root = &[Path::new(".")];
+    if rebase_repo.changes(root)?.is_some()
+        || rebase_repo.staged_changes(root)?.is_some()
+        || !rebase_repo.untracked(root)?.is_empty()
+    {
         rebase_repo.add_all()?;
         rebase_repo.create_branch(old_branch_name, branch_name)?;
         rebase_repo.switch_branch(branch_name)?;
@@ -444,8 +449,17 @@ pub fn overlay(hist: PathBuf, dir: &Path) -> Result<()> {
     let dir_repo = GitRepo::open(dir.to_path_buf()).with_context(|| {
         format!("Cannot overwrite the quest in {dir:?}: it is not a git repository.")
     })?;
-    if dir_repo.has_changes()? {
-        bail!("Cannot overwrite quest in {dir:?}, there are uncommitted changes.");
+    let quest_files = &QUEST_FILES.map(Path::new);
+    let untracked_files = dir_repo.untracked(quest_files)?;
+    let changes = dir_repo.changes(quest_files)?;
+    let staged_changes = dir_repo.staged_changes(quest_files)?;
+    if changes.is_some() || staged_changes.is_some() || !untracked_files.is_empty() {
+        bail!(
+            "Cannot overwrite quest in {dir:?}, there are uncommitted changes that would be affected:\n\nChanges:\n{}\n\nStaged changes:\n{}\n\nUntracked files:\n{}",
+            changes.unwrap_or_default(),
+            staged_changes.unwrap_or_default(),
+            untracked_files,
+        );
     }
     // 2. parse quest from dir
     let original_quest = parse(dir)?;

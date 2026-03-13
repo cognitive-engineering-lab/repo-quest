@@ -348,33 +348,51 @@ impl GitRepo {
     }
 
     /// git diff --quiet && git diff --cached --quiet
-    pub fn has_changes(&self) -> Result<bool> {
-        Ok(!self
+    pub fn changes(&self, paths: &[&Path]) -> Result<Option<String>> {
+        let res = self
             .git()
             .arg("diff")
-            .arg("--quiet")
+            .arg("--name-status")
+            .arg("--exit-code")
+            .arg("--")
+            .args(paths)
             .output()
-            .with_context(|| format!("Could not run git diff in {self:?}."))?
-            .status
-            .success()
-            || !self
-                .git()
-                .arg("diff")
-                .arg("--cached")
-                .arg("--quiet")
-                .output()
-                .with_context(|| format!("Could not run git diff --cached in {self:?}."))?
-                .status
-                .success()
-            || self
-                .git()
-                .arg("ls-files")
-                .arg("--others")
-                .arg("--directory")
-                .arg("--empty-directory")
-                .arg("--exclude-standard")
-                .stdout_with_context(|| format!("Could not run git ls-files in {self:?}."))?
-                .is_empty())
+            .with_context(|| format!("Could not run git diff in {self:?}."))?;
+        Ok(if res.status.success() {
+            None
+        } else {
+            Some(String::from_utf8_lossy(&res.stdout).into_owned())
+        })
+    }
+    pub fn staged_changes(&self, paths: &[&Path]) -> Result<Option<String>> {
+        let res = self
+            .git()
+            .arg("diff")
+            .arg("--cached")
+            .arg("--name-status")
+            .arg("--exit-code")
+            .arg("--")
+            .args(paths)
+            .output()
+            .with_context(|| format!("Could not run git diff --cached in {self:?}."))?;
+
+        Ok(if res.status.success() {
+            None
+        } else {
+            Some(String::from_utf8_lossy(&res.stdout).into_owned())
+        })
+    }
+
+    pub fn untracked(&self, paths: &[&Path]) -> Result<String> {
+        self.git()
+            .arg("ls-files")
+            .arg("--others")
+            .arg("--directory")
+            .arg("--empty-directory")
+            .arg("--exclude-standard")
+            .arg("--")
+            .args(paths)
+            .stdout_with_context(|| format!("Could not run git ls-files in {self:?}."))
     }
 
     /// Returns the branches in the repository in topological order, based on
