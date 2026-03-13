@@ -30,7 +30,7 @@ use crate::{
     quest::{definition::*, instance::*},
 };
 
-pub const BOT_AUTHOR: Option<&str> = Some("RepoQuest <>");
+pub const BOT_AUTHOR: Option<(&str, &str)> = Some(("RepoQuest", "repoquest@example.com"));
 
 /// The overall state of ReqoQuest. All of the state is loaded into memory at
 /// program startup. Unless a user has many quest definitions or very many quest

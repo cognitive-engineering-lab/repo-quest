@@ -111,13 +111,23 @@ impl GitRepo {
     }
 
     /// Creates a commit with the given message.
-    pub fn commit(&self, msg: &str, author: Option<&str>) -> Result<()> {
+    pub fn commit(&self, msg: &str, author: Option<(&str, &str)>) -> Result<()> {
         let mut cmd = self.git();
-        cmd.arg("commit").arg("--allow-empty");
-        if let Some(author) = author {
-            cmd.arg("--author").arg(author);
+        // Git requires the author name and email to be configured via the
+        // config or environment variables even if the author is explicitly
+        // given on the command line, so we use the config option to git (which
+        // must be set before the subcommand).
+        if let Some((name, email)) = author {
+            cmd.args([
+                "-c",
+                &format!("user.name={name}"),
+                "-c",
+                &format!("user.email={email}",),
+            ]);
         }
-        cmd.arg("-m")
+        cmd.arg("commit")
+            .arg("--allow-empty")
+            .arg("-m")
             .arg(msg)
             .run_with_context(|| format!("Could not create commit for {self:?}."))
     }
