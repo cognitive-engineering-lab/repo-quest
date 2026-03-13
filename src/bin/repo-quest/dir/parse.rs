@@ -76,6 +76,7 @@ fn parse_chapter(dir: &Path, chapter_meta: ChapterMeta) -> Result<Chapter> {
     })
 }
 
+#[allow(unused)]
 fn parse_branch_name(chapter_dir: &Path) -> Result<String, anyhow::Error> {
     Ok(chapter_dir
         .file_name()
@@ -296,6 +297,7 @@ pub fn parse_commits_dir(commit_paths: &[PathBuf], commits_dir: &Path) -> Result
 ///
 /// A potential chapter directory is a directory that is not named `main` and
 /// that does not begin with a `.`.
+#[allow(unused)]
 fn potential_chapter_dirs(dir: &Path) -> Result<Vec<PathBuf>, anyhow::Error> {
     let chapter_dirs: Vec<PathBuf> = read_dir_sorted_paths(&dir.join("chapters"))?
         .into_iter()

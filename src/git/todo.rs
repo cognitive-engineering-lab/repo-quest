@@ -37,3 +37,9 @@ impl GitTodoList {
         self.0.push(format!("update-ref refs/heads/{branch}"))
     }
 }
+
+impl Default for GitTodoList {
+    fn default() -> Self {
+        Self::new()
+    }
+}

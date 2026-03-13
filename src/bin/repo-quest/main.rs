@@ -1,5 +1,4 @@
 mod dir;
-mod github;
 mod propagate;
 mod util;
 
@@ -10,7 +9,7 @@ use std::{
     path::{self, Path, PathBuf},
 };
 
-use crate::{dir::QuestDefinition, github::*, propagate::dir_to_hist};
+use crate::{dir::QuestDefinition, propagate::dir_to_hist};
 
 use anyhow::{Context as _, Result};
 use clap::{Parser, ValueEnum};
@@ -152,30 +151,6 @@ pub enum Command {
     // Rename {},
     // Split {},
     // Merge {},
-    /// Bundles a GitHub-based quest definition for use with a RepoQuest Forgejo
-    /// instance.
-    ///
-    /// WARNING: This command is deprecated. Convert your quest to the
-    /// directory-based format.
-    #[deprecated]
-    #[command(name = "bundle-github")]
-    BundleGitHub {
-        /// GitHub access token, e.g., `$GITHUB_TOKEN` in a GitHub action.
-        #[arg(long)]
-        token: Option<String>,
-        /// The base URI for the GitHub instance. Defaults to `http://api.github.com`.
-        #[arg(long, default_value = "https://api.github.com")]
-        base_uri: String,
-        /// The owner of the repository (e.g., username or organization name).
-        #[arg(long)]
-        owner: String,
-        /// The name of the repository.
-        #[arg(long)]
-        repo: String,
-        /// The path to which to write the bundle archive.
-        #[arg(short, long)]
-        output: PathBuf,
-    },
 }
 
 #[tokio::main]
@@ -188,7 +163,7 @@ async fn main() -> Result<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("debug")).init();
 
     match command {
-        Command::Init { dir } => todo!(),
+        Command::Init { dir: _ } => todo!(),
         Command::Bundle { input, output } => {
             let input = match input {
                 Some(input) => input,
@@ -241,7 +216,11 @@ async fn main() -> Result<()> {
             };
             let _ = dir::parse(&quest)?;
         }
-        Command::CommitHist { hist, dir, message } => todo!(),
+        Command::CommitHist {
+            hist: _,
+            dir: _,
+            message: _,
+        } => todo!(),
         Command::Propagate {
             quest,
             original,
@@ -256,13 +235,6 @@ async fn main() -> Result<()> {
             )?;
             println!("{rebase_todo}");
         }
-        Command::BundleGitHub {
-            token,
-            base_uri,
-            owner,
-            repo,
-            output,
-        } => bundle_github(output, token, base_uri, owner, repo).await?,
     };
 
     Ok(())
