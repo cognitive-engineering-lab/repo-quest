@@ -8,7 +8,7 @@ use std::{
 use anyhow::{Context as _, Result, bail};
 use itertools::{EitherOrBoth, Itertools};
 use log::{debug, info, warn};
-use repo_quest::git::GitRepo;
+use repo_quest::{bot::BOT_AUTHOR, git::GitRepo};
 use tempfile::*;
 
 use crate::{dir::*, util::rsync};
@@ -393,7 +393,7 @@ fn create_commit(
     info!("Processing {:?}", dir);
     rsync(dir, &rebase_repo.dir)?;
     rebase_repo.add_all()?;
-    rebase_repo.commit(message.as_deref().unwrap_or(branch_name))?;
+    rebase_repo.commit(message.as_deref().unwrap_or(branch_name), BOT_AUTHOR)?;
     rebase_repo.create_branch("HEAD", branch_name)?;
     Ok(())
 }
@@ -434,10 +434,10 @@ fn create_commit_if_changed(
         rebase_repo.add_all()?;
         rebase_repo.create_branch(old_branch_name, branch_name)?;
         rebase_repo.switch_branch(branch_name)?;
-        rebase_repo.commit(&format!(
-            "fixup! {}",
-            message.as_deref().unwrap_or(branch_name)
-        ))?;
+        rebase_repo.commit(
+            &format!("fixup! {}", message.as_deref().unwrap_or(branch_name)),
+            BOT_AUTHOR,
+        )?;
         Ok(true)
     } else {
         Ok(false)

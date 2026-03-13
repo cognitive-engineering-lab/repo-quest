@@ -111,11 +111,13 @@ impl GitRepo {
     }
 
     /// Creates a commit with the given message.
-    pub fn commit(&self, msg: &str) -> Result<()> {
-        self.git()
-            .arg("commit")
-            .arg("--allow-empty")
-            .arg("-m")
+    pub fn commit(&self, msg: &str, author: Option<&str>) -> Result<()> {
+        let mut cmd = self.git();
+        cmd.arg("commit").arg("--allow-empty");
+        if let Some(author) = author {
+            cmd.arg("--author").arg(author);
+        }
+        cmd.arg("-m")
             .arg(msg)
             .run_with_context(|| format!("Could not create commit for {self:?}."))
     }

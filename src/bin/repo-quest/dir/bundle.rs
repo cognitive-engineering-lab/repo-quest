@@ -3,6 +3,7 @@ use std::{borrow::Cow, collections::HashMap, fs, path::Path};
 use anyhow::{Context as _, Result};
 use log::debug;
 use repo_quest::{
+    bot::BOT_AUTHOR,
     git::GitRepo,
     quest::definition::{
         Comment, IssueTemplate, PullRequestTemplate, QuestDefinitionMetadata, ReviewLineSubject,
@@ -32,7 +33,7 @@ pub fn bundle(quest: QuestDefinition, output: &Path) -> Result<()> {
         Some(commits) if !commits.is_empty() => {
             create_commits(&git_dir_path, &repo, commits.iter())?;
         }
-        _ => repo.commit("Initial commit")?,
+        _ => repo.commit("Initial commit", BOT_AUTHOR)?,
     }
     let main_commit = repo.rev_parse("HEAD")?;
 
@@ -212,6 +213,6 @@ fn create_commit(git_dir_path: &Path, repo: &GitRepo, commit: &Commit) -> Result
     debug!("Creating commit for {:?}.", &commit.path);
     rsync(&commit.path, git_dir_path)?;
     repo.add_all()?;
-    repo.commit(message.as_ref())?;
+    repo.commit(message.as_ref(), BOT_AUTHOR)?;
     Ok(())
 }

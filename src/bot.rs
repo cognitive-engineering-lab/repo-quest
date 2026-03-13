@@ -30,6 +30,8 @@ use crate::{
     quest::{definition::*, instance::*},
 };
 
+pub const BOT_AUTHOR: Option<&str> = Some("RepoQuest <>");
+
 /// The overall state of ReqoQuest. All of the state is loaded into memory at
 /// program startup. Unless a user has many quest definitions or very many quest
 /// instances, having everything in memory shouldn't be an issue.
@@ -690,7 +692,7 @@ pub async fn set_current_chapter(
             // If the rebase fails, first reset to the previous reference solution branch and then
             // rebase onto that.
             local_repo.restore_from(&remote_prev_solution_branch)?;
-            local_repo.commit("Reset to the reference solution")?;
+            local_repo.commit("Reset to the reference solution", BOT_AUTHOR)?;
             local_repo.rebase("main", &remote_prev_solution_branch)?
         }
         Ok(res) => res,
