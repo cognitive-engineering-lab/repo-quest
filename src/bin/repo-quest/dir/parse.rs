@@ -21,7 +21,7 @@ pub fn parse(dir: &Path) -> Result<QuestDefinition> {
 
     let main_dir = dir.join("main");
     let main = if let Some(main_commits) = meta.main {
-        Some(parse_commits_dir(&main_commits, &main_dir)?)
+        Some(parse_commits_dir(main_commits, &main_dir)?)
     } else {
         None
     };
@@ -33,6 +33,7 @@ pub fn parse(dir: &Path) -> Result<QuestDefinition> {
         repo: meta.repo,
         rq_version: meta.rq_version,
         description: meta.description,
+        test_cmd: meta.test_cmd,
     })
 }
 
@@ -61,11 +62,11 @@ fn parse_chapter(dir: &Path, chapter_meta: ChapterMeta) -> Result<Chapter> {
     let pull_request = parse_pull_request(&chapter_dir)?;
 
     let scaffold = if let Some(scaffold) = chapter_meta.scaffold {
-        Some(parse_commits_dir(&scaffold, &chapter_dir.join("scaffold"))?)
+        Some(parse_commits_dir(scaffold, &chapter_dir.join("scaffold"))?)
     } else {
         None
     };
-    let solution = parse_commits_dir(&chapter_meta.solution, &chapter_dir.join("solution"))?;
+    let solution = parse_commits_dir(chapter_meta.solution, &chapter_dir.join("solution"))?;
 
     Ok(Chapter {
         branch_name: chapter_meta.label,
@@ -256,38 +257,29 @@ fn parse_pull_request_comment(comment_path: &Path) -> Result<PullRequestComment>
     }
 }
 
-pub fn parse_commits_dir(commit_paths: &[PathBuf], commits_dir: &Path) -> Result<Vec<Commit>> {
-    let mut commits = Vec::with_capacity(commit_paths.len());
-    for commit_path in commit_paths {
-        let dir = commits_dir.join(commit_path);
+pub fn parse_commits_dir(commit_metas: Vec<CommitMeta>, commits_dir: &Path) -> Result<Vec<Commit>> {
+    // TODO warn about non-.txt files
+    // TODO warn about txt files with no corresponding directories
+
+    let mut parsed_commits = Vec::new();
+    for commit_meta in commit_metas {
+        let dir = commits_dir.join(&commit_meta.label);
         if !dir.exists() {
             bail!("Chapter directory {dir:?} does not exist.");
         } else if !dir.is_dir() {
             bail!("Chapter directory {dir:?} exists, but is not a directory.");
         }
-        let txt = dir.with_extension("txt");
-        commits.push(if txt.is_file() {
-            (dir, Some(txt))
+        let txt = dir.with_added_extension("txt");
+        let msg = if txt.is_file() {
+            Some(
+                fs::read_to_string(&txt)
+                    .with_context(|| format!("Could not open commit message file {txt:?}"))?,
+            )
         } else {
-            (dir, None)
-        })
-    }
+            None
+        };
 
-    // TODO warn about non-.txt files
-    // TODO warn about txt files with no corresponding directories
-
-    let mut parsed_commits = Vec::new();
-    for (path, message_file) in commits {
-        parsed_commits.push(Commit {
-            path: path.to_path_buf(),
-            message: match message_file {
-                Some(path) => Some(
-                    fs::read_to_string(&path)
-                        .with_context(|| format!("Could not open commit message file {path:?}"))?,
-                ),
-                None => None,
-            },
-        });
+        parsed_commits.push(commit_meta.into_commit(msg, commits_dir));
     }
     Ok(parsed_commits)
 }
@@ -482,9 +474,15 @@ Content line 2
     #[test]
     fn test_parse_commits_dir() {
         let res = parse_commits_dir(
-            &[
-                PathBuf::from("00-prepare-interfaces"),
-                PathBuf::from("01-add-placeholders"),
+            vec![
+                CommitMeta {
+                    label: "00-prepare-interfaces".to_string(),
+                    expected_test_result: TestExpectation::Pass,
+                },
+                CommitMeta {
+                    label: "01-add-placeholders".to_string(),
+                    expected_test_result: TestExpectation::Pass,
+                },
             ],
             &PathBuf::from("test-data/test-quest/00-first/scaffold"),
         )
@@ -496,7 +494,8 @@ Content line 2
                     path: PathBuf::from(
                         "test-data/test-quest/00-first/scaffold/00-prepare-interfaces"
                     ),
-                    message: Some("commit message\n".to_string())
+                    message: Some("commit message\n".to_string()),
+                    expected_test_result: TestExpectation::Pass,
                 },
                 Commit {
                     path: PathBuf::from(
@@ -504,7 +503,8 @@ Content line 2
                     ),
                     message: Some(
                         "commit message for final commit in scaffold branch\n".to_string()
-                    )
+                    ),
+                    expected_test_result: TestExpectation::Pass,
                 }
             ]
         );

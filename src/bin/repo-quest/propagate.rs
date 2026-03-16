@@ -257,7 +257,7 @@ fn dirs_to_change_branches(
     rebase_repo: &GitRepo,
 ) -> Result<GitTodoList> {
     let mut todo = GitTodoList::new();
-    for Commit { path, message } in new_quest_commits.main.into_iter().flatten() {
+    for Commit { path, message, .. } in new_quest_commits.main.into_iter().flatten() {
         let old_branch_name = gen_branch_name(&format!("{OLD_BRANCH_PREFIX}/main"), &path);
         rebase_repo.switch_branch(&old_branch_name)?;
         let new_branch_name = gen_branch_name(&format!("{NEW_BRANCH_PREFIX}/main"), &path);
@@ -283,7 +283,7 @@ fn dirs_to_change_branches(
         ..
     } in new_quest_commits.chapters
     {
-        for Commit { path, message } in scaffold.into_iter().flatten() {
+        for Commit { path, message, .. } in scaffold.into_iter().flatten() {
             let old_branch_name = gen_branch_name(
                 &format!("{OLD_BRANCH_PREFIX}/chapter/{branch_name}/scaffold"),
                 &path,
@@ -308,7 +308,7 @@ fn dirs_to_change_branches(
             }
             todo.update_branch(&old_branch_name);
         }
-        for Commit { path, message } in solution {
+        for Commit { path, message, .. } in solution {
             let old_branch_name = gen_branch_name(
                 &format!("{OLD_BRANCH_PREFIX}/chapter/{branch_name}/solution"),
                 &path,
@@ -345,7 +345,7 @@ fn dirs_to_repo(quest_commits: QuestDefinition, rebase_repo: &GitRepo) -> Result
     let QuestDefinition { main, chapters, .. } = quest_commits;
 
     if let Some(main) = main {
-        for Commit { path, message } in main {
+        for Commit { path, message, .. } in main {
             let branch_name = gen_branch_name("quest/main", &path);
             create_commit(rebase_repo, &branch_name, message, &path)?;
         }
@@ -360,7 +360,7 @@ fn dirs_to_repo(quest_commits: QuestDefinition, rebase_repo: &GitRepo) -> Result
     {
         if let Some(scaffold) = scaffold {
             let mut scaffold_branches = Vec::with_capacity(scaffold.len());
-            for Commit { path, message } in scaffold {
+            for Commit { path, message, .. } in scaffold {
                 let branch_name = gen_branch_name(
                     &format!("{OLD_BRANCH_PREFIX}/chapter/{branch_name}/scaffold"),
                     &path,
@@ -370,7 +370,7 @@ fn dirs_to_repo(quest_commits: QuestDefinition, rebase_repo: &GitRepo) -> Result
             }
         }
 
-        for Commit { path, message } in solution {
+        for Commit { path, message, .. } in solution {
             let branch_name = gen_branch_name(
                 &format!("{OLD_BRANCH_PREFIX}/chapter/{branch_name}/solution"),
                 &path,
@@ -483,6 +483,7 @@ pub fn overlay(hist: PathBuf, dir: &Path) -> Result<()> {
         &main_dir,
         &hist_repo,
         branches.iter().map(|s| s.as_str()),
+        original_quest.main.clone().unwrap_or_else(Vec::new),
         "quest/main/",
     )?;
 
@@ -510,7 +511,8 @@ pub fn overlay(hist: PathBuf, dir: &Path) -> Result<()> {
         // if there is a matching original chapter, preserve the issue/pr
         //
         // TODO: would it be better to just save the files somewhere and copy them back?
-        if let Some(original_chapter) = original_chapters.get(chapter_label) {
+        let original_chapter = original_chapters.get(chapter_label);
+        if let Some(original_chapter) = original_chapter {
             debug!("Recreating issues.");
             write_issue(&chapter_dir, &original_chapter.issue)?;
             debug!("Recreating prs.");
@@ -522,6 +524,9 @@ pub fn overlay(hist: PathBuf, dir: &Path) -> Result<()> {
             &chapter_dir.join("scaffold"),
             &hist_repo,
             chapter_branches.iter().map(|s| s.as_str()),
+            original_chapter
+                .and_then(|chapter| chapter.scaffold.clone())
+                .unwrap_or_else(Vec::new),
             &format!("quest/chapter/{chapter_label}/scaffold/"),
         )?;
 
@@ -530,6 +535,9 @@ pub fn overlay(hist: PathBuf, dir: &Path) -> Result<()> {
             &chapter_dir.join("solution"),
             &hist_repo,
             chapter_branches.iter().map(|s| s.as_str()),
+            original_chapter
+                .map(|chapter| chapter.solution.clone())
+                .unwrap_or_else(Vec::new),
             &format!("quest/chapter/{chapter_label}/solution/"),
         )?;
 
@@ -635,8 +643,23 @@ fn dirify_branches<'a>(
     output_dir: &Path,
     repo: &GitRepo,
     branches: impl Iterator<Item = &'a str>,
+    original_commits: Vec<Commit>,
     branch_prefix: &str,
-) -> Result<Vec<PathBuf>, anyhow::Error> {
+) -> Result<Vec<CommitMeta>, anyhow::Error> {
+    let mut original_commits: HashMap<String, Commit> = original_commits
+        .into_iter()
+        .map(|commit| {
+            (
+                commit
+                    .path
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned(),
+                commit,
+            )
+        })
+        .collect();
     let mut main = Vec::new();
     for branch in branches {
         if let Some(commit_label) = branch.strip_prefix(branch_prefix) {
@@ -649,7 +672,14 @@ fn dirify_branches<'a>(
             let msg = repo.commit_message(branch)?;
             fs::write(output_dir.join(format!("{commit_label}.txt")), msg)
                 .with_context(|| format!("Failed to write commit message for {branch}."))?;
-            main.push(PathBuf::from(commit_label));
+            if let Some(original_commit) = original_commits.remove(commit_label) {
+                main.push(original_commit.into_commit_meta());
+            } else {
+                main.push(CommitMeta {
+                    label: commit_label.to_string(),
+                    expected_test_result: TestExpectation::Pass,
+                });
+            }
         }
     }
 

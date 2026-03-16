@@ -19,7 +19,7 @@
 //! This results in, e.g., the [`Chatper`] structure having, a field with type
 //! `Option<Vec<_>>`, even though an empty vector has the same meaning as `None`
 //! when interpreted as a quest.
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -37,16 +37,81 @@ pub struct QuestMeta {
     pub repo: String,
     pub rq_version: String,
     pub description: String,
-    pub main: Option<Vec<PathBuf>>,
+    pub main: Option<Vec<CommitMeta>>,
     pub chapters: Vec<ChapterMeta>,
+    pub test_cmd: Option<Vec<String>>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+pub enum TestExpectation {
+    Pass,
+    Fail,
+}
+
+impl TestExpectation {
+    /// For defining a default deserailization value
+    pub fn pass() -> Self {
+        Self::Pass
+    }
+
+    pub(crate) fn is_pass(&self) -> bool {
+        *self == TestExpectation::Pass
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct CommitMeta {
+    pub label: String,
+    pub expected_test_result: TestExpectation,
+}
+
+impl<'de> Deserialize<'de> for CommitMeta {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Debug, Deserialize)]
+        #[serde(deny_unknown_fields, rename_all = "kebab-case")]
+        #[serde(untagged)]
+        pub enum CommitMetaHelper {
+            Label(String),
+            CommitMeta {
+                label: String,
+                #[serde(default = "TestExpectation::pass")]
+                expected: TestExpectation,
+            },
+        }
+
+        Ok(match CommitMetaHelper::deserialize(deserializer)? {
+            CommitMetaHelper::Label(label) => CommitMeta {
+                label,
+                expected_test_result: TestExpectation::Pass,
+            },
+            CommitMetaHelper::CommitMeta { label, expected } => CommitMeta {
+                label,
+                expected_test_result: expected,
+            },
+        })
+    }
+}
+
+impl CommitMeta {
+    pub fn into_commit(self, msg: Option<String>, commit_dir: &Path) -> Commit {
+        Commit {
+            path: commit_dir.join(self.label),
+            message: msg,
+            expected_test_result: self.expected_test_result,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct ChapterMeta {
     pub label: String,
-    pub scaffold: Option<Vec<PathBuf>>,
-    pub solution: Vec<PathBuf>,
+    pub scaffold: Option<Vec<CommitMeta>>,
+    pub solution: Vec<CommitMeta>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -58,6 +123,7 @@ pub struct QuestDefinition {
     pub description: String,
     pub main: Option<Vec<Commit>>,
     pub chapters: Vec<Chapter>,
+    pub test_cmd: Option<Vec<String>>,
 }
 
 impl QuestDefinition {
@@ -69,7 +135,7 @@ impl QuestDefinition {
             .collect();
         let main = self
             .main
-            .map(|main| main.into_iter().map(|commit| commit.path).collect());
+            .map(|main| main.into_iter().map(Commit::into_commit_meta).collect());
         QuestMeta {
             title: self.title,
             author: self.author,
@@ -78,6 +144,7 @@ impl QuestDefinition {
             description: self.description,
             main,
             chapters,
+            test_cmd: self.test_cmd,
         }
     }
 }
@@ -99,11 +166,11 @@ impl Chapter {
             label: self.branch_name,
             scaffold: self
                 .scaffold
-                .map(|scaffold| scaffold.into_iter().map(|commit| commit.path).collect()),
+                .map(|scaffold| scaffold.into_iter().map(Commit::into_commit_meta).collect()),
             solution: self
                 .solution
                 .into_iter()
-                .map(|commit| commit.path)
+                .map(Commit::into_commit_meta)
                 .collect(),
         }
     }
@@ -165,6 +232,21 @@ pub struct PullRequestCommentMeta {
 pub struct Commit {
     pub path: PathBuf,
     pub message: Option<String>,
+    pub expected_test_result: TestExpectation,
+}
+
+impl Commit {
+    pub fn into_commit_meta(self) -> CommitMeta {
+        CommitMeta {
+            label: self
+                .path
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .into_owned(),
+            expected_test_result: self.expected_test_result,
+        }
+    }
 }
 
 // idea

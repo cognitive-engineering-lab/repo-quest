@@ -1,5 +1,6 @@
 mod dir;
 mod propagate;
+mod test_cmd;
 mod util;
 
 use std::{
@@ -9,7 +10,11 @@ use std::{
     path::{self, Path, PathBuf},
 };
 
-use crate::{dir::QuestDefinition, propagate::dir_to_hist};
+use crate::{
+    dir::QuestDefinition,
+    propagate::dir_to_hist,
+    test_cmd::{TestChapterSelection, test_quest},
+};
 
 use anyhow::{Context as _, Result};
 use clap::{Parser, ValueEnum};
@@ -151,10 +156,40 @@ pub enum Command {
     // Rename {},
     // Split {},
     // Merge {},
+    /// Runs the test script configured in as test-cmd in quest.toml for each
+    /// commit.
+    Test {
+        /// The path to the directory representation of a quest.
+        ///
+        /// If omitted, uses the nearest parent directory that contains a
+        /// `quest.toml` file.
+        #[arg(long, value_name = "QUEST_REPO_ROOT")]
+        dir: Option<PathBuf>,
+        /// Skip running the tests on the scaffold commits.
+        ///
+        /// You can also specify specifically which commits are expected to fail
+        /// in quest.toml.
+        #[arg(long)]
+        skip_scaffold: bool,
+        /// Test only the commits for the given chapter.
+        ///
+        /// Specifying "main" will select the pre-chapter commits in the main
+        /// directory even if a chapter named "main" exists.
+        #[arg(long, value_name = "CHAPTER")]
+        chapter: Option<String>,
+        /// Test only the commits for the given chapter and following chapters.
+        ///
+        /// Specifying the first chapter enables skipping main.
+        ///
+        /// Specifying "main" will select the a chapter named "main". To run
+        /// main and all following chapters, omit the chapter selection
+        /// entirely.
+        #[arg(long, value_name = "CHAPTER", conflicts_with = "chapter")]
+        following_chapters: Option<String>,
+    },
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
     let Args { command } = Args::parse();
 
     #[cfg(not(debug_assertions))]
@@ -234,6 +269,23 @@ async fn main() -> Result<()> {
                 path::absolute(output)?,
             )?;
             println!("{rebase_todo}");
+        }
+        Command::Test {
+            dir,
+            skip_scaffold,
+            chapter,
+            following_chapters,
+        } => {
+            let dir = match dir {
+                Some(dir) => dir,
+                None => infer_dir_path(&PathBuf::from("."))?
+                    .context("Could not determine quest dir path.")?,
+            };
+            let chapter_selection = chapter
+                .map(TestChapterSelection::OneChapter)
+                .or_else(|| following_chapters.map(TestChapterSelection::FollowingChapters))
+                .unwrap_or(TestChapterSelection::AllChapters);
+            test_quest(&dir, skip_scaffold, chapter_selection)?;
         }
     };
 

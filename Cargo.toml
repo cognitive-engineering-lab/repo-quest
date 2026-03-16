@@ -9,6 +9,7 @@ name = "repo_quest"
 path = "src/lib.rs"
 
 [dependencies]
+ansi_term = "0.12.1"
 anyhow = "1.0.100"
 async-lock = "3.4.1"
 axum = { version = "0.8.6", features = ["form", "macros", "multipart"] }
