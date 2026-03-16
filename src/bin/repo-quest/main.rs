@@ -36,14 +36,14 @@ enum QuestFormat {
 
 #[derive(Debug, clap::Subcommand)]
 pub enum Command {
-    /// Initialize a new quest in the given directory.
-    ///
-    /// The given directory must either be empty or not exist. Creates the
-    /// directory if it does not exist, but will not create parent directories.
-    Init {
-        /// The directory in which to initialize the quest
-        dir: PathBuf,
-    },
+    // /// Initialize a new quest in the given directory.
+    // ///
+    // /// The given directory must either be empty or not exist. Creates the
+    // /// directory if it does not exist, but will not create parent directories.
+    // Init {
+    //     /// The directory in which to initialize the quest
+    //     dir: PathBuf,
+    // },
     /// Bundles a quest definition for use with a RepoQuest Forgejo instance.
     Bundle {
         /// The path to the directory format of the quest to bundle.
@@ -53,6 +53,7 @@ pub enum Command {
         #[arg(short, long)]
         output: PathBuf,
     },
+    /// Displays chapter and commit structure of quest.
     Ls {
         /// The path to the directory format of the quest to bundle.
         #[arg(long)]
@@ -102,21 +103,21 @@ pub enum Command {
         /// file.
         quest: Option<PathBuf>,
     },
-    CommitHist {
-        /// The path to the linear history representation of a quest.
-        ///
-        /// If omitted, uses the nearest parent directory that contains `.git`.
-        #[arg(long)]
-        hist: Option<PathBuf>,
-        /// The path to the directory representation of a quest.
-        ///
-        /// If omitted, uses the nearest parent directory that contains
-        /// `quest.toml` file.
-        #[arg(long)]
-        dir: Option<PathBuf>,
-        #[arg(long, short)]
-        message: String,
-    },
+    // CommitHist {
+    //     /// The path to the linear history representation of a quest.
+    //     ///
+    //     /// If omitted, uses the nearest parent directory that contains `.git`.
+    //     #[arg(long)]
+    //     hist: Option<PathBuf>,
+    //     /// The path to the directory representation of a quest.
+    //     ///
+    //     /// If omitted, uses the nearest parent directory that contains
+    //     /// `quest.toml` file.
+    //     #[arg(long)]
+    //     dir: Option<PathBuf>,
+    //     #[arg(long, short)]
+    //     message: String,
+    // },
     /// Converts a quest definition from a collection of directories to a git
     /// repository, and starts a git rebase operation to propagating changes
     /// from one directory to later directories. After the rebase is complete,
@@ -198,7 +199,7 @@ fn main() -> Result<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("debug")).init();
 
     match command {
-        Command::Init { dir: _ } => todo!(),
+        // Command::Init { dir: _ } => todo!(),
         Command::Bundle { input, output } => {
             let input = match input {
                 Some(input) => input,
@@ -251,11 +252,6 @@ fn main() -> Result<()> {
             };
             let _ = dir::parse(&quest)?;
         }
-        Command::CommitHist {
-            hist: _,
-            dir: _,
-            message: _,
-        } => todo!(),
         Command::Propagate {
             quest,
             original,
