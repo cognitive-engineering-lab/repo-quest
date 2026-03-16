@@ -29,12 +29,44 @@ impl TestChapterSelection {
             TestChapterSelection::FollowingChapters(name) => name == chapter,
         }
     }
+
+    pub fn continue_after(&self) -> bool {
+        match self {
+            TestChapterSelection::AllChapters => true,
+            TestChapterSelection::OneChapter(_) => false,
+            TestChapterSelection::FollowingChapters(_) => true,
+        }
+    }
+
+    fn name(&self) -> Option<&str> {
+        match self {
+            TestChapterSelection::AllChapters => None,
+            TestChapterSelection::OneChapter(name) => Some(name),
+            TestChapterSelection::FollowingChapters(name) => Some(name),
+        }
+    }
 }
 
 pub struct TestResult {
     commit: PathBuf,
     passed: bool,
     expected: bool,
+}
+
+impl std::fmt::Display for TestResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let status = if self.passed {
+            ansi_term::Colour::Green.paint("PASSED")
+        } else {
+            ansi_term::Colour::Yellow.paint("FAILED")
+        };
+        let expected = if self.expected {
+            ansi_term::Colour::Green.paint("EXPECTED RESULT")
+        } else {
+            ansi_term::Colour::Red.paint("UNEXPECTED RESULT")
+        };
+        write!(f, "{}: {} {:?}", expected, status, self.commit)
+    }
 }
 
 impl From<(Commit, ExitStatus)> for TestResult {
@@ -53,68 +85,39 @@ pub fn test_quest(
     skip_scaffold: bool,
     chapter_selection: TestChapterSelection,
 ) -> Result<()> {
-    let mut test_results = Vec::new();
+    let mut all_expected = true;
     let quest = dir::parse(dir)?;
-    if let Some(test_cmd) = quest.test_cmd {
-        if let Some((exe, args)) = test_cmd.split_first() {
-            let cmd = || {
-                let mut cmd = std::process::Command::new(exe);
-                cmd.args(args);
-                cmd
-            };
-            if chapter_selection.run_main() {
-                for commit in quest.main.into_iter().flatten() {
-                    let res = cmd().current_dir(&commit.path).output().with_context(|| {
-                        format!("Failed to run test command for commit {:?}", commit.path)
-                    })?;
-                    test_results.push(TestResult::from((commit, res.status)));
-                }
-            }
-            let mut keep_running = false;
-            for chapter in quest.chapters {
-                if keep_running || chapter_selection.is_start_chapter(&chapter.branch_name) {
-                    keep_running = true;
-                    if !skip_scaffold {
-                        for commit in chapter.scaffold.into_iter().flatten() {
-                            let res =
-                                cmd().current_dir(&commit.path).output().with_context(|| {
-                                    format!(
-                                        "Failed to run test command for commit {:?}",
-                                        commit.path
-                                    )
-                                })?;
-                            test_results.push(TestResult::from((commit, res.status)));
-                        }
-                    }
-                    for commit in chapter.solution {
-                        let res = cmd().current_dir(&commit.path).output().with_context(|| {
-                            format!("Failed to run test command for commit {:?}", commit.path)
-                        })?;
-                        test_results.push(TestResult::from((commit, res.status)));
-                    }
-                }
-            }
-        } else {
-            anyhow::bail!("Test command must have at least the program specified.");
-        }
-    } else {
+    let Some(test_cmd) = quest.test_cmd else {
         anyhow::bail!("No test command specified.");
+    };
+
+    let mut found = false;
+    if chapter_selection.run_main() {
+        found = true;
+        for commit in quest.main.into_iter().flatten() {
+            all_expected &= run_test(&test_cmd, commit)?;
+        }
+    }
+    let mut keep_running = false;
+    for chapter in quest.chapters {
+        if keep_running || chapter_selection.is_start_chapter(&chapter.branch_name) {
+            keep_running = chapter_selection.continue_after();
+            found = true;
+            if !skip_scaffold {
+                for commit in chapter.scaffold.into_iter().flatten() {
+                    all_expected &= run_test(&test_cmd, commit)?;
+                }
+            }
+            for commit in chapter.solution {
+                all_expected &= run_test(&test_cmd, commit)?;
+            }
+        }
     }
 
-    let mut all_expected = true;
-    for result in test_results {
-        all_expected &= result.expected;
-        let status = if result.passed {
-            ansi_term::Colour::Green.paint("PASSED")
-        } else {
-            ansi_term::Colour::Yellow.paint("FAILED")
-        };
-        let expected = if result.expected {
-            ansi_term::Colour::Green.paint("EXPECTED RESULT")
-        } else {
-            ansi_term::Colour::Red.paint("UNEXPECTED RESULT")
-        };
-        println!("{}: {} {:?}", expected, status, result.commit);
+    if let Some(chapter_name) = chapter_selection.name()
+        && !found
+    {
+        anyhow::bail!("Specified chapter {chapter_name} not found.");
     }
 
     if all_expected {
@@ -122,4 +125,22 @@ pub fn test_quest(
     } else {
         Err(anyhow::anyhow!("There were unexpected test failures."))
     }
+}
+
+fn run_test(cmd: &[String], commit: Commit) -> Result<bool> {
+    let Some((exe, args)) = cmd.split_first() else {
+        anyhow::bail!("Test command must have at least the program specified.");
+    };
+    let mut cmd = std::process::Command::new(exe);
+    cmd.args(args);
+    cmd.current_dir(&commit.path);
+    let res = cmd.output().with_context(|| {
+        format!(
+            "Failed to run test command {cmd:?} for commit {:?}",
+            commit.path
+        )
+    })?;
+    let res = TestResult::from((commit, res.status));
+    println!("{res}");
+    Ok(res.expected)
 }
