@@ -18,6 +18,7 @@ use forgejo_api::{
     },
 };
 use log::debug;
+use mustache::MapBuilder;
 use url::Url;
 
 #[derive(Clone)]
@@ -157,7 +158,7 @@ impl ForgejoBackend {
         username: String,
         repo_name: String,
         template: &TaskTemplate,
-        mut task_info: HashMap<String, String>,
+        mut task_info: MapBuilder,
         hashes: HashMap<String, String>,
         initial_scaffolding_hash: String,
     ) -> Result<Task> {
@@ -210,16 +211,17 @@ impl ForgejoBackend {
         let pr_number = pr.number.ok_or(anyhow!("No PR id."))?;
         debug!("Created pull request {username}/{repo_name}/{pr_number}.");
 
-        task_info.insert(format!("{} pr", template.task_id), format!("#{pr_number}"));
-        task_info.insert(
-            format!("{} issue", template.task_id),
-            format!("#{issue_number}"),
-        );
+        task_info = task_info.insert_map(&template.task_id, |info| {
+            info.insert_str("pr", format!("#{pr_number}"))
+                .insert_str("issue", format!("#{issue_number}"))
+        });
+
+        let data = task_info.build();
 
         let issue_body = template
             .issue_template
             .body
-            .instantiate(&task_info)
+            .instantiate(&data)
             .context("Couldn't instantiate issue template")?;
         self.forgejo
             .issue_edit_issue(
@@ -248,7 +250,7 @@ impl ForgejoBackend {
                 "This PR resolves #{issue_number}. (Don't merge until you've added your solution!)\n\n{}",
                 pr_template
                     .body
-                    .instantiate(&task_info)
+                    .instantiate(&data)
                     .context("Couldn't instantiate PR template")?
             )
         } else {
@@ -281,7 +283,7 @@ impl ForgejoBackend {
 
         for issue_comment in &template.issue_template.comments {
             let body = CreateIssueCommentOption {
-                body: issue_comment.body.instantiate(&task_info)?,
+                body: issue_comment.body.instantiate(&data)?,
                 updated_at: None,
             };
             self.forgejo
@@ -291,7 +293,7 @@ impl ForgejoBackend {
 
         if let Some(pr_template) = &template.pr_template {
             for pr_comment in &pr_template.comments {
-                let comment_text = pr_comment.body.instantiate(&task_info)?;
+                let comment_text = pr_comment.body.instantiate(&data)?;
                 if let Some(quote) = &pr_comment.quote {
                     // In Forgejo, only one line can have the comment, so only
                     // one of old or new can be set. Since some lines above the

@@ -10,6 +10,7 @@ use anyhow::{Context, anyhow};
 use async_lock::Mutex;
 use axum::{
     Json, Router,
+    body::Body,
     extract::{DefaultBodyLimit, Multipart, Path, Request, State},
     http::StatusCode,
     response::IntoResponse,
@@ -17,9 +18,11 @@ use axum::{
 };
 use flate2::read::GzDecoder;
 use log::{debug, info};
+use mustache::MapBuilder;
 use serde::{Deserialize, Serialize};
 use tar::Archive;
 use thiserror::Error;
+use tokio_util::io::ReaderStream;
 use tower_http::{cors, normalize_path::NormalizePathLayer};
 use tower_layer::Layer as _;
 use url::Url;
@@ -42,6 +45,7 @@ pub const BOT_AUTHOR: Option<(&str, &str)> = Some(("RepoQuest", "repoquest@examp
 pub struct AppState {
     pub forgejo: ForgejoBackend,
     pub forgejo_url: Url,
+    pub public_url: Url,
     pub quest_definitions: QuestDefinitionIndex,
     pub quest_instances: QuestInstanceIndex,
 }
@@ -92,6 +96,10 @@ pub fn new(
                 // allow quest definitions to be large
                 .post(add_quest_definition)
                 .layer(DefaultBodyLimit::disable()),
+        )
+        .route(
+            "/assets/{questDefinitionId}/{*assetPath}",
+            get(get_quest_asset),
         )
         // GET: Gets the list of current quest ids and the names of the
         // templates the quests are based on.
@@ -228,6 +236,35 @@ async fn add_quest_definition(
         name: metadata.title,
         description: metadata.description,
     }))
+}
+
+pub async fn get_quest_asset(
+    State(state): State<Arc<Mutex<AppState>>>,
+    Path((quest_definition_id, asset_path)): Path<(usize, String)>,
+) -> impl IntoResponse {
+    let state = state.lock().await;
+    let Ok(assets_dir) = &state.quest_definitions.assets_dir(quest_definition_id) else {
+        return Err((
+            StatusCode::NOT_FOUND,
+            format!(
+                "Asset not found: quest definition with id {quest_definition_id} does not exist."
+            ),
+        ));
+    };
+
+    let file = match tokio::fs::File::open(assets_dir.join(&asset_path)).await {
+        Ok(file) => file,
+        Err(err) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!(
+                    "Could not open asset file {quest_definition_id}/assets/{asset_path}: {err}"
+                ),
+            ));
+        }
+    };
+
+    Ok(Body::from_stream(ReaderStream::new(file)))
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -700,14 +737,19 @@ pub async fn set_current_chapter(
     local_repo.push("origin", scaffolding, scaffolding)?;
     local_repo.switch_branch("main")?;
 
-    let mut task_info = HashMap::new();
+    let mut task_info = MapBuilder::new().insert_str(
+        "assets",
+        format!("{}/assets/{}", state.public_url, quest.definition_id),
+    );
+
     for (task_id, chapter_num) in quest_definition.metadata.task_ids {
         if let Some(task) = quest.tasks.get(chapter_num) {
-            task_info.insert(format!("{} pr", task_id), format!("#{}", task.pr.number));
-            task_info.insert(
-                format!("{} issue", task_id),
-                format!("#{}", task.issue.number),
-            );
+            task_info = task_info.insert_map("chapter", |chapter_map| {
+                chapter_map.insert_map(task_id.clone(), |info| {
+                    info.insert_str("pr", format!("#{}", task.pr.number))
+                        .insert_str("issue", format!("#{}", task.issue.number))
+                })
+            });
         }
     }
 

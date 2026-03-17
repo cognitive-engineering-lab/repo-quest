@@ -123,6 +123,7 @@ pub struct QuestDefinition {
     pub description: String,
     pub main: Option<Vec<Commit>>,
     pub chapters: Vec<Chapter>,
+    pub assets_dir: Option<PathBuf>,
     pub test_cmd: Option<Vec<String>>,
 }
 

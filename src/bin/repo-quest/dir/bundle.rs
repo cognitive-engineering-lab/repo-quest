@@ -24,7 +24,7 @@ pub fn bundle(quest: QuestDefinition, output: &Path) -> Result<()> {
     //
     // This repo has a worktree so that we can easily copy in snapshots. We'll
     // convert it to a bare repo later.
-    let git_dir_path = workdir.path().to_path_buf().join("repo");
+    let git_dir_path = workdir.path().join("repo");
     fs::create_dir_all(&git_dir_path)?;
     let repo = GitRepo::init(git_dir_path.clone())?;
 
@@ -85,7 +85,7 @@ pub fn bundle(quest: QuestDefinition, output: &Path) -> Result<()> {
     repo.make_bare()?;
 
     // Assemble metadata
-    let quest = QuestDefinitionMetadata {
+    let quest_meta = QuestDefinitionMetadata {
         title: quest.title,
         author: quest.author,
         description: quest.description,
@@ -96,11 +96,21 @@ pub fn bundle(quest: QuestDefinition, output: &Path) -> Result<()> {
 
     debug!("Writing quest definition metadata to temporary file.");
     // Write quest definition to file
-    let quest_json = serde_json::to_string(&quest)
-        .with_context(|| format!("Could not serialize quest {quest:?}"))?;
-    let quest_json_path = workdir.path().to_path_buf().join("data.json");
+    let quest_json = serde_json::to_string(&quest_meta)
+        .with_context(|| format!("Could not serialize quest {quest_meta:?}"))?;
+    let quest_json_path = workdir.path().join("data.json");
     fs::write(&quest_json_path, &quest_json)
         .with_context(|| format!("Could not write quest index to file {quest_json_path:?}"))?;
+
+    let bundle_assets_dir = workdir.path().join("assets");
+    fs::create_dir_all(&bundle_assets_dir)
+        .with_context(|| "Could not create bundle assets dir {bundle_assets_dir:?}.")?;
+    debug!("Copy assets into working directory.");
+    if let Some(asset_dir) = quest.assets_dir {
+        rsync(&asset_dir, &bundle_assets_dir).with_context(
+            || "Could not copy bundle assets from {assets_dir:?} to {bundle_assets_dir:?}.",
+        )?;
+    }
 
     debug!("Creating bundle archive.");
     // Create tarball
@@ -112,6 +122,9 @@ pub fn bundle(quest: QuestDefinition, output: &Path) -> Result<()> {
         .context("Could not add data.json to bundle.")?;
     archive
         .append_dir_all("git", git_dir_path.join(".git"))
+        .context("Could not add git repo to bundle.")?;
+    archive
+        .append_dir_all("assets", &bundle_assets_dir)
         .context("Could not add git repo to bundle.")?;
     archive.finish().context("Could not finalize archive")?;
 

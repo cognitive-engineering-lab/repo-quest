@@ -25,6 +25,16 @@ pub fn parse(dir: &Path) -> Result<QuestDefinition> {
     } else {
         None
     };
+
+    let assets_dir = {
+        let assets_dir = dir.join("assets");
+        if assets_dir.is_dir() {
+            Some(assets_dir)
+        } else {
+            None
+        }
+    };
+
     Ok(QuestDefinition {
         title: meta.title,
         author: meta.author,
@@ -33,6 +43,7 @@ pub fn parse(dir: &Path) -> Result<QuestDefinition> {
         repo: meta.repo,
         rq_version: meta.rq_version,
         description: meta.description,
+        assets_dir,
         test_cmd: meta.test_cmd,
     })
 }

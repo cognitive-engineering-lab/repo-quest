@@ -254,13 +254,24 @@ impl QuestDefinitionIndex {
         self.index.is_empty()
     }
 
-    /// Directory containing the quest definition for the quest with the given
-    /// id.
+    /// Directory containing the quest definition for the quest definition with
+    /// the given id.
     pub fn dir(&self, id: usize) -> Result<PathBuf> {
         Ok(self.dir.join(
             self.index
                 .get(id)
                 .with_context(|| format!("No quest definition with id {id}."))?,
+        ))
+    }
+
+    /// Directory containing the quest definition assets for the quest
+    /// definition with the given id.
+    pub fn assets_dir(&self, id: usize) -> Result<PathBuf> {
+        Ok(self.dir.join(
+            self.index
+                .get(id)
+                .with_context(|| format!("No quest definition with id {id}."))?
+                .join("assets"),
         ))
     }
 

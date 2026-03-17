@@ -26,6 +26,8 @@ struct Args {
     /// Base URL for the Forgejo instance
     #[arg(long, default_value = "http://forgejo:3000")]
     forgejo_url: Url,
+    #[arg(long)]
+    public_url: Url,
     /// Base URL for Forgejo to access this bot's hook
     #[arg(long, default_value = "http://repoquest:8000")]
     hook_url: Url,
@@ -36,6 +38,7 @@ async fn main() -> Result<()> {
     let Args {
         state_dir,
         forgejo_url,
+        public_url,
         hook_url,
     } = Args::parse();
 
@@ -77,6 +80,7 @@ async fn main() -> Result<()> {
     let state = AppState {
         forgejo,
         forgejo_url,
+        public_url,
         quest_definitions,
         quest_instances,
     };
