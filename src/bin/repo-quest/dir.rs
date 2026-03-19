@@ -21,6 +21,7 @@
 //! when interpreted as a quest.
 use std::path::{Path, PathBuf};
 
+use serde::ser::SerializeStruct;
 use serde::{Deserialize, Serialize};
 
 mod parse;
@@ -60,10 +61,44 @@ impl TestExpectation {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CommitMeta {
     pub label: String,
-    pub expected_test_result: TestExpectation,
+    pub expected: TestExpectation,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+#[serde(untagged)]
+pub enum CommitMetaHelper {
+    Label(String),
+    CommitMeta {
+        label: String,
+        #[serde(default = "TestExpectation::pass")]
+        expected: TestExpectation,
+    },
+}
+
+impl From<CommitMetaHelper> for CommitMeta {
+    fn from(value: CommitMetaHelper) -> Self {
+        match value {
+            CommitMetaHelper::Label(label) => CommitMeta {
+                label,
+                expected: TestExpectation::Pass,
+            },
+            CommitMetaHelper::CommitMeta { label, expected } => CommitMeta { label, expected },
+        }
+    }
+}
+
+impl From<CommitMeta> for CommitMetaHelper {
+    fn from(value: CommitMeta) -> Self {
+        let CommitMeta { label, expected } = value;
+        match expected {
+            TestExpectation::Pass => CommitMetaHelper::Label(label),
+            TestExpectation::Fail => CommitMetaHelper::CommitMeta { label, expected },
+        }
+    }
 }
 
 impl<'de> Deserialize<'de> for CommitMeta {
@@ -71,28 +106,25 @@ impl<'de> Deserialize<'de> for CommitMeta {
     where
         D: serde::Deserializer<'de>,
     {
-        #[derive(Debug, Deserialize)]
-        #[serde(deny_unknown_fields, rename_all = "kebab-case")]
-        #[serde(untagged)]
-        pub enum CommitMetaHelper {
-            Label(String),
-            CommitMeta {
-                label: String,
-                #[serde(default = "TestExpectation::pass")]
-                expected: TestExpectation,
-            },
-        }
+        Ok(CommitMetaHelper::deserialize(deserializer)?.into())
+    }
+}
 
-        Ok(match CommitMetaHelper::deserialize(deserializer)? {
-            CommitMetaHelper::Label(label) => CommitMeta {
-                label,
-                expected_test_result: TestExpectation::Pass,
-            },
-            CommitMetaHelper::CommitMeta { label, expected } => CommitMeta {
-                label,
-                expected_test_result: expected,
-            },
-        })
+impl Serialize for CommitMeta {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let CommitMeta { label, expected } = self;
+        match expected {
+            TestExpectation::Pass => serializer.serialize_str(label),
+            TestExpectation::Fail => {
+                let mut s = serializer.serialize_struct("CommitMeta", 2)?;
+                s.serialize_field("label", label)?;
+                s.serialize_field("expected", expected)?;
+                s.end()
+            }
+        }
     }
 }
 
@@ -101,7 +133,7 @@ impl CommitMeta {
         Commit {
             path: commit_dir.join(self.label),
             message: msg,
-            expected_test_result: self.expected_test_result,
+            expected_test_result: self.expected,
         }
     }
 }
@@ -245,7 +277,7 @@ impl Commit {
                 .unwrap()
                 .to_string_lossy()
                 .into_owned(),
-            expected_test_result: self.expected_test_result,
+            expected: self.expected_test_result,
         }
     }
 }

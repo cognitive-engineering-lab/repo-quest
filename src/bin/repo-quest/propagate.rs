@@ -576,7 +576,7 @@ pub fn overlay(hist: PathBuf, dir: &Path) -> Result<()> {
 
     fs::write(
         dir.join("quest.toml"),
-        &toml::ser::to_string(&meta)
+        &toml::ser::to_string_pretty(&meta)
             .with_context(|| format!("Failed to serialize quest metadata {meta:?}."))?,
     )
     .context("Failed to write quest metadata.")?;
@@ -677,7 +677,7 @@ fn dirify_branches<'a>(
             } else {
                 main.push(CommitMeta {
                     label: commit_label.to_string(),
-                    expected_test_result: TestExpectation::Pass,
+                    expected: TestExpectation::Pass,
                 });
             }
         }

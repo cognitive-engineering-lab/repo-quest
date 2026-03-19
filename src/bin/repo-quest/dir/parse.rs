@@ -488,11 +488,11 @@ Content line 2
             vec![
                 CommitMeta {
                     label: "00-prepare-interfaces".to_string(),
-                    expected_test_result: TestExpectation::Pass,
+                    expected: TestExpectation::Pass,
                 },
                 CommitMeta {
                     label: "01-add-placeholders".to_string(),
-                    expected_test_result: TestExpectation::Pass,
+                    expected: TestExpectation::Pass,
                 },
             ],
             &PathBuf::from("test-data/test-quest/00-first/scaffold"),
