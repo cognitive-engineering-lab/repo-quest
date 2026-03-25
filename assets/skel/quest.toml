@@ -1,0 +1,18 @@
+title = "Quest Title"
+author = "Quest Author"
+repo = "my-quest"
+rq-version = "0.3.0"
+description = """
+A short description of my quest.
+"""
+test-cmd = [
+    "cargo",
+    "test",
+]
+
+main = ["initialize-project"]
+
+[[chapters]]
+label = "first-chapter"
+scaffold = [{ label = "add-test", expected = "fail" }]
+solution = ["implement-add"]

@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - "**"
+
+jobs:
+  Tests:
+    runs-on: docker
+    container:
+      image: ubuntu:latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Build cache
+        uses: Swatinem/rust-cache@v2
+      - name: Test
+        run: cargo test
+      - name: Lints
+        run: bash .githooks/pre-commit
+        if: ${{ vars.STRICTNESS }} == 'Strict'
