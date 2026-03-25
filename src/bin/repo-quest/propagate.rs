@@ -590,7 +590,7 @@ fn write_pr(chapter_dir: &Path, pull_request: &PullRequest) -> Result<()> {
         write!(
             &fs::File::create_new(file)?,
             "+++\n{}+++\n{}",
-            toml::ser::to_string(&primary_issue.meta)?,
+            toml::ser::to_string_pretty(&primary_issue.meta)?,
             primary_issue.content
         )
         .with_context(|| format!("Failed to write primary issue for {chapter_dir:?}."))?;
@@ -605,7 +605,7 @@ fn write_pr(chapter_dir: &Path, pull_request: &PullRequest) -> Result<()> {
             write!(
                 &fs::File::create_new(&comment.path)?,
                 "+++\n{}+++\n{}",
-                toml::ser::to_string(&comment.meta)?,
+                toml::ser::to_string_pretty(&comment.meta)?,
                 comment.content
             )
             .with_context(|| format!("Failed to write comment {:?}.", &comment.path))?;
@@ -620,7 +620,7 @@ fn write_issue(chapter_dir: &Path, issue: &Issue) -> Result<()> {
     write!(
         &fs::File::create_new(file)?,
         "+++\n{}+++\n{}",
-        toml::ser::to_string(&issue.primary_issue.meta)?,
+        toml::ser::to_string_pretty(&issue.primary_issue.meta)?,
         issue.primary_issue.content
     )
     .with_context(|| format!("Failed to write primary issue for {chapter_dir:?}."))?;
