@@ -1,5 +1,5 @@
+mod convert;
 mod dir;
-mod propagate;
 mod test_cmd;
 mod util;
 
@@ -11,8 +11,8 @@ use std::{
 };
 
 use crate::{
+    convert::dir_to_hist,
     dir::QuestDefinition,
-    propagate::dir_to_hist,
     test_cmd::{TestChapterSelection, test_quest},
 };
 
@@ -242,7 +242,7 @@ fn main() -> Result<()> {
                 None => infer_hist_path(&PathBuf::from("."))?
                     .context("Could not determine quest hist path.")?,
             };
-            propagate::overlay(hist, &dir)?
+            convert::overlay(hist, &dir)?
         }
         Command::Check { quest } => {
             let quest = match quest {
@@ -258,7 +258,7 @@ fn main() -> Result<()> {
             changed,
             output,
         } => {
-            let rebase_todo = propagate::prepare_propagate_repo(
+            let rebase_todo = convert::prepare_propagate_repo(
                 &quest,
                 &original,
                 &changed,
