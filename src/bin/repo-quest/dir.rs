@@ -285,3 +285,63 @@ impl Commit {
 // idea
 // - create temp dir for storing specific versions of dirs representation
 // - build repo directly in target folder
+
+/// This struct represents a kind of a commit, along with what chapter it came
+/// from.
+///
+/// It exists to support iterating over all commits in a quest in a uniform way
+/// via `QuestDefinition::commits_iter`.
+#[derive(Clone, Copy, Debug)]
+pub enum CommitKind<'a> {
+    Main,
+    Scaffold { chapter_label: &'a str },
+    Solution { chapter_label: &'a str },
+}
+
+impl<'a> CommitKind<'a> {
+    pub fn branch_name(&self, prefix: &str, commit_dir: &Path) -> String {
+        let suffix = &commit_dir.file_name().unwrap().to_string_lossy();
+        match self {
+            CommitKind::Main => format!("{prefix}/main/{suffix}"),
+            CommitKind::Scaffold { chapter_label } => {
+                format!("{prefix}/chapter/{chapter_label}/scaffold/{suffix}")
+            }
+            CommitKind::Solution { chapter_label } => {
+                format!("{prefix}/chapter/{chapter_label}/solution/{suffix}")
+            }
+        }
+    }
+}
+
+impl QuestDefinition {
+    /// Iterates commits in order, annotated with the chapter the kind of commit
+    /// it is (main, scaffold, solution) along with the chapter it came from.
+    pub fn commits_iter(&self) -> impl Iterator<Item = (CommitKind<'_>, &Commit)> {
+        let main_iter = self
+            .main
+            .iter()
+            .flatten()
+            .map(|commit| (CommitKind::Main, commit));
+        let chapters_iter = self.chapters.iter().flat_map(|chapter| {
+            let scaffold_iter = chapter.scaffold.iter().flatten().map(|commit| {
+                (
+                    CommitKind::Scaffold {
+                        chapter_label: &chapter.label,
+                    },
+                    commit,
+                )
+            });
+            let solution_iter = chapter.solution.iter().map(|commit| {
+                (
+                    CommitKind::Solution {
+                        chapter_label: &chapter.label,
+                    },
+                    commit,
+                )
+            });
+            scaffold_iter.chain(solution_iter)
+        });
+
+        main_iter.chain(chapters_iter)
+    }
+}

@@ -250,16 +250,16 @@ fn dirs_to_change_branches(
     rebase_repo: &GitRepo,
 ) -> Result<GitTodoList> {
     let mut todo = GitTodoList::new();
-    for Commit { path, message, .. } in new_quest_commits.main.into_iter().flatten() {
-        let old_branch_name = gen_branch_name(&format!("{OLD_BRANCH_PREFIX}/main"), &path);
+    for (commit_kind, commit) in new_quest_commits.commits_iter() {
+        let old_branch_name = commit_kind.branch_name(OLD_BRANCH_PREFIX, &commit.path);
         rebase_repo.switch_branch(&old_branch_name)?;
-        let new_branch_name = gen_branch_name(&format!("{NEW_BRANCH_PREFIX}/main"), &path);
+        let new_branch_name = commit_kind.branch_name(NEW_BRANCH_PREFIX, &commit.path);
         let has_changes = create_commit_if_changed(
             rebase_repo,
             &old_branch_name,
             &new_branch_name,
-            message,
-            &path,
+            commit.message.as_deref(),
+            &commit.path,
         )?;
         let old_rev = rebase_repo.rev_parse_short(&old_branch_name)?;
         todo.pick(&old_rev, Some(&old_branch_name));
@@ -269,64 +269,6 @@ fn dirs_to_change_branches(
         }
         todo.update_branch(&old_branch_name);
     }
-    for Chapter {
-        label: branch_name,
-        scaffold,
-        solution,
-        ..
-    } in new_quest_commits.chapters
-    {
-        for Commit { path, message, .. } in scaffold.into_iter().flatten() {
-            let old_branch_name = gen_branch_name(
-                &format!("{OLD_BRANCH_PREFIX}/chapter/{branch_name}/scaffold"),
-                &path,
-            );
-            rebase_repo.switch_branch(&old_branch_name)?;
-            let new_branch_name = gen_branch_name(
-                &format!("{NEW_BRANCH_PREFIX}/chapter/{branch_name}/scaffold"),
-                &path,
-            );
-            let has_changes = create_commit_if_changed(
-                rebase_repo,
-                &old_branch_name,
-                &new_branch_name,
-                message,
-                &path,
-            )?;
-            let old_rev = rebase_repo.rev_parse_short(&old_branch_name)?;
-            todo.pick(&old_rev, Some(&old_branch_name));
-            if has_changes {
-                let new_rev = rebase_repo.rev_parse_short(&new_branch_name)?;
-                todo.fixup(&new_rev, Some(&new_branch_name));
-            }
-            todo.update_branch(&old_branch_name);
-        }
-        for Commit { path, message, .. } in solution {
-            let old_branch_name = gen_branch_name(
-                &format!("{OLD_BRANCH_PREFIX}/chapter/{branch_name}/solution"),
-                &path,
-            );
-            rebase_repo.switch_branch(&old_branch_name)?;
-            let new_branch_name = gen_branch_name(
-                &format!("{NEW_BRANCH_PREFIX}/chapter/{branch_name}/solution"),
-                &path,
-            );
-            let has_changes = create_commit_if_changed(
-                rebase_repo,
-                &old_branch_name,
-                &new_branch_name,
-                message,
-                &path,
-            )?;
-            let old_rev = rebase_repo.rev_parse_short(&old_branch_name)?;
-            todo.pick(&old_rev, Some(&old_branch_name));
-            if has_changes {
-                let new_rev = rebase_repo.rev_parse_short(&new_branch_name)?;
-                todo.fixup(&new_rev, Some(&new_branch_name));
-            }
-            todo.update_branch(&old_branch_name);
-        }
-    }
 
     Ok(todo)
 }
@@ -334,42 +276,15 @@ fn dirs_to_change_branches(
 /// Creates the commits represented by the sequence of directories.
 ///
 /// Each directory's commit has the previous directory's commit as its parent.
-fn dirs_to_repo(quest_commits: QuestDefinition, rebase_repo: &GitRepo) -> Result<()> {
-    let QuestDefinition { main, chapters, .. } = quest_commits;
-
-    if let Some(main) = main {
-        for Commit { path, message, .. } in main {
-            let branch_name = gen_branch_name("quest/main", &path);
-            create_commit(rebase_repo, &branch_name, message, &path)?;
-        }
-    }
-
-    for Chapter {
-        label: branch_name,
-        scaffold,
-        solution,
-        ..
-    } in chapters
-    {
-        if let Some(scaffold) = scaffold {
-            let mut scaffold_branches = Vec::with_capacity(scaffold.len());
-            for Commit { path, message, .. } in scaffold {
-                let branch_name = gen_branch_name(
-                    &format!("{OLD_BRANCH_PREFIX}/chapter/{branch_name}/scaffold"),
-                    &path,
-                );
-                create_commit(rebase_repo, &branch_name, message, &path)?;
-                scaffold_branches.push(branch_name);
-            }
-        }
-
-        for Commit { path, message, .. } in solution {
-            let branch_name = gen_branch_name(
-                &format!("{OLD_BRANCH_PREFIX}/chapter/{branch_name}/solution"),
-                &path,
-            );
-            create_commit(rebase_repo, &branch_name, message, &path)?;
-        }
+fn dirs_to_repo(quest: QuestDefinition, rebase_repo: &GitRepo) -> Result<()> {
+    for (commit_kind, commit) in quest.commits_iter() {
+        let branch_name = commit_kind.branch_name(OLD_BRANCH_PREFIX, &commit.path);
+        create_commit(
+            rebase_repo,
+            &branch_name,
+            commit.message.as_deref(),
+            &commit.path,
+        )?;
     }
 
     Ok(())
@@ -380,31 +295,15 @@ fn dirs_to_repo(quest_commits: QuestDefinition, rebase_repo: &GitRepo) -> Result
 fn create_commit(
     rebase_repo: &GitRepo,
     branch_name: &str,
-    message: Option<String>,
+    message: Option<&str>,
     dir: &Path,
 ) -> Result<()> {
     info!("Processing {:?}", dir);
     rsync(dir, &rebase_repo.dir)?;
     rebase_repo.add_all()?;
-    rebase_repo.commit(message.as_deref().unwrap_or(branch_name), BOT_AUTHOR)?;
+    rebase_repo.commit(message.unwrap_or(branch_name), BOT_AUTHOR)?;
     rebase_repo.create_branch("HEAD", branch_name)?;
     Ok(())
-}
-
-/// Generate the branch name that corresponds to a chapter directory in a quest.
-///
-/// The branch name is prefixed with the section name.
-///
-/// ```
-/// assert_eq!(gen_branch_name("foo/bar", "/tmp/quest/chapter/scaffold/01-baz"), "foo/bar/01-baz")
-/// ```
-fn gen_branch_name(section_name: &str, dir: &Path) -> String {
-    let branch_name = format!(
-        "{}/{}",
-        section_name,
-        &dir.file_name().unwrap().to_string_lossy()
-    );
-    branch_name
 }
 
 /// Makes new branch based on old branch and commits to it.
@@ -414,7 +313,7 @@ fn create_commit_if_changed(
     rebase_repo: &GitRepo,
     old_branch_name: &str,
     branch_name: &str,
-    message: Option<String>,
+    message: Option<&str>,
     dir: &Path,
 ) -> Result<bool> {
     info!("Processing {:?}", dir);
@@ -428,7 +327,7 @@ fn create_commit_if_changed(
         rebase_repo.create_branch(old_branch_name, branch_name)?;
         rebase_repo.switch_branch(branch_name)?;
         rebase_repo.commit(
-            &format!("fixup! {}", message.as_deref().unwrap_or(branch_name)),
+            &format!("fixup! {}", message.unwrap_or(branch_name)),
             BOT_AUTHOR,
         )?;
         Ok(true)
