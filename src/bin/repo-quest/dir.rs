@@ -282,10 +282,6 @@ impl Commit {
     }
 }
 
-// idea
-// - create temp dir for storing specific versions of dirs representation
-// - build repo directly in target folder
-
 /// This struct represents a kind of a commit, along with what chapter it came
 /// from.
 ///
