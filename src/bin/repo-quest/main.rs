@@ -1,4 +1,4 @@
-mod convert;
+mod commands;
 mod dir;
 mod test_cmd;
 mod util;
@@ -11,7 +11,6 @@ use std::{
 };
 
 use crate::{
-    convert::dir_to_hist,
     dir::QuestDefinition,
     test_cmd::{TestChapterSelection, test_quest},
 };
@@ -36,14 +35,14 @@ enum QuestFormat {
 
 #[derive(Debug, clap::Subcommand)]
 pub enum Command {
-    // /// Initialize a new quest in the given directory.
-    // ///
-    // /// The given directory must either be empty or not exist. Creates the
-    // /// directory if it does not exist, but will not create parent directories.
-    // Init {
-    //     /// The directory in which to initialize the quest
-    //     dir: PathBuf,
-    // },
+    /// Initialize a new quest in the given directory.
+    ///
+    /// The given directory must either be empty or not exist. Creates the
+    /// directory if it does not exist, but will not create parent directories.
+    Init {
+        /// The directory in which to initialize the quest
+        dir: PathBuf,
+    },
     /// Bundles a quest definition for use with a RepoQuest Forgejo instance.
     Bundle {
         /// The path to the directory format of the quest to bundle.
@@ -199,7 +198,7 @@ fn main() -> Result<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("debug")).init();
 
     match command {
-        // Command::Init { dir: _ } => todo!(),
+        Command::Init { dir } => commands::init(&dir)?,
         Command::Bundle { input, output } => {
             let input = match input {
                 Some(input) => input,
@@ -229,7 +228,7 @@ fn main() -> Result<()> {
                 Some(hist) => hist,
                 None => dir.join("hist"),
             };
-            dir_to_hist(&dir, hist)?;
+            commands::dir_to_hist(&dir, hist)?;
         }
         Command::HistToDir { dir, hist } => {
             let dir = match dir {
@@ -242,7 +241,7 @@ fn main() -> Result<()> {
                 None => infer_hist_path(&PathBuf::from("."))?
                     .context("Could not determine quest hist path.")?,
             };
-            convert::overlay(hist, &dir)?
+            commands::overlay(hist, &dir)?
         }
         Command::Check { quest } => {
             let quest = match quest {
@@ -258,7 +257,7 @@ fn main() -> Result<()> {
             changed,
             output,
         } => {
-            let rebase_todo = convert::prepare_propagate_repo(
+            let rebase_todo = commands::prepare_propagate_repo(
                 &quest,
                 &original,
                 &changed,

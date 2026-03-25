@@ -43,7 +43,7 @@ pub fn prepare_propagate_repo(
     let quest_repo = GitRepo::open(quest_dir.to_path_buf())?;
 
     // Initialize the repository that will host the rebase.
-    ensure_empty_dir(&output_dir)?;
+    super::ensure_empty_dir(&output_dir)?;
     let rebase_repo = GitRepo::init(output_dir)?;
 
     // Set up tempdirs for copying out the specified versions of the quest definition.
@@ -80,24 +80,6 @@ pub fn prepare_propagate_repo(
     rebase_repo.switch_branch("main")?;
 
     Ok(todo)
-}
-
-/// Creates the output dir if it does not exist. Fails with `Err` if the output
-/// dir exists but is not empty.
-fn ensure_empty_dir(output_dir: &Path) -> Result<()> {
-    if !output_dir.exists() {
-        fs::create_dir_all(output_dir)
-            .with_context(|| format!("Could not create output directory {output_dir:?}."))?;
-    } else if !output_dir.is_dir()
-        || output_dir
-            .read_dir()
-            .with_context(|| format!("Cannot read output directory {output_dir:?}."))?
-            .next()
-            .is_some()
-    {
-        bail!("Given output output path exists but is not an empty directory.")
-    }
-    Ok(())
 }
 
 /// Checks to make sure that two quests have the same chapter structure.
@@ -278,6 +260,7 @@ fn dirs_to_change_branches(
 /// Each directory's commit has the previous directory's commit as its parent.
 fn dirs_to_repo(quest: QuestDefinition, rebase_repo: &GitRepo) -> Result<()> {
     for (commit_kind, commit) in quest.commits_iter() {
+        debug!("Converting commit {commit_kind:?} {commit:?}.");
         let branch_name = commit_kind.branch_name(OLD_BRANCH_PREFIX, &commit.path);
         create_commit(
             rebase_repo,
@@ -586,7 +569,7 @@ pub fn dir_to_hist(quest_dir: &Path, output_dir: PathBuf) -> Result<()> {
     if output_dir.is_dir() {
         fs::remove_dir_all(&output_dir)?;
     }
-    ensure_empty_dir(&output_dir)?;
+    super::ensure_empty_dir(&output_dir)?;
     let output_repo = GitRepo::init(output_dir)?;
 
     info!("{old_quest_commits:?}");

@@ -440,4 +440,12 @@ impl GitRepo {
 
         Ok(out)
     }
+
+    pub fn name() -> Result<String> {
+        let out = Command::new("git")
+            .args(["config", "--get", "user.name"])
+            .stdout_with_context(|| "Could not get user.name from git config.")?;
+
+        Ok(out)
+    }
 }
