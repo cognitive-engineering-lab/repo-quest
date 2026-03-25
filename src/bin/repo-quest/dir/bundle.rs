@@ -43,7 +43,7 @@ pub fn bundle(quest: QuestDefinition, output: &Path) -> Result<()> {
     for (
         task_id,
         Chapter {
-            branch_name,
+            label: branch_name,
             issue,
             pull_request,
             scaffold,

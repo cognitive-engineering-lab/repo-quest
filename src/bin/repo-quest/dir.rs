@@ -184,7 +184,7 @@ impl QuestDefinition {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Chapter {
-    pub branch_name: String,
+    pub label: String,
     pub issue: Issue,
     pub pull_request: PullRequest,
     /// May be empty.
@@ -196,7 +196,7 @@ pub struct Chapter {
 impl Chapter {
     pub fn meta(self) -> ChapterMeta {
         ChapterMeta {
-            label: self.branch_name,
+            label: self.label,
             scaffold: self
                 .scaffold
                 .map(|scaffold| scaffold.into_iter().map(Commit::into_commit_meta).collect()),

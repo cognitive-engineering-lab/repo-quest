@@ -62,7 +62,7 @@ pub fn prepare_propagate_repo(
     info!("{old_quest_commits:?}");
     info!("{new_quest_commits:?}");
 
-    check_compatibility(
+    check_chapter_compatibility(
         old_source_dir.path(),
         &old_quest_commits,
         new_source_dir.path(),
@@ -101,47 +101,42 @@ fn ensure_empty_dir(output_dir: &Path) -> Result<()> {
 }
 
 /// Checks to make sure that two quests have the same chapter structure.
-fn check_compatibility(
+fn check_chapter_compatibility(
     old_source_dir: &Path,
-    old_quest_commits: &QuestDefinition,
+    old_quest: &QuestDefinition,
     new_source_dir: &Path,
-    new_quest_commits: &QuestDefinition,
+    new_quest: &QuestDefinition,
 ) -> Result<()> {
-    let dirname = "main";
     check_optional_commit_dirs_aligned(
         old_source_dir,
-        &old_quest_commits.main,
+        &old_quest.main,
         new_source_dir,
-        &new_quest_commits.main,
-        dirname,
+        &new_quest.main,
+        "main",
     )?;
-    for chapter in old_quest_commits
-        .chapters
-        .iter()
-        .zip_longest(&new_quest_commits.chapters)
-    {
+    for chapter in old_quest.chapters.iter().zip_longest(&new_quest.chapters) {
         match chapter {
             EitherOrBoth::Both(
                 Chapter {
-                    branch_name: old_branch_name,
+                    label: old_label,
                     scaffold: old_scaffold,
                     solution: old_solution,
                     ..
                 },
                 Chapter {
-                    branch_name: new_branch_name,
+                    label: new_label,
                     scaffold: new_scaffold,
                     solution: new_solution,
                     ..
                 },
             ) => {
-                if old_branch_name < new_branch_name {
+                if old_label < new_label {
                     bail!(
-                        "Propagate does not work with differing commit structures, only different commit content.\n\nOriginal has a {old_branch_name} branch, changed does not."
+                        "Propagate does not work with differing commit structures, only different commit content.\n\nOriginal has a {old_label} chapter, changed does not."
                     );
-                } else if old_branch_name > new_branch_name {
+                } else if old_label > new_label {
                     bail!(
-                        "Propagate does not work with differing commit structures, only different commit content.\n\nChanged has a {new_branch_name} branch, original does not."
+                        "Propagate does not work with differing commit structures, only different commit content.\n\nChanged has a {new_label} chapter, original does not."
                     )
                 } else {
                     check_optional_commit_dirs_aligned(
@@ -149,7 +144,7 @@ fn check_compatibility(
                         old_scaffold,
                         new_source_dir,
                         new_scaffold,
-                        dirname,
+                        old_label,
                     )?;
                     check_commits_aligned(
                         old_source_dir,
@@ -160,16 +155,14 @@ fn check_compatibility(
                 }
             }
             EitherOrBoth::Left(Chapter {
-                branch_name: old_branch_name,
-                ..
+                label: old_label, ..
             }) => bail!(
-                "Propagate does not work with differing commit structures, only different commit content.\n\nOriginal has a {old_branch_name} branch, changed does not."
+                "Propagate does not work with differing commit structures, only different commit content.\n\nOriginal has a {old_label} chapter, changed does not."
             ),
             EitherOrBoth::Right(Chapter {
-                branch_name: new_branch_name,
-                ..
+                label: new_label, ..
             }) => bail!(
-                "Propagate does not work with differing commit structures, only different commit content.\n\nChanged has a {new_branch_name} branch, original does not."
+                "Propagate does not work with differing commit structures, only different commit content.\n\nChanged has a {new_label} chapter, original does not."
             ),
         }
     }
@@ -277,7 +270,7 @@ fn dirs_to_change_branches(
         todo.update_branch(&old_branch_name);
     }
     for Chapter {
-        branch_name,
+        label: branch_name,
         scaffold,
         solution,
         ..
@@ -352,7 +345,7 @@ fn dirs_to_repo(quest_commits: QuestDefinition, rebase_repo: &GitRepo) -> Result
     }
 
     for Chapter {
-        branch_name,
+        label: branch_name,
         scaffold,
         solution,
         ..
@@ -490,7 +483,7 @@ pub fn overlay(hist: PathBuf, dir: &Path) -> Result<()> {
     let original_chapters: HashMap<_, _> = original_quest
         .chapters
         .iter()
-        .map(|chapter| (chapter.branch_name.as_str(), chapter))
+        .map(|chapter| (chapter.label.as_str(), chapter))
         .collect();
     let mut chapters = Vec::new();
     for (chapter_label, chapter_branches) in branches

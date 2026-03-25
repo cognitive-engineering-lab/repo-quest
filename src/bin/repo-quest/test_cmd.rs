@@ -100,7 +100,7 @@ pub fn test_quest(
     }
     let mut keep_running = false;
     for chapter in quest.chapters {
-        if keep_running || chapter_selection.is_start_chapter(&chapter.branch_name) {
+        if keep_running || chapter_selection.is_start_chapter(&chapter.label) {
             keep_running = chapter_selection.continue_after();
             found = true;
             if !skip_scaffold {

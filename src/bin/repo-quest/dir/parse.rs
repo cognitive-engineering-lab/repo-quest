@@ -80,7 +80,7 @@ fn parse_chapter(dir: &Path, chapter_meta: ChapterMeta) -> Result<Chapter> {
     let solution = parse_commits_dir(chapter_meta.solution, &chapter_dir.join("solution"))?;
 
     Ok(Chapter {
-        branch_name: chapter_meta.label,
+        label: chapter_meta.label,
         issue,
         pull_request,
         scaffold,

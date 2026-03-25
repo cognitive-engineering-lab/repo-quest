@@ -300,7 +300,7 @@ fn quest_tree(quest: &'_ QuestDefinition) -> Result<Tree<Cow<'_, str>>> {
     }
 
     for chapter in &quest.chapters {
-        let mut chapter_tree = Tree::new(Cow::Borrowed(chapter.branch_name.as_str()));
+        let mut chapter_tree = Tree::new(Cow::Borrowed(chapter.label.as_str()));
         if let Some(scaffold) = &chapter.scaffold {
             let mut scaffold_tree = Tree::new(Cow::Borrowed("scaffold"));
             for commit in scaffold {
