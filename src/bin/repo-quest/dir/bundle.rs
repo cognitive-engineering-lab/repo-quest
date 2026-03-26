@@ -1,10 +1,8 @@
-use std::{borrow::Cow, collections::HashMap, fs, path::Path};
+use std::{collections::HashMap, fs, path::Path};
 
 use anyhow::{Context as _, Result};
 use log::debug;
 use repo_quest::{
-    bot::BOT_AUTHOR,
-    git::GitRepo,
     quest::definition::{
         Comment, IssueTemplate, PullRequestTemplate, QuestDefinitionMetadata, ReviewLineSubject,
         ReviewSubject, TaskTemplate,
@@ -12,33 +10,44 @@ use repo_quest::{
     template::Template,
 };
 
-use crate::util::rsync;
+use crate::{commands::quest_to_hist, util::rsync};
 
 use super::*;
+
+/// Helper to take last element while ensuring modified Vec doesn't get used
+/// again by accident.
+fn take_last<T>(mut v: Vec<T>) -> Option<T> {
+    v.pop()
+}
 
 /// Converts a `dir::QuestDefinition` into the bundle format on disk.
 pub fn bundle(quest: QuestDefinition, output: &Path) -> Result<()> {
     let workdir = tempfile::tempdir().context("Could not create temporary working directory.")?;
+
+    const QUEST_BRANCH_PREFIX: &str = "quest";
 
     // Create repo dir
     //
     // This repo has a worktree so that we can easily copy in snapshots. We'll
     // convert it to a bare repo later.
     let git_dir_path = workdir.path().join("repo");
-    fs::create_dir_all(&git_dir_path)?;
-    let repo = GitRepo::init(git_dir_path.clone())?;
+    let repo = quest_to_hist(&quest, git_dir_path.clone(), QUEST_BRANCH_PREFIX)?;
 
-    debug!("Creating initial main branch commits.");
-    create_commits(&git_dir_path, &repo, quest.main.iter())?;
-    let main_commit = repo.rev_parse("HEAD")?;
+    let last_main = take_last(quest.main).unwrap(); // unwrap: parse checks that main has at least one commit
+    let last_main_commit = CommitKind::Main.branch_name(QUEST_BRANCH_PREFIX, &last_main.path);
+    // quest_to_hist leaves the repo pointing to "main"
+    repo.hard_reset(&last_main_commit)?;
 
-    // Bundle each chapter
+    // Construct metadata and solution/scaffolding commits for each chapter
     let mut task_ids = HashMap::<String, usize>::new();
     let mut tasks = Vec::<TaskTemplate>::new();
+    // if the initiail chapter omits the scaffold, use the last main commit in
+    // place of a previous solution commit, since there is no previous solution
+    let mut last_solution_ref = last_main_commit;
     for (
         task_id,
         Chapter {
-            label: branch_name,
+            label,
             issue,
             pull_request,
             scaffold,
@@ -46,36 +55,50 @@ pub fn bundle(quest: QuestDefinition, output: &Path) -> Result<()> {
         },
     ) in quest.chapters.into_iter().enumerate()
     {
-        debug!("Bundling chapter {branch_name}");
-        let scaffold_branch_name = format!("{branch_name}-scaffold");
-        let solution_branch_name = format!("{branch_name}-solution");
+        let scaffold_branch_name = format!("{label}-scaffold");
+        let solution_branch_name = format!("{label}-solution");
 
-        debug!("Creating scaffold commits");
-        // Scaffold commits
-        create_commits(&git_dir_path, &repo, scaffold.iter().flatten())?;
-        repo.create_branch("main", &scaffold_branch_name)?;
+        let scaffold_commit_kind = CommitKind::Scaffold {
+            chapter_label: &label,
+        };
+        let solution_commit_kind = CommitKind::Solution {
+            chapter_label: &label,
+        };
 
-        debug!("Creating solution commits");
-        // Solution commits
-        create_commits(&git_dir_path, &repo, &solution)?;
-        repo.create_branch("main", &solution_branch_name)?;
+        // Create scaffold commit
+        let last_scaffold_branch = if let Some(scaffold) = scaffold
+            && let Some(scaffold) = take_last(scaffold)
+        {
+            scaffold_commit_kind.branch_name(QUEST_BRANCH_PREFIX, &scaffold.path)
+        } else {
+            last_solution_ref
+        };
+        repo.create_branch(&last_scaffold_branch, &scaffold_branch_name)?;
 
-        let issue_template = bundle_issue(&branch_name, issue);
-        let pr_template = bundle_pull_request(&branch_name, pull_request);
+        // Create solution commit
+        let solution_commit = take_last(solution).unwrap(); // unwrap: parse guarantees it has least one commit
+        let last_solution_branch =
+            solution_commit_kind.branch_name(QUEST_BRANCH_PREFIX, &solution_commit.path);
+        repo.create_branch(&last_solution_branch, &solution_branch_name)?;
+
+        // remember the previous solution commit, in case there is no scaffold
+        // in the next chapter
+        last_solution_ref = last_solution_branch;
+
+        let issue_template = bundle_issue(&label, issue);
+        let pr_template = bundle_pull_request(&label, pull_request);
 
         tasks.push(TaskTemplate {
-            task_id: branch_name.clone(),
+            task_id: label.clone(),
             issue_template,
             pr_template: Some(pr_template),
             scaffolding: scaffold_branch_name.into(),
             reference_solution: solution_branch_name.into(),
         });
 
-        task_ids.insert(branch_name, task_id);
+        task_ids.insert(label, task_id);
     }
 
-    debug!("Resetting main to main commit");
-    repo.hard_reset(&main_commit)?;
     // Convert .git in repo to a bare repo
     repo.make_bare()?;
 
@@ -196,31 +219,4 @@ fn bundle_issue(branch_name: &String, issue: Issue) -> IssueTemplate {
             })
             .collect(),
     }
-}
-
-fn create_commits<'a, 'b, 'c>(
-    git_dir_path: &'a Path,
-    repo: &'b GitRepo,
-    commits: impl IntoIterator<Item = &'c Commit>,
-) -> Result<()> {
-    for commit in commits {
-        create_commit(git_dir_path, repo, commit)?;
-    }
-
-    Ok(())
-}
-
-fn create_commit(git_dir_path: &Path, repo: &GitRepo, commit: &Commit) -> Result<()> {
-    let message = match &commit.message {
-        Some(message) => Cow::Borrowed(message.as_str()),
-        None => match commit.path.file_name() {
-            None => Cow::Borrowed("solution"),
-            Some(name) => name.to_string_lossy(),
-        },
-    };
-    debug!("Creating commit for {:?}.", &commit.path);
-    rsync(&commit.path, git_dir_path)?;
-    repo.add_all()?;
-    repo.commit(message.as_ref(), BOT_AUTHOR)?;
-    Ok(())
 }

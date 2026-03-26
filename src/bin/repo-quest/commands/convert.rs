@@ -70,7 +70,7 @@ pub fn prepare_propagate_repo(
     )?;
 
     // Build the basic repo out of the "original" version of the quest.
-    dirs_to_repo(&old_quest_commits, &rebase_repo)?;
+    dirs_to_repo(&old_quest_commits, &rebase_repo, OLD_BRANCH_PREFIX)?;
 
     // Augment the repo with the chapters that have changes and produce the
     // git rebase todo-list for propagating the changes.
@@ -257,10 +257,10 @@ fn dirs_to_change_branches(
 /// Creates the commits represented by the sequence of directories.
 ///
 /// Each directory's commit has the previous directory's commit as its parent.
-fn dirs_to_repo(quest: &QuestDefinition, rebase_repo: &GitRepo) -> Result<()> {
+fn dirs_to_repo(quest: &QuestDefinition, rebase_repo: &GitRepo, branch_prefix: &str) -> Result<()> {
     for (commit_kind, commit) in quest.commits_iter() {
         debug!("Converting commit {commit_kind:?} {commit:?}.");
-        let branch_name = commit_kind.branch_name(OLD_BRANCH_PREFIX, &commit.path);
+        let branch_name = commit_kind.branch_name(branch_prefix, &commit.path);
         create_commit(
             rebase_repo,
             &branch_name,
@@ -318,7 +318,7 @@ fn create_commit_if_changed(
     }
 }
 
-pub fn overlay(hist: PathBuf, dir: &Path) -> Result<()> {
+pub fn overlay(hist: PathBuf, dir: &Path, branch_prefix: &str) -> Result<()> {
     // 1. make sure there's nothing uncommitted in dir
     let dir_repo = GitRepo::open(dir.to_path_buf()).with_context(|| {
         format!("Cannot overwrite the quest in {dir:?}: it is not a git repository.")
@@ -359,7 +359,7 @@ pub fn overlay(hist: PathBuf, dir: &Path) -> Result<()> {
             &hist_repo,
             branches.iter().map(|s| s.as_str()),
             original_quest.main.clone(),
-            "quest/main/",
+            &format!("{branch_prefix}/main/"),
         )?;
         // create an empty initial commit for main if none is provided by the
         // hist repo
@@ -380,9 +380,10 @@ pub fn overlay(hist: PathBuf, dir: &Path) -> Result<()> {
         .map(|chapter| (chapter.label.as_str(), chapter))
         .collect();
     let mut chapters = Vec::new();
+    let chapter_branch_prefix = format!("{branch_prefix}/chapter/");
     for (chapter_label, chapter_branches) in branches
         .iter()
-        .filter(|b| b.starts_with("quest/chapter/"))
+        .filter(|b| b.starts_with(&chapter_branch_prefix))
         .chunk_by(|branch| branch.split("/").dropping(2).next())
         .into_iter()
     {
@@ -414,7 +415,7 @@ pub fn overlay(hist: PathBuf, dir: &Path) -> Result<()> {
             original_chapter
                 .and_then(|chapter| chapter.scaffold.clone())
                 .unwrap_or_else(Vec::new),
-            &format!("quest/chapter/{chapter_label}/scaffold/"),
+            &format!("{branch_prefix}/chapter/{chapter_label}/scaffold/"),
         )?;
 
         debug!("Creating solution commits for {chapter_label}.");
@@ -425,7 +426,7 @@ pub fn overlay(hist: PathBuf, dir: &Path) -> Result<()> {
             original_chapter
                 .map(|chapter| chapter.solution.clone())
                 .unwrap_or_else(Vec::new),
-            &format!("quest/chapter/{chapter_label}/solution/"),
+            &format!("{branch_prefix}/chapter/{chapter_label}/solution/"),
         )?;
 
         // only add the directory to the metadata if the chapter is new or the
@@ -568,13 +569,21 @@ fn dirify_branches<'a>(
     Ok(main)
 }
 
-pub fn dir_to_hist(quest_dir: &Path, output_dir: PathBuf) -> Result<GitRepo> {
+pub fn dir_to_hist(quest_dir: &Path, output_dir: PathBuf, branch_prefix: &str) -> Result<GitRepo> {
     // Parse out the commits of the quests.
     let quest = parse(quest_dir)?;
-    quest_to_hist(&quest, output_dir)
+    quest_to_hist(&quest, output_dir, branch_prefix)
 }
 
-pub fn quest_to_hist(quest: &QuestDefinition, output_dir: PathBuf) -> Result<GitRepo> {
+/// Converts the quest definition to a linear-histroy representation.
+///
+/// Leaves the repository on the "main" branch, which is not part of the
+/// linear-history representation.
+pub fn quest_to_hist(
+    quest: &QuestDefinition,
+    output_dir: PathBuf,
+    branch_prefix: &str,
+) -> Result<GitRepo> {
     // Initialize the repository that will host the rebase.
     if output_dir.is_dir() {
         fs::remove_dir_all(&output_dir)?;
@@ -585,7 +594,7 @@ pub fn quest_to_hist(quest: &QuestDefinition, output_dir: PathBuf) -> Result<Git
     debug!("{quest:?}");
 
     // Build the basic repo out of the "original" version of the quest.
-    dirs_to_repo(quest, &output_repo)?;
+    dirs_to_repo(quest, &output_repo, branch_prefix)?;
 
     // Move the current branch back to main.
     output_repo.switch_branch("main")?;

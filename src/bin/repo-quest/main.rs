@@ -197,6 +197,7 @@ fn main() -> Result<()> {
     #[cfg(debug_assertions)]
     env_logger::Builder::from_env(Env::default().default_filter_or("debug")).init();
 
+    const QUEST_BRANCH_PREFIX: &str = "quest";
     match command {
         Command::Init { dir } => commands::init(&dir)?,
         Command::Bundle { input, output } => {
@@ -228,7 +229,7 @@ fn main() -> Result<()> {
                 Some(hist) => hist,
                 None => dir.join("hist"),
             };
-            commands::dir_to_hist(&dir, hist)?;
+            commands::dir_to_hist(&dir, hist, QUEST_BRANCH_PREFIX)?;
         }
         Command::HistToDir { dir, hist } => {
             let dir = match dir {
@@ -241,7 +242,7 @@ fn main() -> Result<()> {
                 None => infer_hist_path(&PathBuf::from("."))?
                     .context("Could not determine quest hist path.")?,
             };
-            commands::overlay(hist, &dir)?
+            commands::overlay(hist, &dir, QUEST_BRANCH_PREFIX)?
         }
         Command::Check { quest } => {
             let quest = match quest {

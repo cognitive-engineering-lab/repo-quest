@@ -77,6 +77,12 @@ fn parse_chapter(dir: &Path, chapter_meta: ChapterMeta) -> Result<Chapter> {
         None
     };
     let solution = parse_commits_dir(chapter_meta.solution, &chapter_dir.join("solution"))?;
+    if solution.is_empty() {
+        bail!(
+            "Solution for chapter {} must have at least one entry.",
+            chapter_meta.label
+        );
+    }
 
     Ok(Chapter {
         label: chapter_meta.label,
