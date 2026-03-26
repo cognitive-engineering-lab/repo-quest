@@ -1,7 +1,9 @@
 use std::{
     collections::HashMap,
     convert::Infallible,
+    fs,
     io::{Seek, Write as _},
+    path::PathBuf,
     sync::Arc,
     time::Duration,
 };
@@ -10,18 +12,23 @@ use anyhow::{Context, anyhow};
 use async_lock::Mutex;
 use axum::{
     Json, Router,
-    body::Body,
-    extract::{DefaultBodyLimit, Multipart, Path, Request, State},
+    body::{Body, Bytes},
+    extract::{
+        DefaultBodyLimit, Multipart, Path, Request, State, WebSocketUpgrade,
+        ws::{Message, WebSocket},
+    },
     http::StatusCode,
     response::IntoResponse,
-    routing::{get, post},
+    routing::{any, get, post},
 };
 use flate2::read::GzDecoder;
-use log::{debug, info};
+use log::{debug, error, info};
 use mustache::MapBuilder;
 use serde::{Deserialize, Serialize};
 use tar::Archive;
 use thiserror::Error;
+use tokio::sync::watch;
+use tokio_stream::{Elapsed, Stream, StreamExt, wrappers::WatchStream};
 use tokio_util::io::ReaderStream;
 use tower_http::{cors, normalize_path::NormalizePathLayer};
 use tower_layer::Layer as _;
@@ -41,13 +48,81 @@ pub const BOT_AUTHOR: Option<(&str, &str)> = Some(("RepoQuest", "repoquest@examp
 ///
 /// All changes to the state should be written to disk on each change before the
 /// global lock (see the note on concurrency in `main`) is released.
-#[derive(Clone)]
 pub struct AppState {
     pub forgejo: ForgejoBackend,
     pub forgejo_url: Url,
     pub public_url: Url,
     pub quest_definitions: QuestDefinitionIndex,
     pub quest_instances: QuestInstanceIndex,
+    pub errors: Errors,
+}
+
+pub struct Errors {
+    path: PathBuf,
+    errors: Vec<String>,
+    tx: watch::Sender<()>,
+    rx: watch::Receiver<()>,
+}
+
+impl Errors {
+    pub fn push(&mut self, error: String) {
+        self.errors.push(error);
+        // nothing useful we can do if we fail to notify things about the error
+        if let Err(err) = self.tx.send(()) {
+            error!("{err:?}");
+        }
+        self.save()
+    }
+
+    pub fn clear(&mut self) {
+        self.errors.clear();
+        self.save();
+    }
+
+    fn save(&self) {
+        match serde_json::to_string(&self.errors) {
+            Ok(data) => {
+                if let Err(err) = fs::write(&self.path, data) {
+                    error!("Could not write error data to disk {err:?}.");
+                }
+            }
+            Err(err) => {
+                error!("Could not serialize error data: {err:?}.");
+            }
+        }
+    }
+
+    pub fn load(path: PathBuf) -> anyhow::Result<Self> {
+        let errors = {
+            if path.is_file() {
+                let errors_json = fs::read_to_string(&path)?;
+                serde_json::from_str(&errors_json)?
+            } else {
+                Vec::new()
+            }
+        };
+        let (tx, rx) = tokio::sync::watch::channel(());
+        Ok(Errors {
+            path,
+            errors,
+            tx,
+            rx,
+        })
+    }
+
+    /// A stream of the notices that the errors have been updated.
+    ///
+    /// Includes the initial errors value, even if it is empty.
+    pub fn notices(&self) -> impl Stream<Item = std::result::Result<(), Elapsed>> + 'static {
+        WatchStream::new(self.rx.clone())
+            .timeout_repeating(tokio::time::interval(Duration::from_secs(5)))
+    }
+
+    pub fn json(&self) -> String {
+        // unwrap: the errors are a Vec<String> which should always be
+        // serializable
+        serde_json::to_string(&self.errors).unwrap()
+    }
 }
 
 #[derive(Debug, Error)]
@@ -70,17 +145,34 @@ impl IntoResponse for AppError {
 
 pub type Result<T> = std::result::Result<T, AppError>;
 
+async fn log_error_responses(
+    State(state): State<Arc<Mutex<AppState>>>,
+    request: Request,
+    next: axum::middleware::Next,
+) -> axum::http::Response<Body> {
+    let response = next.run(request).await;
+
+    let mut state = state.lock().await;
+    if response.status().is_server_error() {
+        state.errors.push(format!("{response:?}"));
+    }
+
+    response
+}
+
 pub fn new(
     state: AppState,
 ) -> impl tower_service::Service<
     Request,
-    Response = axum::http::Response<axum::body::Body>,
+    Response = axum::http::Response<Body>,
     Error = Infallible,
     Future: Send,
 > + Clone {
     let cors = cors::CorsLayer::new()
         .allow_origin(cors::Any)
         .allow_headers(cors::Any);
+
+    let state = Arc::new(Mutex::new(state));
 
     // build our application with a route
     let app = Router::new()
@@ -133,6 +225,13 @@ pub fn new(
             "/quest/{questId}/chapter/current/reference_solution",
             get(get_current_reference_solution).post(create_current_reference_solution),
         )
+        .route("/error/log", get(get_error_log))
+        .route("/error/clear", post(clear_errors))
+        .route("/error/listen", any(register_for_errors))
+        .route_layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            log_error_responses,
+        ))
         // A note on concurrency:
         //
         // At the moment requests are completely serialized by using async_lock
@@ -143,8 +242,9 @@ pub fn new(
         // instance is local to the reqpo-quest process) should be resolved
         // quickly enough that there is little benefit to handling them in
         // parallel.
-        .with_state(Arc::new(Mutex::new(state)))
+        .with_state(state)
         .layer(cors);
+
     NormalizePathLayer::trim_trailing_slash().layer(app)
 }
 
@@ -775,4 +875,57 @@ pub async fn set_current_chapter(
     quests.store_quest(quest_id, &quest)?;
 
     Ok(task)
+}
+
+async fn get_error_log(State(state): State<Arc<Mutex<AppState>>>) -> Result<Json<Vec<String>>> {
+    let state = state.lock().await;
+    Ok(Json(state.errors.errors.clone()))
+}
+
+async fn register_for_errors(
+    ws: WebSocketUpgrade,
+    State(state): State<Arc<Mutex<AppState>>>,
+) -> axum::response::Response {
+    debug!("Websocket connection received");
+    ws.on_upgrade(|socket| handle_error_report_socket(socket, state))
+}
+
+async fn handle_error_report_socket(mut socket: WebSocket, state: Arc<Mutex<AppState>>) {
+    let mut notices = {
+        let state = state.lock().await;
+        state.errors.notices()
+    };
+
+    while let Some(res) = notices.next().await {
+        match res {
+            Ok(()) => {
+                let msg = {
+                    let state = state.lock().await;
+                    state.errors.json()
+                };
+                if let Err(err) = socket.send(Message::text(msg)).await {
+                    debug!("The websocket client disconnected {err:?}");
+                    break;
+                }
+            }
+            Err(_elapsed) => {
+                // check that the websocket connection is still alive
+                if let Err(err) = socket.send(Message::Ping(Bytes::new())).await {
+                    debug!("Websocket error: {err:?}");
+                    break;
+                }
+                if socket.recv().await.is_none() {
+                    debug!("The websocket client disconnected");
+                    break;
+                }
+            }
+        }
+    }
+}
+
+async fn clear_errors(State(state): State<Arc<Mutex<AppState>>>) -> Result<()> {
+    info!("Clear stored errors.");
+    let mut state = state.lock().await;
+    state.errors.clear();
+    Ok(())
 }

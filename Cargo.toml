@@ -12,7 +12,7 @@ path = "src/lib.rs"
 ansi_term = "0.12.1"
 anyhow = "1.0.100"
 async-lock = "3.4.1"
-axum = { version = "0.8.6", features = ["form", "macros", "multipart"] }
+axum = { version = "0.8.6", features = ["form", "macros", "multipart", "ws"] }
 clap = { version = "4.5.52", features = ["derive"] }
 env_logger = "0.11.8"
 flate2 = "1.1.5"
@@ -30,7 +30,8 @@ tar = "0.4.44"
 tempfile = "3.23.0"
 termtree = "1.0.0"
 thiserror = "2.0.17"
-tokio = { version = "1.48.0", features = ["full"] }
+tokio = { version = "1.48.0", features = ["full", "sync", "time"] }
+tokio-stream = { version = "0.1.18", features = ["sync", "time"] }
 tokio-util = { version = "0.7.18", features = ["io"] }
 toml = "1.0.6"
 tower-http = { version = "0.6.6", features = ["cors", "normalize-path"] }

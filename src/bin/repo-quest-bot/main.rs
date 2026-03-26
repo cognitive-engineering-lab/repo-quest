@@ -12,7 +12,7 @@ use log::info;
 use url::Url;
 
 use repo_quest::{
-    bot::{AppState, Result},
+    bot::{AppState, Errors},
     forgejo::ForgejoBackend,
     quest::{definition::*, instance::*},
 };
@@ -34,7 +34,7 @@ struct Args {
 }
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> anyhow::Result<()> {
     let Args {
         state_dir,
         forgejo_url,
@@ -77,12 +77,17 @@ async fn main() -> Result<()> {
         )
         .await?;
 
+    let path = quest_dir.join("errors.json");
+    info!("Reading stored server errors from {path:?}.");
+    let errors = Errors::load(path)?;
+
     let state = AppState {
         forgejo,
         forgejo_url,
         public_url,
         quest_definitions,
         quest_instances,
+        errors,
     };
 
     let app = repo_quest::bot::new(state);
