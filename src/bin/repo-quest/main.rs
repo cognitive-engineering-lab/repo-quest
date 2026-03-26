@@ -20,6 +20,7 @@ use clap::{Parser, ValueEnum};
 use env_logger::Env;
 use termtree::Tree;
 
+/// repo-quest is an authoring tool for RepoQuest quests.
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
@@ -33,17 +34,32 @@ enum QuestFormat {
     Hist,
 }
 
+const fn after_help_dir() -> &'static str {
+    "If the directory representation path is omitted, the nearest parent \
+    directory with a `quest.toml` file will be used."
+}
+
+const fn after_help_hist() -> &'static str {
+    "If the directory representation path is omitted, the nearest parent \
+    directory with a `quest.toml` file will be used. \
+\
+    If the linear-history representation path is omitted, a `hist` directory \
+    relative to the directory representation path will be used."
+}
+
 #[derive(Debug, clap::Subcommand)]
 pub enum Command {
     /// Initialize a new quest in the given directory.
     ///
     /// The given directory must either be empty or not exist. Creates the
     /// directory if it does not exist, but will not create parent directories.
+    #[command(after_help=after_help_dir())]
     Init {
         /// The directory in which to initialize the quest
-        dir: PathBuf,
+        quest: PathBuf,
     },
     /// Bundles a quest definition for use with a RepoQuest Forgejo instance.
+    #[command(after_help=after_help_dir())]
     Bundle {
         /// The path to the directory format of the quest to bundle.
         #[arg(long)]
@@ -53,21 +69,19 @@ pub enum Command {
         output: PathBuf,
     },
     /// Displays chapter and commit structure of quest.
+    #[command(after_help=after_help_dir())]
     Ls {
         /// The path to the directory format of the quest to bundle.
         #[arg(long)]
         quest: Option<PathBuf>,
     },
     /// Converts a quest from directory format to linear history format.
+    #[command(after_help=after_help_hist())]
     DirToHist {
         /// The path to the directory representation of a quest.
-        ///
-        /// If omitted, uses the nearest parent directory that contains a
-        /// `quest.toml` file.
         #[arg(long, value_name = "QUEST_REPO_ROOT")]
-        dir: Option<PathBuf>,
-        /// The output directory. If omitted, uses a `hist` directory relative
-        /// to the quest directory.
+        quest: Option<PathBuf>,
+        /// The output directory.
         ///
         /// Will be created if it does not exist. If it does exist, it will be
         /// overwritten.
@@ -80,26 +94,20 @@ pub enum Command {
     /// Will only overlay on a git repository with no uncommitted changes.
     ///
     /// See the propagate command for more information.
+    #[command(after_help=after_help_hist())]
     HistToDir {
         /// The path to the linear history representation of a quest.
-        ///
-        /// If omitted, uses the nearest parent directory that contains `.git`.
         #[arg(long)]
         hist: Option<PathBuf>,
         /// The path to the directory representation of a quest.
-        ///
-        /// If omitted, uses the nearest parent directory that contains
-        /// `quest.toml` file.
         #[arg(long)]
-        dir: Option<PathBuf>,
+        quest: Option<PathBuf>,
     },
     /// Checks that the directory format of a quest is well-formed.
+    #[command(after_help=after_help_dir())]
     Check {
         #[arg(long)]
         /// The path to the quest.
-        ///
-        /// If omitted uses the nearest parent directory with a `quest.toml`
-        /// file.
         quest: Option<PathBuf>,
     },
     // CommitHist {
@@ -137,6 +145,7 @@ pub enum Command {
     /// - Use the `overlay` command to update the working directory of the
     ///   quest definition repository.
     /// - Amend the commit with the forward-propagated changes.
+    #[command(after_help=after_help_hist())]
     Propagate {
         /// The quest definition that has a change that requires propagating.
         #[arg(long, value_name = "QUEST_REPO_ROOT")]
@@ -158,13 +167,14 @@ pub enum Command {
     // Merge {},
     /// Runs the test script configured in as test-cmd in quest.toml for each
     /// commit.
+    #[command(after_help=after_help_dir())]
     Test {
         /// The path to the directory representation of a quest.
         ///
         /// If omitted, uses the nearest parent directory that contains a
         /// `quest.toml` file.
         #[arg(long, value_name = "QUEST_REPO_ROOT")]
-        dir: Option<PathBuf>,
+        quest: Option<PathBuf>,
         /// Skip running the tests on the scaffold commits.
         ///
         /// You can also specify specifically which commits are expected to fail
@@ -199,7 +209,7 @@ fn main() -> Result<()> {
 
     const QUEST_BRANCH_PREFIX: &str = "quest";
     match command {
-        Command::Init { dir } => commands::init(&dir)?,
+        Command::Init { quest } => commands::init(&quest)?,
         Command::Bundle { input, output } => {
             let input = match input {
                 Some(input) => input,
@@ -219,8 +229,8 @@ fn main() -> Result<()> {
             let quest_tree = quest_tree(&quest)?;
             println!("{quest_tree}");
         }
-        Command::DirToHist { dir, hist } => {
-            let dir = match dir {
+        Command::DirToHist { quest, hist } => {
+            let dir = match quest {
                 Some(dir) => dir,
                 None => infer_dir_path(&PathBuf::from("."))?
                     .context("Could not determine quest dir path.")?,
@@ -231,16 +241,15 @@ fn main() -> Result<()> {
             };
             commands::dir_to_hist(&dir, hist, QUEST_BRANCH_PREFIX)?;
         }
-        Command::HistToDir { dir, hist } => {
-            let dir = match dir {
+        Command::HistToDir { quest, hist } => {
+            let dir = match quest {
                 Some(dir) => dir,
                 None => infer_dir_path(&PathBuf::from("."))?
                     .context("Could not determine quest dir path.")?,
             };
             let hist = match hist {
                 Some(hist) => hist,
-                None => infer_hist_path(&PathBuf::from("."))?
-                    .context("Could not determine quest hist path.")?,
+                None => dir.join("hist"),
             };
             commands::overlay(hist, &dir, QUEST_BRANCH_PREFIX)?
         }
@@ -267,12 +276,12 @@ fn main() -> Result<()> {
             println!("{rebase_todo}");
         }
         Command::Test {
-            dir,
+            quest,
             skip_scaffold,
             chapter,
             following_chapters,
         } => {
-            let dir = match dir {
+            let dir = match quest {
                 Some(dir) => dir,
                 None => infer_dir_path(&PathBuf::from("."))?
                     .context("Could not determine quest dir path.")?,
@@ -354,13 +363,6 @@ fn find_parent_dir_containing(
 fn infer_dir_path(cur: &Path) -> Result<Option<PathBuf>> {
     fn p(entry: &DirEntry) -> Result<bool> {
         Ok(entry.file_name() == "quest.toml" && entry.file_type()?.is_file())
-    }
-    find_parent_dir_containing(cur, p)
-}
-
-fn infer_hist_path(cur: &Path) -> Result<Option<PathBuf>> {
-    fn p(entry: &DirEntry) -> Result<bool> {
-        Ok(entry.file_name() == ".git")
     }
     find_parent_dir_containing(cur, p)
 }
