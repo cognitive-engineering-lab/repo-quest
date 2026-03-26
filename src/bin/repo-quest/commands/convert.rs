@@ -70,7 +70,7 @@ pub fn prepare_propagate_repo(
     )?;
 
     // Build the basic repo out of the "original" version of the quest.
-    dirs_to_repo(old_quest_commits, &rebase_repo)?;
+    dirs_to_repo(&old_quest_commits, &rebase_repo)?;
 
     // Augment the repo with the chapters that have changes and produce the
     // git rebase todo-list for propagating the changes.
@@ -258,7 +258,7 @@ fn dirs_to_change_branches(
 /// Creates the commits represented by the sequence of directories.
 ///
 /// Each directory's commit has the previous directory's commit as its parent.
-fn dirs_to_repo(quest: QuestDefinition, rebase_repo: &GitRepo) -> Result<()> {
+fn dirs_to_repo(quest: &QuestDefinition, rebase_repo: &GitRepo) -> Result<()> {
     for (commit_kind, commit) in quest.commits_iter() {
         debug!("Converting commit {commit_kind:?} {commit:?}.");
         let branch_name = commit_kind.branch_name(OLD_BRANCH_PREFIX, &commit.path);
@@ -561,10 +561,13 @@ fn dirify_branches<'a>(
     Ok(main)
 }
 
-pub fn dir_to_hist(quest_dir: &Path, output_dir: PathBuf) -> Result<()> {
+pub fn dir_to_hist(quest_dir: &Path, output_dir: PathBuf) -> Result<GitRepo> {
     // Parse out the commits of the quests.
-    let old_quest_commits = parse(quest_dir)?;
+    let quest = parse(quest_dir)?;
+    quest_to_hist(&quest, output_dir)
+}
 
+pub fn quest_to_hist(quest: &QuestDefinition, output_dir: PathBuf) -> Result<GitRepo> {
     // Initialize the repository that will host the rebase.
     if output_dir.is_dir() {
         fs::remove_dir_all(&output_dir)?;
@@ -572,13 +575,13 @@ pub fn dir_to_hist(quest_dir: &Path, output_dir: PathBuf) -> Result<()> {
     super::ensure_empty_dir(&output_dir)?;
     let output_repo = GitRepo::init(output_dir)?;
 
-    info!("{old_quest_commits:?}");
+    debug!("{quest:?}");
 
     // Build the basic repo out of the "original" version of the quest.
-    dirs_to_repo(old_quest_commits, &output_repo)?;
+    dirs_to_repo(quest, &output_repo)?;
 
     // Move the current branch back to main.
     output_repo.switch_branch("main")?;
 
-    Ok(())
+    Ok(output_repo)
 }

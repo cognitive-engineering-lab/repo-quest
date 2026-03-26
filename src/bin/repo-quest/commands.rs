@@ -5,7 +5,7 @@ use std::{fs, path::Path};
 
 use anyhow::{Context as _, Result, bail};
 
-pub use convert::{dir_to_hist, overlay, prepare_propagate_repo};
+pub use convert::{dir_to_hist, overlay, prepare_propagate_repo, quest_to_hist};
 pub use init::init;
 
 /// Creates the output dir if it does not exist. Fails with `Err` if the output
