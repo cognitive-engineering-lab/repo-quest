@@ -4,11 +4,11 @@
 //! [`QuestDefinition`] representation that can be converted into a bundle that can
 //! be used by repoquest.
 //!
-//! The parsing of the directory structure does not default things during
-//! parsing, because we want to be able to use this same structure for actions
-//! that convert the parsed structure back to the directory structure preserving
-//! the user's choices about what to omit (i.e., rather than reifying the
-//! defaults).
+//! The parsing of the directory structure (mostly) does not default things
+//! during parsing, because we want to be able to use this same structure for
+//! actions that convert the parsed structure back to the directory structure
+//! preserving the user's choices about what to omit (i.e., rather than reifying
+//! the defaults).
 //!
 //! Additionally, we can't normalize things that have the same meaning, because
 //! we need to preserve information about what the user wrote. For example, both
@@ -30,6 +30,7 @@ pub use self::parse::parse;
 mod bundle;
 pub use self::bundle::bundle;
 
+/// A representation of the data in the quest.toml file.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct QuestMeta {
@@ -62,12 +63,14 @@ impl TestExpectation {
     }
 }
 
+/// Representation of commit information written in a quest.toml file.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CommitMeta {
     pub label: String,
     pub expected: TestExpectation,
 }
 
+/// Helper structure for serializing and deserializing `CommitMeta`.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 #[serde(untagged)]
@@ -139,6 +142,7 @@ impl CommitMeta {
     }
 }
 
+/// Representation of chapter information written in a quest.toml file.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct ChapterMeta {
@@ -147,6 +151,7 @@ pub struct ChapterMeta {
     pub solution: Vec<CommitMeta>,
 }
 
+/// The full definition of a quest corresponding to the directory format.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct QuestDefinition {
     pub title: String,
@@ -157,6 +162,10 @@ pub struct QuestDefinition {
     /// Must be non-empty
     pub main: Vec<Commit>,
     pub chapters: Vec<Chapter>,
+    /// Absolute path to the assets directory.
+    ///
+    /// `parse` assumes this will always be "assets" relative to the root of the
+    /// quest definition directory.
     pub assets_dir: Option<PathBuf>,
     pub test_cmd: Option<Vec<String>>,
 }
@@ -188,6 +197,9 @@ impl QuestDefinition {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Chapter {
+    /// The label identifying the chapter. Must be acceptable as a filename and
+    /// as a branch name, since it corresponds to part of each in different
+    /// quest representations.
     pub label: String,
     pub issue: Issue,
     pub pull_request: PullRequest,
@@ -215,6 +227,7 @@ impl Chapter {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IssueComment {
+    /// The absolute path to the defining the issue comment.
     pub path: PathBuf,
     pub content: String,
 }
@@ -245,6 +258,7 @@ pub struct PullRequest {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PullRequestComment {
+    /// The absolute path to the defining the pull request comment.
     pub path: PathBuf,
     pub meta: Option<PullRequestCommentMeta>,
     pub content: String,
@@ -267,6 +281,10 @@ pub struct PullRequestCommentMeta {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Commit {
+    /// The absolute path to the directory with the content of the commit.
+    ///
+    /// The final directory name must be usable as a branch name, since it will
+    /// be used as part of one.
     pub path: PathBuf,
     pub message: Option<String>,
     pub expected: TestExpectation,
