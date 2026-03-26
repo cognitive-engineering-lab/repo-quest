@@ -29,12 +29,7 @@ pub fn bundle(quest: QuestDefinition, output: &Path) -> Result<()> {
     let repo = GitRepo::init(git_dir_path.clone())?;
 
     debug!("Creating initial main branch commits.");
-    match quest.main {
-        Some(commits) if !commits.is_empty() => {
-            create_commits(&git_dir_path, &repo, commits.iter())?;
-        }
-        _ => repo.commit("Initial commit", BOT_AUTHOR)?,
-    }
+    create_commits(&git_dir_path, &repo, quest.main.iter())?;
     let main_commit = repo.rev_parse("HEAD")?;
 
     // Bundle each chapter

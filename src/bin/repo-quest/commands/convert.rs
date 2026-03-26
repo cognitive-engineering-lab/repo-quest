@@ -89,12 +89,11 @@ fn check_chapter_compatibility(
     new_source_dir: &Path,
     new_quest: &QuestDefinition,
 ) -> Result<()> {
-    check_optional_commit_dirs_aligned(
+    check_commits_aligned(
         old_source_dir,
         &old_quest.main,
         new_source_dir,
         &new_quest.main,
-        "main",
     )?;
     for chapter in old_quest.chapters.iter().zip_longest(&new_quest.chapters) {
         match chapter {
@@ -354,13 +353,26 @@ pub fn overlay(hist: PathBuf, dir: &Path) -> Result<()> {
     let hist_repo = GitRepo::open(hist)?;
     let branches = hist_repo.topo_branches()?;
     debug!("Creating main commits.");
-    let main = dirify_branches(
-        &main_dir,
-        &hist_repo,
-        branches.iter().map(|s| s.as_str()),
-        original_quest.main.clone().unwrap_or_else(Vec::new),
-        "quest/main/",
-    )?;
+    let main = {
+        let main = dirify_branches(
+            &main_dir,
+            &hist_repo,
+            branches.iter().map(|s| s.as_str()),
+            original_quest.main.clone(),
+            "quest/main/",
+        )?;
+        // create an empty initial commit for main if none is provided by the
+        // hist repo
+        if main.is_empty() {
+            fs::create_dir_all(main_dir.join("initial-commit"))?;
+            vec![CommitMeta {
+                label: "initial-commit".to_string(),
+                expected: TestExpectation::Pass,
+            }]
+        } else {
+            main
+        }
+    };
 
     let original_chapters: HashMap<_, _> = original_quest
         .chapters
@@ -438,11 +450,6 @@ pub fn overlay(hist: PathBuf, dir: &Path) -> Result<()> {
     debug!("Creating quest.toml.");
     // only add the directory to the metadata if the chapter is new or the
     // directory existed before
-    let main = if original_quest.main.is_none() && main.is_empty() {
-        None
-    } else {
-        Some(main)
-    };
     let meta = QuestMeta {
         main,
         chapters,

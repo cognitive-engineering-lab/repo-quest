@@ -20,11 +20,10 @@ pub fn parse(dir: &Path) -> Result<QuestDefinition> {
     let chapters = parse_chapters(dir, meta.chapters)?;
 
     let main_dir = dir.join("main");
-    let main = if let Some(main_commits) = meta.main {
-        Some(parse_commits_dir(main_commits, &main_dir)?)
-    } else {
-        None
-    };
+    let main = parse_commits_dir(meta.main, &main_dir)?;
+    if main.is_empty() {
+        bail!("Directory for main branch must have at least one entry.");
+    }
 
     let assets_dir = {
         let assets_dir = dir.join("assets");

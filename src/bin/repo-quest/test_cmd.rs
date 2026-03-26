@@ -94,7 +94,7 @@ pub fn test_quest(
     let mut found = false;
     if chapter_selection.run_main() {
         found = true;
-        for commit in quest.main.into_iter().flatten() {
+        for commit in quest.main.into_iter() {
             all_expected &= run_test(&test_cmd, commit)?;
         }
     }

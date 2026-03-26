@@ -289,14 +289,12 @@ fn main() -> Result<()> {
 
 fn quest_tree(quest: &'_ QuestDefinition) -> Result<Tree<Cow<'_, str>>> {
     let mut quest_tree = Tree::new(Cow::Borrowed(quest.title.as_str()));
-    if let Some(main) = &quest.main {
-        let mut main_tree = Tree::new(Cow::Borrowed("main"));
-        for commit in main {
-            let leaf = Tree::new(commit.path.file_name().unwrap().to_string_lossy());
-            main_tree.push(leaf);
-        }
-        quest_tree.push(main_tree);
+    let mut main_tree = Tree::new(Cow::Borrowed("main"));
+    for commit in &quest.main {
+        let leaf = Tree::new(commit.path.file_name().unwrap().to_string_lossy());
+        main_tree.push(leaf);
     }
+    quest_tree.push(main_tree);
 
     for chapter in &quest.chapters {
         let mut chapter_tree = Tree::new(Cow::Borrowed(chapter.label.as_str()));

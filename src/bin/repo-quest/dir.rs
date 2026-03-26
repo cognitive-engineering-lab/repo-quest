@@ -38,7 +38,8 @@ pub struct QuestMeta {
     pub repo: String,
     pub rq_version: String,
     pub description: String,
-    pub main: Option<Vec<CommitMeta>>,
+    /// Must be non-empty
+    pub main: Vec<CommitMeta>,
     pub chapters: Vec<ChapterMeta>,
     pub test_cmd: Option<Vec<String>>,
 }
@@ -153,7 +154,8 @@ pub struct QuestDefinition {
     pub repo: String,
     pub rq_version: String,
     pub description: String,
-    pub main: Option<Vec<Commit>>,
+    /// Must be non-empty
+    pub main: Vec<Commit>,
     pub chapters: Vec<Chapter>,
     pub assets_dir: Option<PathBuf>,
     pub test_cmd: Option<Vec<String>>,
@@ -168,7 +170,9 @@ impl QuestDefinition {
             .collect();
         let main = self
             .main
-            .map(|main| main.into_iter().map(Commit::into_commit_meta).collect());
+            .into_iter()
+            .map(Commit::into_commit_meta)
+            .collect();
         QuestMeta {
             title: self.title,
             author: self.author,
@@ -313,11 +317,7 @@ impl QuestDefinition {
     /// Iterates commits in order, annotated with the chapter the kind of commit
     /// it is (main, scaffold, solution) along with the chapter it came from.
     pub fn commits_iter(&self) -> impl Iterator<Item = (CommitKind<'_>, &Commit)> {
-        let main_iter = self
-            .main
-            .iter()
-            .flatten()
-            .map(|commit| (CommitKind::Main, commit));
+        let main_iter = self.main.iter().map(|commit| (CommitKind::Main, commit));
         let chapters_iter = self.chapters.iter().flat_map(|chapter| {
             let scaffold_iter = chapter.scaffold.iter().flatten().map(|commit| {
                 (
