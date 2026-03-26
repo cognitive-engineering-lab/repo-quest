@@ -506,7 +506,7 @@ Content line 2
                         "test-data/test-quest/00-first/scaffold/00-prepare-interfaces"
                     ),
                     message: Some("commit message\n".to_string()),
-                    expected_test_result: TestExpectation::Pass,
+                    expected: TestExpectation::Pass,
                 },
                 Commit {
                     path: PathBuf::from(
@@ -515,7 +515,7 @@ Content line 2
                     message: Some(
                         "commit message for final commit in scaffold branch\n".to_string()
                     ),
-                    expected_test_result: TestExpectation::Pass,
+                    expected: TestExpectation::Pass,
                 }
             ]
         );

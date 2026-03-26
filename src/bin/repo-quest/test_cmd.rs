@@ -75,7 +75,7 @@ impl From<(Commit, ExitStatus)> for TestResult {
         TestResult {
             commit: commit.path,
             passed: status.success(),
-            expected: commit.expected_test_result.is_pass() == status.success(),
+            expected: commit.expected.is_pass() == status.success(),
         }
     }
 }

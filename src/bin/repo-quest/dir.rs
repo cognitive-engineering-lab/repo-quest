@@ -133,7 +133,7 @@ impl CommitMeta {
         Commit {
             path: commit_dir.join(self.label),
             message: msg,
-            expected_test_result: self.expected,
+            expected: self.expected,
         }
     }
 }
@@ -265,7 +265,7 @@ pub struct PullRequestCommentMeta {
 pub struct Commit {
     pub path: PathBuf,
     pub message: Option<String>,
-    pub expected_test_result: TestExpectation,
+    pub expected: TestExpectation,
 }
 
 impl Commit {
@@ -277,7 +277,7 @@ impl Commit {
                 .unwrap()
                 .to_string_lossy()
                 .into_owned(),
-            expected: self.expected_test_result,
+            expected: self.expected,
         }
     }
 }
