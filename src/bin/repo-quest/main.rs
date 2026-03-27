@@ -72,7 +72,7 @@ pub enum Command {
     },
     /// Converts a quest from directory format to linear history format.
     #[command(after_help=after_help_hist())]
-    DirToHist {
+    Hist {
         /// The path to the directory representation of a quest.
         #[arg(long, value_name = "QUEST_REPO_ROOT")]
         quest: Option<PathBuf>,
@@ -90,7 +90,7 @@ pub enum Command {
     ///
     /// See the propagate command for more information.
     #[command(after_help=after_help_hist())]
-    HistToDir {
+    Dirs {
         /// The path to the linear history representation of a quest.
         #[arg(long)]
         hist: Option<PathBuf>,
@@ -224,7 +224,7 @@ fn main() -> Result<()> {
             let quest_tree = commands::quest_tree(&quest)?;
             println!("{quest_tree}");
         }
-        Command::DirToHist { quest, hist } => {
+        Command::Hist { quest, hist } => {
             let dir = match quest {
                 Some(dir) => dir,
                 None => infer_dir_path(&PathBuf::from("."))?
@@ -236,7 +236,7 @@ fn main() -> Result<()> {
             };
             commands::dir_to_hist(&dir, hist, QUEST_BRANCH_PREFIX)?;
         }
-        Command::HistToDir { quest, hist } => {
+        Command::Dirs { quest, hist } => {
             let dir = match quest {
                 Some(dir) => dir,
                 None => infer_dir_path(&PathBuf::from("."))?
