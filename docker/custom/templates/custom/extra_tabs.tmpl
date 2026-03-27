@@ -40,6 +40,13 @@
      align-items: center;
      justify-content: center;
  }
+
+ #rq-error-notice {
+     display: none;
+     background: var(--color-error-bg);
+     border: var(--color-error-border);
+     color: var(--color-error-text);
+ }
 </style>
 
 <div id="rq-sidebar" class="ui container rq-sidebar-open">
@@ -81,6 +88,16 @@
             <span id="solution-button-span"></span>
         </div>
     </div>
+    <div id="rq-error-notice" class="ui attached segment">
+        <h3>Error</h3>
+        RepoQuest has encountered errors. Please <a
+        href="https://github.com/cognitive-engineering-lab/repo-quest/issues/new">submit
+        a bug report</a> that includes the quests you have installed and <a
+        href="{{AppSubUrl}}/rq/error/log">the server error messages</a> and any error messages below.
+        <ul id="rq-error-list">
+        </ul>
+        <button onclick="clear_errors()">Clear all errors.</button>
+    </div>
 </div>
 
 <script>
@@ -93,11 +110,73 @@
          sidebar.classList.remove("rq-sidebar-closed");
          sidebar.classList.add("rq-sidebar-open");
      }
+
+     const toggle = document.getElementById("rq-sidebar-toggle");
+     toggle.addEventListener("click", toggleSidebar);
+ }
+</script>
+
+<script>
+ function error_notice(msg) {
+     const notice = document.getElementById("rq-error-notice");
+     const list = document.getElementById("rq-error-list");
+
+     var entry = document.createElement('li');
+     entry.appendChild(document.createTextNode(msg));
+     list.appendChild(entry);
+
+     notice.style.display = "block";
+
+     throw new Error(msg);
  }
 
- const toggle = document.getElementById("rq-sidebar-toggle");
- console.log(toggle);
- toggle.addEventListener("click", toggleSidebar);
+ function clear_errors() {
+     const notice = document.getElementById("rq-error-notice");
+     notice.style.display = "none";
+
+     fetch("{{AppSubUrl}}/rq/error/clear", {
+         method: "POST",
+     }).then(function(response) {
+         if (!response.ok) {
+             error_notice(`Error getting clearing errors: ${response.status} ${response.body}`);
+         }
+     });
+ }
+
+ {
+     let websocket = null;
+
+     function listen_errors() {
+         websocket = new WebSocket("{{AppSubUrl}}/rq/error/listen");
+         websocket.addEventListener("message", (e) => {
+             let errors = JSON.parse(e.data);
+             if (errors.length > 0) {
+                 error_notice(`Server has encountered errors: ${errors[errors.length-1]}`);
+             }
+         });
+     }
+
+     // For why we explicitly close and restart the socket, see
+     // https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API/Writing_WebSocket_client_applications#working_with_the_bfcache
+     window.addEventListener("pagehide", () => {
+         if (websocket) {
+             websocket.close();
+             websocket = null;
+             const list = document.getElementById("rq-error-list");
+             list.innerHTML = "";
+         }
+     });
+
+     window.addEventListener("pageshow", (event) => {
+         if (event.persisted) {
+             listen_errors()
+         }
+     });
+
+     // the server always responds with the current state of errors, so no need
+     // for a separate check.
+     listen_errors()
+ }
 </script>
 
 <script>
@@ -106,7 +185,7 @@
      headers: { "Content-Type": "application/json" },
  }).then(function(response) {
      if (!response.ok) {
-         throw new Error(`Error getting current quest chapter: ${response.status} ${response.body}`);
+         error_notice(`Error getting current quest chapter: ${response.status} ${response.body}`);
      }
      return response.json();
  }).then(function(response) {
@@ -131,7 +210,6 @@
      if (!response) {
          curTaskNameSpan.remove();
      } else {
-         console.log(response);
          curTaskNameSpan.innerHTML = response.taskName;
      }
  });
@@ -143,7 +221,7 @@
          headers: { "Content-Type": "application/json" },
      }).then(function(response) {
          if (!response.ok) {
-             throw new Error(`Error starting quest: ${response.status} ${response.body}`);
+             error_notice(`Error starting quest: ${response.status} ${response.body}`);
          }
          return response.json();
      }).then(function(pr) {
@@ -156,7 +234,7 @@
      headers: { "Content-Type": "application/json" },
  }).then(function(response) {
      if (!response.ok) {
-         throw new Error(`Error checking reference solution status: ${response.status} ${response.body}`);
+         error_notice(`Error checking reference solution status: ${response.status} ${response.body}`);
      }
      return response.json();
  }).then(function(pr) {
