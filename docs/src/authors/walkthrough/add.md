@@ -6,11 +6,14 @@ structure.
 
 First, ensure that `hist` is up-to-date with the directory representation.
 
-> [!WARNING]
-> Unlike with how the `dirs` command checks for changes before overwriting, the
-> `hist` command will overwrite any pending changes in the `hist` directory.
+> [!NOTE]
+> Like with how the `dirs` command checks for changes before overwriting, the
+> `hist` command will not overwrite an existing `hist` directory, so you will
+> need to make sure there's nothing you want to keep, and then remove the
+> directory before continuing.
 
 ```shell
+rm -rf hist
 repo-quest hist
 ```
 

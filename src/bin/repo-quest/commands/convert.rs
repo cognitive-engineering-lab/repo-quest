@@ -584,10 +584,6 @@ pub fn quest_to_hist(
     output_dir: PathBuf,
     branch_prefix: &str,
 ) -> Result<GitRepo> {
-    // Initialize the repository that will host the rebase.
-    if output_dir.is_dir() {
-        fs::remove_dir_all(&output_dir)?;
-    }
     super::ensure_empty_dir(&output_dir)?;
     let output_repo = GitRepo::init(output_dir)?;
 

@@ -23,7 +23,7 @@ fn ensure_empty_dir(output_dir: &Path) -> Result<()> {
             .next()
             .is_some()
     {
-        bail!("Given output output path exists but is not an empty directory.")
+        bail!("Given output path {output_dir:?} exists but is not an empty directory.")
     }
     Ok(())
 }
