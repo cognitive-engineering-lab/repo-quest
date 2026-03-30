@@ -3,7 +3,7 @@
 To create a new quest in a directory `my-quest`, run the following.
 
 ```shell
-repoquest init my-quest
+repo-quest init my-quest
 ```
 
 The `init` command creates a quest directory `my-quest` that contains a basic

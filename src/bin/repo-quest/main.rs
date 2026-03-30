@@ -130,7 +130,7 @@ pub enum Command {
     /// committed versions of a quest. A typical use would be:
     ///
     /// - Start from a quest definition repository with no uncommitted changes.
-    /// - Make a change taht will need to be propagated forward. (Since it can
+    /// - Make a change that will need to be propagated forward. (Since it can
     ///   only be propagated forward, make the change to the earliest quest stage
     ///   that needs it.)
     /// - Commit the change.
