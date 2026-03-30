@@ -140,7 +140,7 @@ pub enum Command {
     /// - Use the `overlay` command to update the working directory of the
     ///   quest definition repository.
     /// - Amend the commit with the forward-propagated changes.
-    #[command(after_help=after_help_hist())]
+    #[command(after_help=after_help_hist(), verbatim_doc_comment)]
     Propagate {
         /// The quest definition that has a change that requires propagating.
         #[arg(long, value_name = "QUEST_REPO_ROOT")]
