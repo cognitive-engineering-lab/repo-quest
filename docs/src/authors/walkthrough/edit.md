@@ -58,6 +58,7 @@ This is an awesome quest where you will do cool things!
 Amend the most recent commit with the changes.
 
 ```shell
+git add -u .
 git commit --amend --no-edit
 ```
 

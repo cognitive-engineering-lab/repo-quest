@@ -20,6 +20,7 @@ repo-quest hist
 Switch to the main branch and move it to the last commit of the last chapter.
 
 ```shell
+cd hist
 git switch main
 git reset --hard quest/chapter/first-chapter/solution/implement-add
 ```
@@ -152,6 +153,7 @@ Quest Title
 Stage and commit the changes to the quest with git.
 
 ```sh
+cd ..
 git add .
 git commit -m "Add sub-and-mul chapter"
 ```
