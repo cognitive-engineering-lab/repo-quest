@@ -56,3 +56,6 @@ services:
     depends_on:
       - forgejo
       - repoquest
+networks:
+  default:
+    name: repo-quest_default
