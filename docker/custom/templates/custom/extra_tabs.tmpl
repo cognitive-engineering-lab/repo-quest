@@ -1,12 +1,16 @@
 {{ if .IsSigned }}
 <style>
+ .menu.visible {
+     z-index: 101;
+ }
+
  #rq-sidebar {
      position:fixed;
      height: calc(100dvh - 2 * 49px);
      width: 20em;
      top:49px;
      right:0;
-     z-index:10000;
+     z-index:100;
      background: var(--color-box-body);
      border: solid 1px var(--color-secondary);
      border-right: none;
