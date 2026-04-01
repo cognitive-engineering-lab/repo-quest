@@ -96,6 +96,16 @@ documentation, and so may break with upgrades to the Forgejo image. For example,
 - the content of the user dashboard is overridden, and
 - an absolute-positioned sidebar is added as part of `extra_tabs.tmpl`.
 
+When developing the UI without requiring changes to the backend it can be
+helpful to just copy in the UI files and then force Forgejo to reload them.
+However, those files will be stored in the volume and so the volume will have to
+be recreated when actually updating the Forgejo image.
+
+```shell
+podman cp docker/custom/templates/ repo-quest_forgejo_1:/var/lib/gitea/custom/ \
+    && podman exec repo-quest_forgejo_1 forgejo manager reload-templates
+```
+
 ### Testing
 
 There is very little in the way of automated tests. The skeleton directory used
