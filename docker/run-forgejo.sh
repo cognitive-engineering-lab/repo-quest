@@ -27,6 +27,13 @@ if [ ! -f "$(dirname ${GITEA_APP_INI})/configured" ]; then
     register &
 fi
 
+# The templates live on the volume, so they need to be overidden on start-up,
+# otherwise they don't get updated when a new image is built.
+cp -R /etc/templates/templates $GITEA_CUSTOM/
+
+# TODO: app.ini has the same problem, but it created only on the volume during
+# first run of docker-entrypoint.sh, so recreating it isn't as straightforward.
+
 RQ_PORT="${RQ_PORT:-8085}"
 export GITEA__SERVER__ROOT_URL="http://localhost:$RQ_PORT"
 RQ_SSH_PORT="${RQ_SSH_PORT:-2222}"

@@ -10,7 +10,7 @@ ADD --chmod=755 ./docker/run-forgejo.sh /usr/local/bin/run-forgejo.sh
 USER git
 
 ADD --chmod=644 ./docker/app.ini /etc/templates/app.ini
-ADD --chown=1000:1000 ./docker/custom/templates "$GITEA_CUSTOM/templates"
+ADD --chown=644:644 ./docker/custom/templates "/etc/templates/templates"
 
 ENV RQ_PORT=8085
 
