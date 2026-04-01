@@ -1,48 +1,48 @@
 <!DOCTYPE HTML>
-<html lang="en" class="light" dir="ltr">
+<html lang="en" class="sidebar-visible no-js light">
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Rust It Yourself</title>
-        <meta name="robots" content="noindex">
-
+        <title>RepoQuest</title>
+                <meta name="robots" content="noindex" />
+                
 
         <!-- Custom HTML head -->
         
+
+        <meta content="text/html; charset=utf-8" http-equiv="Content-Type">
         <meta name="description" content="">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <meta name="theme-color" content="#ffffff">
+        <meta name="theme-color" content="#ffffff" />
 
-        <link rel="icon" href="favicon.svg">
-        <link rel="shortcut icon" href="favicon.png">
-        <link rel="stylesheet" href="css/variables.css">
+                <link rel="icon" href="favicon.svg">
+                        <link rel="shortcut icon" href="favicon.png">
+                <link rel="stylesheet" href="css/variables.css">
         <link rel="stylesheet" href="css/general.css">
         <link rel="stylesheet" href="css/chrome.css">
-        <link rel="stylesheet" href="css/print.css" media="print">
-
+                <link rel="stylesheet" href="css/print.css" media="print">
+        
         <!-- Fonts -->
         <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
-        <link rel="stylesheet" href="fonts/fonts.css">
-
+                <link rel="stylesheet" href="fonts/fonts.css">
+        
         <!-- Highlight.js Stylesheets -->
         <link rel="stylesheet" href="highlight.css">
         <link rel="stylesheet" href="tomorrow-night.css">
         <link rel="stylesheet" href="ayu-highlight.css">
 
         <!-- Custom theme stylesheets -->
-        <link rel="stylesheet" href="styles.css">
-
-    </head>
-    <body class="sidebar-visible no-js">
-    <div id="body-container">
+        
+            </head>
+    <body>
         <!-- Provide site root to javascript -->
-        <script>
+        <script type="text/javascript">
             var path_to_root = "";
             var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
         </script>
 
         <!-- Work around some values being stored in localStorage wrapped in quotes -->
-        <script>
+        <script type="text/javascript">
             try {
                 var theme = localStorage.getItem('mdbook-theme');
                 var sidebar = localStorage.getItem('mdbook-sidebar');
@@ -58,102 +58,71 @@
         </script>
 
         <!-- Set the theme before any content is loaded, prevents flash -->
-        <script>
+        <script type="text/javascript">
             var theme;
             try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
             if (theme === null || theme === undefined) { theme = default_theme; }
             var html = document.querySelector('html');
+            html.classList.remove('no-js')
             html.classList.remove('light')
             html.classList.add(theme);
-            var body = document.querySelector('body');
-            body.classList.remove('no-js')
-            body.classList.add('js');
+            html.classList.add('js');
         </script>
 
-        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
-
         <!-- Hide / unhide sidebar before it is displayed -->
-        <script>
-            var body = document.querySelector('body');
-            var sidebar = null;
-            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+        <script type="text/javascript">
+            var html = document.querySelector('html');
+            var sidebar = 'hidden';
             if (document.body.clientWidth >= 1080) {
                 try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
                 sidebar = sidebar || 'visible';
-            } else {
-                sidebar = 'hidden';
             }
-            sidebar_toggle.checked = sidebar === 'visible';
-            body.classList.remove('sidebar-visible');
-            body.classList.add("sidebar-" + sidebar);
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
         </script>
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded "><a href="chapter_1.html"><strong aria-hidden="true">1.</strong> Chapter 1</a></li></ol>
-            </div>
-            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
-                <div class="sidebar-resize-indicator"></div>
-            </div>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">Introduction to RepoQuest</a></li><li class="chapter-item expanded affix "><li class="part-title">For Learners</li><li class="chapter-item expanded "><a href="learners.html"><strong aria-hidden="true">1.</strong> Following quests</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="learners/requirements.html"><strong aria-hidden="true">1.1.</strong> Requirements</a></li><li class="chapter-item expanded "><a href="learners/starting-repoquest.html"><strong aria-hidden="true">1.2.</strong> Starting the RepoQuest environment</a></li><li class="chapter-item expanded "><a href="learners/adding-a-quest.html"><strong aria-hidden="true">1.3.</strong> Adding a quest</a></li><li class="chapter-item expanded "><a href="learners/starting-a-quest.html"><strong aria-hidden="true">1.4.</strong> Starting a quest</a></li><li class="chapter-item expanded "><a href="learners/completing-a-chapter.html"><strong aria-hidden="true">1.5.</strong> Completing a chapter</a></li><li class="chapter-item expanded "><a href="learners/using-a-reference-solution.html"><strong aria-hidden="true">1.6.</strong> Using a reference solution</a></li></ol></li><li class="chapter-item expanded "><li class="part-title">For Authors</li><li class="chapter-item expanded "><a href="authors.html"><strong aria-hidden="true">2.</strong> Authoring quests</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="authors/dependencies.html"><strong aria-hidden="true">2.1.</strong> RepoQuest dependencies</a></li><li class="chapter-item expanded "><a href="authors/walkthrough.html"><strong aria-hidden="true">2.2.</strong> Walk-through</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="authors/walkthrough/create.html"><strong aria-hidden="true">2.2.1.</strong> Create a quest</a></li><li class="chapter-item expanded "><a href="authors/walkthrough/edit.html"><strong aria-hidden="true">2.2.2.</strong> Edit the initial commits</a></li><li class="chapter-item expanded "><a href="authors/walkthrough/add.html"><strong aria-hidden="true">2.2.3.</strong> Add a chapter</a></li><li class="chapter-item expanded "><a href="authors/walkthrough/test.html"><strong aria-hidden="true">2.2.4.</strong> Test the quest commits</a></li><li class="chapter-item expanded "><a href="authors/walkthrough/bundle.html"><strong aria-hidden="true">2.2.5.</strong> Bundle the quest</a></li></ol></li><li class="chapter-item expanded "><a href="authors/example.html"><strong aria-hidden="true">2.3.</strong> An example quest and some vocabulary</a></li><li class="chapter-item expanded "><a href="authors/converting-existing.html"><strong aria-hidden="true">2.4.</strong> Converting an existing tutorial to a quest</a></li><li class="chapter-item expanded "><a href="authors/recommendations.html"><strong aria-hidden="true">2.5.</strong> Recommendations</a></li><li class="chapter-item expanded "><div><strong aria-hidden="true">2.6.</strong> Reference</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="reference/repoquest-binary.html"><strong aria-hidden="true">2.6.1.</strong> RepoQuest binary</a></li><li class="chapter-item expanded "><a href="reference/directory-format.html"><strong aria-hidden="true">2.6.2.</strong> Quest directory format</a></li><li class="chapter-item expanded "><a href="reference/repository-format.html"><strong aria-hidden="true">2.6.3.</strong> Quest repository format</a></li></ol></li></ol></li></ol>            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
-
-        <!-- Track and set sidebar scroll position -->
-        <script>
-            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
-            sidebarScrollbox.addEventListener('click', function(e) {
-                if (e.target.tagName === 'A') {
-                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
-                }
-            }, { passive: true });
-            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
-            sessionStorage.removeItem('sidebar-scroll');
-            if (sidebarScrollTop) {
-                // preserve sidebar scroll position when navigating via links within sidebar
-                sidebarScrollbox.scrollTop = sidebarScrollTop;
-            } else {
-                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
-                var activeSection = document.querySelector('#sidebar .active');
-                if (activeSection) {
-                    activeSection.scrollIntoView({ block: 'center' });
-                }
-            }
-        </script>
 
         <div id="page-wrapper" class="page-wrapper">
 
             <div class="page">
-                                <div id="menu-bar-hover-placeholder"></div>
-                <div id="menu-bar" class="menu-bar sticky">
+                
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky bordered">
                     <div class="left-buttons">
-                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                        <button id="sidebar-toggle" class="icon-button" type="button" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
                             <i class="fa fa-bars"></i>
-                        </label>
+                        </button>
                         <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
                             <i class="fa fa-paint-brush"></i>
                         </button>
                         <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
-                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light (default)</button></li>
                             <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
                             <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
                             <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
                             <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
                         </ul>
-                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                                                <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
                             <i class="fa fa-search"></i>
                         </button>
-                    </div>
+                                            </div>
 
-                    <h1 class="menu-title">Rust It Yourself</h1>
+                    <h1 class="menu-title">RepoQuest</h1>
 
                     <div class="right-buttons">
-                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                                                <a href="print.html" title="Print this book" aria-label="Print this book">
                             <i id="print-button" class="fa fa-print"></i>
                         </a>
-
+                                                                        
                     </div>
                 </div>
 
-                <div id="search-wrapper" class="hidden">
+                                <div id="search-wrapper" class="hidden">
                     <form id="searchbar-outer" class="searchbar-outer">
                         <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
                     </form>
@@ -163,9 +132,9 @@
                         </ul>
                     </div>
                 </div>
-
+                
                 <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
-                <script>
+                <script type="text/javascript">
                     document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
                     document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
                     Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
@@ -175,159 +144,765 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="programming-a-guessing-game"><a class="header" href="#programming-a-guessing-game">Programming a Guessing Game</a></h1>
-<p>Our first project will be to implement a guessing game from scratch. The game should work like this:</p>
+                        <h1 id="introduction-to-repoquest"><a class="header" href="#introduction-to-repoquest">Introduction to RepoQuest</a></h1>
+<p>RepoQuest is an experimental tool for interactive programming tutorials. Each
+lesson takes place in a Git repository hosted in a local instance (running in
+Docker) of the <a href="https://forgejo.org/">Forgejo</a> Git forge. RepoQuest uses the
+Forgejo interface for issues and pull requests to provide starter code and
+explain programming concepts.</p>
+<p>This documentation consists of two parts. The first part describes how to
+install and run RepoQuest for a learner following a quest. The second part
+describes how to create quests for quest authors.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="following-quests"><a class="header" href="#following-quests">Following quests</a></h1>
+<p>This section of the documentation covers running RepoQuest for a learner.</p>
+<p>Setting up RepoQuest in the first place requires several steps, described in the
+following sections. Once running, RepoQuest imitates the normal way of
+interacting with a Git forge such as GitHub or Forgejo, so using RepoQuest
+should feel familiar to most users.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="requirements"><a class="header" href="#requirements">Requirements</a></h1>
+<p>Docker or Podman is required follow a quest using RepoQuest.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="starting-the-repoquest-environment"><a class="header" href="#starting-the-repoquest-environment">Starting the RepoQuest environment</a></h1>
+<p>To start the RepoQuest environment using Docker, clone the RepoQuest repository.
+In the root of the repository run</p>
+<pre><code class="language-sh">docker compose up --build --detach
+</code></pre>
+<p>To start RepoQuest using Podman, clone the repository and in the root of the
+repository run</p>
+<pre><code class="language-sh">podman compose up --build --detach
+</code></pre>
+<p>You can control the port that RepoQuest uses for its HTTP server with the
+<code>RQ_PORT</code> environment variable and the port used for its SSH server with the
+<code>RQ_SSH_PORT</code> environment variable. For example,</p>
+<pre><code class="language-sh">RQ_PORT=8000 RQ_SSH_PORT=2022 docker compose up --build --detach
+</code></pre>
+<p>Once that command returns successfully, you can access RepoQuest at
+<a href="http://localhost:8085/">http://localhost:8085/</a> (adjusting the port number
+according to how you configured it).</p>
+<p>You will need to register so that RepoQuest knows your email address (for
+correctly associating commits). To clone from and push to the RepoQuest
+instance, you can either use the username and password you registered with
+(e.g., <code>git clone http://username:password@localhost:3000/username/repo.git</code>) or
+you can register an SSH with RepoQuest key in the user preferences section of
+the UI (e.g., <code>git clone ssh://git@localhost:2222/username/repo.git</code>).</p>
+<p>To shut down RepoQuest, run <code>podman compose down</code> in the same directory. Docker
+or Podman volumes associated with the compose service will persist your
+configuration and the quest data.</p>
+<p>To start a quest after registering, first <a href="http://localhost:8085">upload a quest definition
+bundle</a> (such as <a href="learners/starting-repoquest.html#TODO">rqst-async.tgz</a>), and then start
+the quest.</p>
+<h3 id="forgejo-actions-ci-support"><a class="header" href="#forgejo-actions-ci-support">Forgejo Actions CI support</a></h3>
+<p>In order to support Forgejo Actions, the socket for communicating with Docker or
+Podman must be made available to the Forgejo Runner container. For Docker the
+default configuration should work with no changes. For rootless Podman, you will
+have to start the service that provides the socket and then specify the path to
+the socket via the environment variable <code>RQ_DOCKER_HOST</code>.</p>
+<p>For example,</p>
+<pre><code class="language-sh">systemctl --user start podman.socket
+RQ_DOCKER_HOST=&quot;$XDG_RUNTIME_DIR/podman/podman.sock&quot; \
+    podman compose up --build --detach
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="adding-a-quest"><a class="header" href="#adding-a-quest">Adding a quest</a></h1>
+<p>Once you are logged into RepoQuest, the home page will include a section labeled
+&quot;Install a quest&quot;. Select a quest bundle using the &quot;browse&quot; button and then
+click &quot;add quest&quot; to add the quest to the RepoQuest instance. If the quest is
+successfully added, a new entry will appear in the &quot;Start a New Quest&quot; section.</p>
+<p><img src="learners/../../assets/quests-page.png" alt="Quests Page" /></p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="starting-a-quest"><a class="header" href="#starting-a-quest">Starting a quest</a></h1>
+<p>To start a quest, click the &quot;Start&quot; button for the quest under the &quot;Start a New
+Quest&quot; section. After a few seconds, your browser will be redirected to the
+issue for the first task of the new quest.</p>
+<p><img src="learners/../../assets/quests-page.png" alt="Quests Page" /></p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="completing-a-chapter"><a class="header" href="#completing-a-chapter">Completing a chapter</a></h1>
+<p>To complete a chapter of a quest, merge the completed pull request for the
+chapter to main. An issue and pull request for the next chapter will be created
+automatically.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="using-a-reference-solution"><a class="header" href="#using-a-reference-solution">Using a reference solution</a></h1>
+<p>If you require a reference solution for a chapter, press the &quot;Add reference
+solution&quot; button in the top right of the quest repository interface. The
+reference solution will be added as pull request into the branch for the current
+chapter's task.</p>
+<p>You can then browse the reference solution or make use of the solution by
+merging into the branch for the active chapter's task. If you do so, you will
+still need to finish the chapter by merging the task branch into main.</p>
+<p><img src="learners/../../assets/sidebar.png" alt="RepoQuest Sidebar" /></p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="authoring-quests"><a class="header" href="#authoring-quests">Authoring quests</a></h1>
+<p>RepoQuest is useful for developing tutorials in which a learner progressively
+extends a single program. Each chapter presents a learner with some scaffolding for
+a problem and instructions. The learner implements a solution based on the
+scaffolding, and then the subsequent chapter provides additional scaffolding and
+instructions that build on the previous solution.</p>
+<p>For example, a tutorial for building an interpreter might begin with providing
+the learner with a datatype defining the syntax tree for a language and the
+signature for an evaluation function and ask the learner to implement evaluation
+the function. A subsequent chapter in the quest could add additional cases to
+the syntax tree datatype and ask the learner to extend the evaluation function,
+or could add signatures for additional functions over the syntax tree datatype
+and ask the learner to implement those.</p>
+<p>The learner completes the quest using a <a href="./learners.html">forge-based interface</a>
+where each chapter in the quest is completed by merging a branch with the
+learner's solution into the main branch of a repository.</p>
+<h2 id="two-quest-representations"><a class="header" href="#two-quest-representations">Two quest representations</a></h2>
+<p>RepoQuest makes use of two quest formats. The first represents each scaffolding
+or solution commit in a quest as a directory. This makes it possible to use git
+to version control the whole quest sequence.</p>
+<p>The second represents the quest as a git repository, where the quest sequence is
+represented as a linear history of git commits. This representation makes it
+easier to make edits to the content and structure of the quest.</p>
+<p>The walk-through will demonstrate how to make use of each representation when
+working on a quest.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="dependencies"><a class="header" href="#dependencies">Dependencies</a></h1>
+<p>Many of the RepoQuest commands require the following programs to be available on
+your <code>PATH</code>.</p>
 <ul>
-<li>The program will greet the player.</li>
-<li>It will generate a random integer between 1 and 100.</li>
-<li>It will then prompt the player to enter a guess.</li>
-<li>After a guess is entered, the program will indicate whether the guess is too low or too high.</li>
-<li>If the guess is correct, the game will print a congratulatory message and exit.</li>
-<li>Otherwise, the game keeps going.</li>
+<li><code>git</code></li>
+<li><code>rsync</code></li>
 </ul>
-<h2 id="setting-up-a-new-project"><a class="header" href="#setting-up-a-new-project">Setting Up a New Project</a></h2>
-<p>First, setup a new project:</p>
-<pre><code class="language-console">$ cargo new guessing_game
-$ cd guessing_game
+<div style="break-before: page; page-break-before: always;"></div><h1 id="walk-through"><a class="header" href="#walk-through">Walk-through</a></h1>
+<p>This chapter will walk you through the steps of creating a new quest and making
+various changes and additions to it.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="create-a-quest"><a class="header" href="#create-a-quest">Create a quest</a></h1>
+<p>To create a new quest in a directory <code>my-quest</code>, run the following.</p>
+<pre><code class="language-shell">repo-quest init my-quest
 </code></pre>
-<details>
-  <summary>What does this do?</summary>
-<p>The first command, <code>cargo new</code>, takes the name of the project (<code>guessing_game</code>) as the first argument. The second command changes to the new project’s directory.</p>
-</details>
-<p>Then run the project:</p>
-<pre><code class="language-console">$ cargo run
+<p>The <code>init</code> command creates a quest directory <code>my-quest</code> that contains a basic
+quest definition.</p>
+<pre><code class="language-plaintext">├── .gitignore
+├── quest.toml
+├── main
+│   ├── initialize-project
+│   │   ├── Cargo.lock
+│   │   ├── Cargo.toml
+│   │   ├── README.md
+│   │   └── src
+│   │       └── main.rs
+│   └── initialize-project.txt
+└── chapters
+    └── first-chapter
+        ├── issue
+        │   ├── 01-comment.md
+        │   └── 02-comment.md
+        ├── issue.md
+        ├── pr
+        │   └── 01-comment.md
+        ├── pr.md
+        ├── scaffold
+        │   ├── add-test
+        │   │   ├── Cargo.lock
+        │   │   ├── Cargo.toml
+        │   │   ├── README.md
+        │   │   └── src
+        │   │       └── main.rs
+        │   └── add-test.txt
+        └── solution
+            ├── implement-add
+            │   ├── Cargo.lock
+            │   ├── Cargo.toml
+            │   ├── README.md
+            │   └── src
+            │       ├── main.rs
+            │       └── operations.rs
+            └── implement-add.txt
 </code></pre>
-<p>It should print <code>Hello world!</code>.</p>
-<details>
-  <summary>Why does it print this?</summary>
-<p>This is the default behavior for new binaries. Look at <code>src/main.rs</code>.</p>
-</details>
-<h2 id="processing-a-guess"><a class="header" href="#processing-a-guess">Processing a Guess</a></h2>
-<p>Open <code>src/main.rs</code> and look at the <code>main</code> function. Right now, it contains the one line:</p>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>println!("Hello, world!");
-<span class="boring">}</span></code></pre></pre>
-<task> 
-<span>Task 1:</span> greet the player when they run the binary by printing exactly this text:
-<pre><code class="language-console">$ cargo run
-Guess the number!
-Please input your guess.
+<p>Edit <code>quest.toml</code> to set the title, author, and description of the quest. Also
+set the <code>repo</code> value to a name that will be used as the name for the repository
+created when a learner starts the quest.</p>
+<p>Then, initialize the directory as a git repository and commit everything.</p>
+<pre><code class="language-shell">cd my-quest
+git init .
+git add .
+git commit -m &quot;Initial commit&quot;
 </code></pre>
-</task>
-<p>For this first project, we will check your work with a provided testing binary called <code>guessing-game-grader</code>. Before making your changes, try running it to observe the failing test:</p>
-<pre><code class="language-console">$ guessing-game-grader
-✗ Task 1: Prints the right initial strings
-  The diff is:
-     H̶e̶l̶l̶o̶,̶ ̶w̶o̶r̶l̶d̶!̶
-     Guess the number!
-     Please input your guess.
+<p>You can view the current state of the quest (chapters and commits) using
+<code>repo-quest tree</code>.</p>
+<pre><code class="language-shell">repo-quest ls
 </code></pre>
-<p>Once you make the correct edit, the grader should show the test as passing and move on to the next test, like this:</p>
-<pre><code class="language-console">$ guessing-game-grader
-✓ Task 1: Prints the right initial strings
-✗ Task 2: Accepts an input
-  [...]
+<pre><code class="language-plaintext">Quest Title
+├── main
+│   └── initialize-project
+└── first-chapter
+    ├── scaffold
+    │   └── add-test
+    └── solution
+        └── implement-add
 </code></pre>
-<details>
-  <summary>I need a hint!</summary>
-<p>TODO</p>
-</details>
-<details>
-  <summary>I need the solution!</summary>
-<p>TODO</p>
-</details>
-<p>Once you're ready, move on to the next task.</p>
-<task> 
-<span>Task 2:</span> read a string from the command line and print it out, like this:
-<pre><code class="language-console">$ cargo run
-Guess the number!
-Please input your guess.
-15
-You guessed: 15
+<div style="break-before: page; page-break-before: always;"></div><h1 id="edit-the-initial-commits"><a class="header" href="#edit-the-initial-commits">Edit the initial commits</a></h1>
+<p>The <code>main</code> directory contains the commits that will already be present in the
+repository when a learner starts the quest. All quests must have at least one
+commit in defined in <code>main</code>. The generated quest contains a single commit,
+labeled <code>initialize-project</code>. We will both the <code>README.md</code> file in this commit.</p>
+<p>If we edited the <code>README.md</code> file directly, we would also have to edit it in
+every later commit in every chapter. Instead, we will use the <code>repo-quest</code> tool
+to create a linear-history repository representation of the quest and use
+standard <code>git</code> operations to edit the history as a whole.</p>
+<p>Run <code>repo-quest hist</code> in the root of the quest definition repository to create
+the linear-history representation. The linear-history representation will be
+created in a directory named <code>hist</code> in the root of the repository. The <code>hist</code>
+directory is already included in the default <code>.gitignore</code> file.</p>
+<p>The crated <code>hist</code> directory is a git repository with a branch defined for every
+commit. The <code>main</code> branch is not associated with a specific chapter or commit
+and instead is for your use in moving between commits to edit the repository.</p>
+<pre><code class="language-shell">git log --pretty=oneline --graph --decorate --abbrev-commit --all
 </code></pre>
-</task>
-<p>The key method is <a href="https://doc.rust-lang.org/std/io/struct.Stdin.html#method.read_line"><code>Stdin::read_line</code></a>. A core skill in the Rust It Yourself series  will be learning to read documentation of unfamiliar methods, so let's read the documentation for <code>read_line</code>:</p>
-<details>
-  <summary>How was I supposed to know that <code>Stdin::read_line</code> is the key method?</summary>
-<p>TODO (Google, StackOverflow, ChatGPT, top-down search of the docs, ...)</p>
-</details>
-<blockquote>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>pub fn read_line(&amp;self, buf: &amp;mut String) -&gt; Result&lt;usize&gt;
-<span class="boring">}</span></code></pre></pre>
-<p>Locks this handle and reads a line of input, appending it to the specified buffer.
-For detailed semantics of this method, see the documentation on <a href="https://doc.rust-lang.org/std/io/trait.BufRead.html#method.read_line"><code>BufRead::read_line</code></a>.</p>
-<h5 id="examples"><a class="header" href="#examples">Examples</a></h5>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use std::io;
+<pre><code class="language-plaintext">* dbe6499 (HEAD -&gt; main, quest/chapter/first-chapter/solution/implement-add) Implement a reference add function
+* 2d5d518 (quest/chapter/first-chapter/scaffold/add-test) Add a test that needs to be implemented
+* f9dc574 (quest/main/initialize-project) Initial commit
+</code></pre>
+<p>To edit the <code>README.md</code> and have it propagate through the later commits, use
+an interactive git rebase and choose to edit the commit.</p>
+<pre><code class="language-shell">git rebase -i --update-refs --root
+</code></pre>
+<pre><code class="language-plaintext">edit f9dc574 # Initial commit
+update-ref refs/heads/quest/main/initialize-project
 
-let mut input = String::new();
-match io::stdin().read_line(&amp;mut input) {
-    Ok(n) =&gt; {
-        println!("{n} bytes read");
-        println!("{input}");
-    }
-    Err(error) =&gt; println!("error: {error}"),
-}
-<span class="boring">}</span></code></pre></pre>
+pick 2d5d518 # Add a test that needs to be implemented
+update-ref refs/heads/quest/chapter/first-chapter/scaffold/add-test
+
+pick dbe6499 # Implement a reference add function
+update-ref refs/heads/quest/chapter/first-chapter/solution/implement-add
+</code></pre>
+<p>Change the content of <code>README.md</code>.</p>
+<pre><code class="language-markdown"># My Quest
+
+This is an awesome quest where you will do cool things!
+</code></pre>
+<p>Amend the most recent commit with the changes.</p>
+<pre><code class="language-shell">git add -u .
+git commit --amend --no-edit
+</code></pre>
+<p>Finish the rebase.</p>
+<pre><code class="language-shell">git rebase --continue
+</code></pre>
+<h3 id="commit-the-changes"><a class="header" href="#commit-the-changes">Commit the changes</a></h3>
+<p>The changes to <code>README.md</code> have been propagated through all of the commits in
+the linear history representation in <code>hist</code>. Now we just need to apply the
+changes to the original quest directory so that we can commit them.</p>
+<p>The command <code>repo-quest dirs</code> will apply the changes from the linear-history
+representation to the quest definition and update <code>quest.toml</code>. Because the
+command makes significant edits to the quest, it will only make the updates if
+there are no uncommitted changes to <code>quest.toml</code>, <code>main</code>, or <code>chapters</code>.</p>
+<blockquote>
+<p>[!NOTE]
+The overwriting of <code>quest.toml</code> will also normalize the structure, so there
+may be some unexpected changes to the file.</p>
 </blockquote>
-<p>The first line is the <strong>type signature</strong> of <code>read_line</code>. It says: "I am a method that takes two arguments: an immutable reference to myself (<a href="https://doc.rust-lang.org/std/io/struct.Stdin.html"><code>Stdin</code></a>), and a mutable reference to a <a href="https://doc.rust-lang.org/std/string/struct.String.html"><code>String</code></a>. I return a type called <code>Result&lt;usize&gt;</code>."</p>
-<p>This type signature and example use Rust features we haven't discussed yet. That's expected — another core skill in the Rust It Yourself series is working with code that uses features you don't fully understand. So let's try and learn something from this example anyway.</p>
-<p>The <code>read_line</code> method demonstrates two key aspects of Rust:</p>
-<ol>
+<p>Stage and commit the changes.</p>
+<pre><code class="language-shell">git add .
+git commit -m &quot;abc&quot;
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="add-a-chapter"><a class="header" href="#add-a-chapter">Add a chapter</a></h1>
+<p>To add a new chapter, create a new commit or sequence of commits in the
+linear-history format and make a branch for each commit with the correct
+structure.</p>
+<p>First, ensure that <code>hist</code> is up-to-date with the directory representation.</p>
+<blockquote>
+<p>[!NOTE]
+Like with how the <code>dirs</code> command checks for changes before overwriting, the
+<code>hist</code> command will not overwrite an existing <code>hist</code> directory, so you will
+need to make sure there's nothing you want to keep, and then remove the
+directory before continuing.</p>
+</blockquote>
+<pre><code class="language-shell">rm -rf hist
+repo-quest hist
+</code></pre>
+<p>Switch to the main branch and move it to the last commit of the last chapter.</p>
+<pre><code class="language-shell">cd hist
+git switch main
+git reset --hard quest/chapter/first-chapter/solution/implement-add
+</code></pre>
+<h2 id="create-the-scaffolding"><a class="header" href="#create-the-scaffolding">Create the scaffolding</a></h2>
+<p>The new chapter will have an additional task, asking the learner to implement
+some simple functions. The scaffolding commits will add the tests and the
+solution commits will add the implementations.</p>
+<p>In order to reduce the chances of conflicts when incorporating the scaffolding
+into the learner's repository, try to keep the changes made for scaffolding and the
+changes made for the solution in separate files. If there is a conflict, the
+generated pull request for the chapter will discard the learner's changes for
+earlier chapters and replace them with the reference solutions.</p>
+<p>In this quest, the learner will be modifying <code>src/operations.rs</code> and the scaffolding
+changes will be to <code>src/main.rs</code>.</p>
+<p>Modify the tests in <code>src/main.rs</code> to include the following tests.</p>
+<pre><pre class="playground"><code class="language-rust">
+<span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_sub() {
+    assert_eq!(sub(3,1), 2);
+}
+
+#[test]
+fn test_mul() {
+    assert_eq!(mul(2,3), 6);
+}
+<span class="boring">}
+</span></code></pre></pre>
+<p>Commit the changes and create a branch to indicate that the commit is a
+scaffolding commit.</p>
+<pre><code class="language-shell">git add -u .
+git commit -m &quot;Add sub and mul tests&quot;
+git branch -c quest/chapter/sub-and-mul/scaffold/add-tests
+</code></pre>
+<p>When converting back to the directory format, <code>sub-and-mul</code> will become the
+label and directory name for the chapter and <code>add-tests</code> will become the label
+and directory name for the commit.</p>
+<h2 id="create-the-reference-solution-commits"><a class="header" href="#create-the-reference-solution-commits">Create the reference solution commits</a></h2>
+<p>Modify <code>src/operations.rs</code> to add the <code>sub</code> implementation.</p>
+<pre><pre class="playground"><code class="language-rust">
+<span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub fn sub(x: u32, y: u32) -&gt; u32 { x - y }
+<span class="boring">}
+</span></code></pre></pre>
+<p>Commit the changes and create a branch to indicate that the commit is a
+solution commit.</p>
+<pre><code class="language-shell">git add -u .
+git commit -m &quot;Add sub implementation&quot;
+git branch -c quest/chapter/sub-and-mul/solution/add-sub
+</code></pre>
+<p>Modify <code>src/operations.rs</code> to add the <code>mul</code> implementation.</p>
+<pre><pre class="playground"><code class="language-rust">
+<span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub fn mul(x: u32, y: u32) -&gt; u32 { x * y }
+<span class="boring">}
+</span></code></pre></pre>
+<p>Commit the changes and create a branch to indicate that the commit is a
+solution commit.</p>
+<pre><code class="language-shell">git add -u .
+git commit -m &quot;Add sub implementation&quot;
+git branch -c quest/chapter/sub-and-mul/solution/add-mul
+</code></pre>
+<h2 id="define-the-task"><a class="header" href="#define-the-task">Define the task</a></h2>
+<p>To continue defining the chapter, we first convert back to the directory format.</p>
+<pre><code class="language-shell">repo-quest dirs
+</code></pre>
+<p>If you attempt to view the structure of the quest now with <code>repo-quest ls</code>, you
+will see an error:</p>
+<pre><code class="language-plaintext">Error: Could not read issue file &quot;/home/author/my-quest/chapters/sub-and-mul/issue.md&quot;
+</code></pre>
+<p>This is because even though you can defined the commits for a chapter with the
+linear-history format, you did not define the instructions for the user. To do
+so, create the mentioned file and add the following content.</p>
+<pre><code class="language-markdown">+++
+title = &quot;Add sub and mul&quot;
++++
+Add `sub` and `mul` functions that take and return `u32` to `operations.rs`.
+</code></pre>
+<p>This file defines the Forgejo issue that will be created for the user when they
+start the chapter. The metadata block delimited by the <code>+++</code> marks is TOML and
+defines the title of the issue. The remainder of the file is Markdown and will
+become the body of the issue.</p>
+<p>Once you have saved the file, you can run <code>repo-quest ls</code> again and you will see
+the structure of the quest with the new chapter and commits added.</p>
+<pre><code class="language-plaintext">Quest Title
+├── main
+│   └── initialize-project
+├── first-chapter
+│   ├── scaffold
+│   │   └── add-test
+│   └── solution
+│       └── implement-add
+└── sub-and-mul
+    ├── scaffold
+    │   └── add-tests
+    └── solution
+        ├── add-sub
+        └── add-mul
+</code></pre>
+<p>Stage and commit the changes to the quest with git.</p>
+<pre><code class="language-sh">cd ..
+git add .
+git commit -m &quot;Add sub-and-mul chapter&quot;
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="test-the-quest-commits"><a class="header" href="#test-the-quest-commits">Test the quest commits</a></h1>
+<p>In order to test each commit of a quest, you can define a test command in
+<code>quest.toml</code>. The command defined when creating a quest with <code>repo-quest init</code>
+is <code>cargo test</code>.</p>
+<pre><code class="language-toml">test-cmd = [
+    &quot;cargo&quot;,
+    &quot;test&quot;,
+]
+</code></pre>
+<p>The command <code>repo-quest test</code> runs the command for each commit. The output of
+<code>repo-quest test</code> indicates for each commit whether the result was the expected
+one or not and whether the test passed or failed.</p>
+<pre><code class="language-plaintext">EXPECTED RESULT: PASSED &quot;/home/theo/work/trust2/example/my-quest/main/initialize-project&quot;
+EXPECTED RESULT: FAILED &quot;/home/theo/work/trust2/example/my-quest/chapters/first-chapter/scaffold/add-test&quot;
+EXPECTED RESULT: PASSED &quot;/home/theo/work/trust2/example/my-quest/chapters/first-chapter/solution/implement-add&quot;
+UNEXPECTED RESULT: FAILED &quot;/home/theo/work/trust2/example/my-quest/chapters/sub-and-mul/scaffold/add-tests&quot;
+UNEXPECTED RESULT: FAILED &quot;/home/theo/work/trust2/example/my-quest/chapters/sub-and-mul/solution/add-sub&quot;
+EXPECTED RESULT: PASSED &quot;/home/theo/work/trust2/example/my-quest/chapters/sub-and-mul/solution/add-mul&quot;
+Error: There were unexpected test failures.
+</code></pre>
+<p>Commits that should have the tests fail can be marked to expect failure. For
+example, the first commit of first-chapter adds a test for which the called
+functions are not implemented, so the registered test command <code>cargo test</code>
+should fail. The scaffold commit for <code>first-chapter</code> is marked for expecting
+failure, but the scaffold commit and one of the solution commits for the
+<code>sub-and-mul</code> chapter are not.</p>
+<p>To mark them as expecting to fail, change the chapter definition to the following.</p>
+<pre><code class="language-toml">[[chapters]]
+label = &quot;sub-and-mul&quot;
+scaffold = [
+    {label = &quot;add-tests&quot;, expected = &quot;fail&quot;}
+]
+solution = [
+    {label = &quot;add-sub&quot;, expected = &quot;fail&quot;},
+    &quot;add-mul&quot;,
+]
+</code></pre>
+<blockquote>
+<p>[!NOTE]
+The above format is not the format that <code>repo-quest dirs</code> will produce. If you
+want to match that format, use the following instead:</p>
+<pre><code class="language-toml">[[chapters]]
+label = &quot;sub-and-mul&quot;
+solution = [
+    { label = &quot;add-sub&quot;, expected = &quot;fail&quot; },
+    &quot;add-mul&quot;,
+]
+
+[[chapters.scaffold]]
+label = &quot;add-tests&quot;
+expected = &quot;fail&quot;
+</code></pre>
+</blockquote>
+<p>Stage and commit the changes with git.</p>
+<pre><code class="language-shell">git add .
+git commit -m &quot;Fix test expectations&quot;
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="bundle-the-quest"><a class="header" href="#bundle-the-quest">Bundle the quest</a></h1>
+<p>Once your quest is ready for distribution, create the quest bundle with
+<code>repo-quest bundle</code>.</p>
+<pre><code class="language-sh">repo-quest bundle --output my-quest.tgz
+</code></pre>
+<p>This file can be uploaded to a RepoQuest Forgejo instance to run the quest.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="quest-definition-structure-overview-and-glossary"><a class="header" href="#quest-definition-structure-overview-and-glossary">Quest definition structure overview and glossary</a></h1>
+<p>This page give an overview of the structure of a quest definition and defines
+some terms used in this documentation by means of an example quest.</p>
+<pre><code>├── .git
+├── .gitignore
+├── quest.toml
+├── main
+│   ├── initialize-project
+│   │   ├── Cargo.lock
+│   │   ├── Cargo.toml
+│   │   ├── README.md
+│   │   └── src
+│   │       └── main.rs
+│   └── initialize-project.txt
+└── chapters
+    └── first-chapter
+        ├── issue
+        │   ├── 01-comment.md
+        │   └── 02-comment.md
+        ├── issue.md
+        ├── pr
+        │   └── 01-comment.md
+        ├── pr.md
+        ├── scaffold
+        │   ├── add-test
+        │   │   ├── Cargo.lock
+        │   │   ├── Cargo.toml
+        │   │   ├── README.md
+        │   │   └── src
+        │   │       └── main.rs
+        │   └── add-test.txt
+        └── solution
+            ├── implement-add
+            │   ├── Cargo.lock
+            │   ├── Cargo.toml
+            │   ├── README.md
+            │   └── src
+            │       ├── main.rs
+            │       └── operations.rs
+            └── implement-add.txt
+</code></pre>
+<p>The <code>quest.toml</code> contains the <em>quest metadata</em>, such as the title and author of
+the quest. It also contains the chapter listing for the quest, which defines the
+order of the chapters and of the commits within a chapter.</p>
+<p>The <code>main</code> directory contains several directories and text files. Each directory
+and text file represents a commit and commit message. The commits defined within
+the <code>main</code> directory will be included in the learner's quest repository at the
+start of the quest, before any tasks have been completed.</p>
+<p>The <code>chapters</code> directory contains a sub-directory defining each <em>chapter</em> in the
+quest. Each chapter may contain a <code>scaffold</code> directory containing directories
+and text files representing <em>commits</em> and <em>commit messages</em> that represent the
+<em>scaffolding code</em> provided to the learner upon starting a chapter. The chapter
+must contain a <code>solution</code> directory which contains the commits and commit
+messages representing a <em>reference solution</em> which builds on the scaffolding
+code.</p>
+<blockquote>
+<p>[!NOTE]
+The word &quot;commit&quot; is used to describe a few different things for the various
+repository representations. The documentation here will attempt to distinguish
+between them as clearly as possible by specifying &quot;chapter commit&quot;,
+&quot;scaffolding commit&quot;, or &quot;solution commit&quot; when referring to one of the
+commits within a chapter or specifically one of the scaffold or solution
+commits. Commits within the <code>main</code> directory will also be referred to a
+&quot;chapter commits&quot; even though the content of <code>main</code> comes before any chapter.</p>
+</blockquote>
+<p>The folder names are not required to be prefixed with a number. The name of the
+folder will sometimes be referred to as the <em>chapter label</em> and will be the
+basis of the <em>chapter branch name</em> when converting to the linear history format
+of the quest.</p>
+<p>Each chapter must have a <em>task description</em> contained in an <code>issue.md</code> file. The
+content of that issue will be presented to the learner as an issue within
+Forgejo. Each chapter may additionally have a <code>pr.md</code> file which contains
+additional task information specifically pertaining to the scaffolding code for
+the task. The content of the file will be included in the initial pull request
+generated for the task.</p>
+<p>The <code>issue</code> and <code>pr</code> folders contain additional file which will be presented as
+comments on the issue or pull request. See the
+<a href="authors/../reference/directory-format.html">reference</a> for more information about the
+additional metadata that can be included with those files.</p>
+<p>This <code>hist</code> directory contains a <em>linear-history representation</em> of the quest,
+which may be easier to edit than the <em>directory representation</em> for some quest
+creation or maintenance tasks. The RepoQuest binary includes utilities for
+converting between the directory representation and linear-history
+representation.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="converting-an-existing-tutorial-to-a-quest"><a class="header" href="#converting-an-existing-tutorial-to-a-quest">Converting an existing tutorial to a quest</a></h1>
+<p>The process for converting an existing tutorial to a quest depends on the
+structure of the tutorial.</p>
+<p>If it is already represented as a sequence of scaffolding and reference solution
+directories, where each directory is a complete snapshot of the state of the
+quest, then the easiest way is probably to manually adapt the directory
+structure to match the <a href="authors/../reference/directory-format.html">directory-based format</a>
+and add the additional required metadata.</p>
+<p>If the quest is not represented like that, then the easiest way is probably to
+do the tutorial within a git repository, committing each scaffolding and
+solution step as you go. Then add the metadata required to match the
+<a href="authors/../reference/repository-format.html">repository-based format</a> and convert the
+repository to the directory based structure <a href="authors/./hist-to-dirs.html">using the <code>repoquest</code>
+binary</a>.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="recommendations-for-quest-development"><a class="header" href="#recommendations-for-quest-development">Recommendations for quest development</a></h1>
+<ul>
+<li>Only edit branches for commits as part of a <code>rebase --update-refs</code> command, to
+ensure that the changes propagate forward. This means using <code>git reset</code> to
+move the <code>main</code> branch around to make edits and using <code>git branch -c</code> to name
+label the commits with branch names that RepoQuest knows how to interpret.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="repoquest-binary"><a class="header" href="#repoquest-binary">RepoQuest binary</a></h1>
+<p>The individual commands for the RepoQuest authoring binary are documented within
+the binary itself. That documentation can be viewed by passing the <code>--help</code> flag
+to <code>repoquest</code> itself or to any of the subcommands.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="quest-directory-format"><a class="header" href="#quest-directory-format">Quest directory format</a></h1>
+<p>The following diagram attempts to capture the general &quot;grammar&quot; of the quest
+directory format. The individual parts are described below. For a concrete
+example, see <a href="reference/../authors/walkthrough/create.html">the authoring walkthrough</a>.</p>
+<pre><code>├── quest.toml (Required)
+├── main (Required, and at least one entry required)
+│   ├── commit/
+│   ├── commit.txt
+│   └── ...
+└── chapters (Required, and at least one entry required)
+    ├── chapter
+    │   ├── issue (Optional)
+    │   │   ├── issue-comment.md
+    │   │   └── ...
+    │   ├── issue.md (Required)
+    │   ├── pr (Optional)
+    │   │   ├── pr-comment.md
+    │   │   └── ...
+    │   ├── pr.md (Optional)
+    │   ├── scaffold (Optional)
+    │   │   ├── commit/
+    │   │   ├── commit.txt
+    │   │   └── ...
+    │   └── solution (Required, and at least one entry required)
+    │       ├── commit/
+    │       ├── commit.txt
+    │       └── ...
+    └── ...
+</code></pre>
+<ul>
 <li>
-<p><strong>Mutability:</strong> Rust requires you to be more explicit about when data is mutated in-place. Here, calling <code>read_line</code> mutates <code>input</code> in-place. That is represented by the fact that the second argument is not a plain <code>String</code>, but instead a mutable reference <code>&amp;mut String</code>. Additionally, the variable <code>input</code> must be declared as <code>mut</code> so we are allowed to mutate it.</p>
+<p><code>quest.toml</code>: Contains the metadata about the quest definition. See below for
+the definition of the keys in the file.</p>
 </li>
 <li>
-<p><strong>Error handling:</strong> Rust does not have a concept of <code>undefined</code> (as in JS) or <code>None</code> (as in Python) or <code>NULL</code> (as in C++) or <code>nil</code> (as in Go). Rust also does not have exceptions. Instead, to represent "this operation can succeed and return <code>X</code> or fail and return <code>Y</code>", Rust uses enums in combination with pattern matching via operators like <code>match</code>. Unlike enums in other languages, Rust's enums can have fields (similar to tagged unions in C).</p>
+<p><code>main/</code>: Directory containing commits that will be included in the learner's
+repository upon starting the quest, before any chapter has been completed.
+This must contain at least one entry.</p>
 </li>
-</ol>
-<p>Now, try copy-pasting this example into the bottom of your <code>main</code> function. Run the code (with <code>cargo run</code>), see how it works, and try editing the example so it completes Task 2.</p>
+<li>
+<p><code>chapters/</code>: Directory containing directories defining the chapters of the
+quest. This must contain at least one entry.</p>
+</li>
+<li>
+<p><code>chapter/</code>: Directory defining a chapter. The name of the directory is the
+chapter label, which must appear in <code>quest.toml</code>.</p>
+</li>
+<li>
+<p><code>commit/</code>: Directory containing the contents of a commit. The name of the
+directory is the commit label, which must appear in <code>quest.toml</code>.</p>
+</li>
+<li>
+<p><code>commit.txt</code>: Plain-text file containing the commit message of a commit. The
+name of the file must match the name of the corresponding commit directory.</p>
+</li>
+<li>
+<p><code>issue.md</code>: Markdown file with TOML frontmatter delimited by <code>+++</code> fences.
+This defines the Forgejo issue that will be created for the learner when the
+learner starts a chapter. The frontmatter must define exactly the key <code>title</code>
+which is a string that will be used for the title of the issue.</p>
+</li>
+<li>
+<p><code>issue/</code>: Directory containing files defining comments that will be created on
+the generated issue when a chapter is started. The comment files are
+interpreted in lexical order of filename, and so the convention is to prefix
+them with a numeric value.</p>
+</li>
+<li>
+<p><code>issue-comment.md</code>: Markdown file with no frontmatter. The content of this
+file will be the content of a comment on the generated Forgejo issue for the
+chapter.</p>
+</li>
+<li>
+<p><code>pr.md</code>: Markdown file with TOML frontmatter delimited by <code>+++</code> fences. This
+defines the Forgejo pull request that will be created for the learner when the
+learner starts a chapter. The frontmatter must define exactly the key <code>title</code>
+which is a string that will be used for the title of the issue.</p>
+<p>If omitted, the generated pull request will have a standard body that links to
+the issue and will use the same title as the issue.</p>
+</li>
+<li>
+<p><code>pr/</code>: Directory containing files defining comments that will be created on
+the generated pull request when a chapter is started. The comment files are
+interpreted in lexical order of filename, and so the convention is to prefix
+them with a numeric value.</p>
+<p>The comments can be defined even if <code>pr.md</code> is omitted.</p>
+</li>
+<li>
+<p><code>pr-comment.md</code>: Markdown file with TOML frontmatter delimited by <code>+++</code>
+fences. The content of this file will be the content of a comment on the
+generated Forgejo pull request for the chapter.</p>
+<p>The frontmatter, if provided, defines a quote of the code in the pull request.
+The frontmatter, if provided, must contain exactly the keys <code>file</code>,
+<code>end-line-side</code>, and <code>end-line</code>. The value for <code>end-line-side</code> must either be
+the string <code>&quot;right&quot;</code> or <code>&quot;left&quot;</code>, where <code>&quot;right&quot;</code> means the result of the pull
+request and <code>&quot;left&quot;</code> means the base of the pull request. The value for <code>file</code>
+must be a string that names a file (in the result or base of the pull request,
+depending on <code>end-line-side</code>), relative to the root of the commit directory.
+The value for <code>end-line</code> must be an integer that is the last line number of
+the code to quote.</p>
+</li>
+</ul>
+<h2 id="questtoml"><a class="header" href="#questtoml"><code>quest.toml</code></a></h2>
+<p>The <code>quest.toml</code> file defines metadata about and the structure of the quest. The
+following keys are supported:</p>
+<ul>
+<li>
+<p><code>title</code>: Required. A string defining the quest title.</p>
+</li>
+<li>
+<p><code>author</code>: Required. A string defining the quest author.</p>
+</li>
+<li>
+<p><code>repo</code>: Required. A string defining the name to use for the Forgejo repository
+generated for the learner when they start the quest.</p>
+</li>
+<li>
+<p><code>rq-version</code>: Required. A string defining the compatible version of
+repo-quest. Not currently checked.</p>
+</li>
+<li>
+<p><code>description</code>: Require.d A string defining a short description of the quest to
+be presented to the learner when they install the quest.</p>
+</li>
+<li>
+<p><code>test-cmd</code>: Optional. An array of strings giving a command to execute in each
+commit directory when <code>repo-quest test</code> is invoked.</p>
+</li>
+<li>
+<p><code>main</code>: Required. A non-empty array of commit information. See below for the
+structure of the commit information.</p>
+</li>
+<li>
+<p><code>chapters</code>: Required. A non-empty array of tables defining the chapters in a
+quest. The order of the chapters in this array is the order of the in which
+the chapters are interpreted.</p>
+<p>Each chapter table must have the key <code>label</code> whose value is the chapter label
+as a string. Each chapter may optionally have the key <code>scaffold</code> whose value
+is an array of commit information. Each chapter must have the key <code>solution</code>
+whose value is a non-empty array of commit information.</p>
+</li>
+</ul>
+<p>Commit information is given as either a string or table. If a string, then the
+string is interpreted as the label of the commit. The label must exist in the
+corresponding chapter or <code>main/</code> directory. If a table, then the table has two
+keys. The key <code>label</code> is required. The value for <code>label</code> is a string that gives
+the chapter label. The key <code>expected</code> is optional. The value for <code>expected</code> may
+be the string <code>&quot;pass&quot;</code> or the string <code>&quot;fail&quot;</code>. If omitted or if a just string is
+given for the chapter information, <code>&quot;pass&quot;</code> is assumed. The value indicates
+whether the test command is expected to pass or fail for that commit.</p>
+<h2 id="git"><a class="header" href="#git"><code>.git</code></a></h2>
+<p>Some <code>repo-quest</code> operations assume that the quest directory is committed to a
+Git repository. If the quest is not committed, those commands will produce an
+error.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="quest-repository-format"><a class="header" href="#quest-repository-format">Quest repository format</a></h1>
+<p>The linear-history repository format for a quest makes it easier to make edits
+to the content and structure of the quest. This format does not include all of
+the information required to define a quest: for example, it omits task
+instructions. It does include the chapter structure, commits, and commit
+messages.</p>
+<p>The repository format consists of a git repository with a linear history of
+commits. Each commit has a corresponding branch whose name has one of the
+following formats:</p>
+<ul>
+<li><code>quest/main/commit-label</code>,</li>
+<li><code>quest/chapter/chapter-label/scaffold/commit-label</code>, or</li>
+<li><code>quest/chapter/chapter-label/solution/commit-label</code>,</li>
+</ul>
+<p>where each of the <code>commit-label</code> and <code>chapter-label</code> components are replaced by
+concrete commit and chapter labels.</p>
+<p>The commits with branches of the form <code>quest/main/commit-label</code> correspond to
+the commits in the directory structure in the <code>main</code> directory. The commits the
+other format correspond to the scaffold or reference solution commits for a
+chapter with the given label.</p>
+<p>All commits for a chapter must be adjacent, all commits for <code>quests/main</code>
+must come before any chapter commits, and all commits must have exactly one
+branch with the given format.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-
-
+                        
+                        
                         <div style="clear: both"></div>
                     </nav>
                 </div>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-
-            </nav>
+                
+                            </nav>
 
         </div>
 
-
-
-
-        <script>
+        
+        
+        
+                <script type="text/javascript">
             window.playground_copyable = true;
         </script>
-
-
-        <script src="elasticlunr.min.js"></script>
-        <script src="mark.min.js"></script>
-        <script src="searcher.js"></script>
-
-        <script src="clipboard.min.js"></script>
-        <script src="highlight.js"></script>
-        <script src="book.js"></script>
+        
+        
+                <script src="elasticlunr.min.js" type="text/javascript" charset="utf-8"></script>
+        <script src="mark.min.js" type="text/javascript" charset="utf-8"></script>
+        <script src="searcher.js" type="text/javascript" charset="utf-8"></script>
+        
+        <script src="clipboard.min.js" type="text/javascript" charset="utf-8"></script>
+        <script src="highlight.js" type="text/javascript" charset="utf-8"></script>
+        <script src="book.js" type="text/javascript" charset="utf-8"></script>
 
         <!-- Custom JS scripts -->
-
-        <script>
+        
+                        <script type="text/javascript">
         window.addEventListener('load', function() {
             window.setTimeout(window.print, 100);
         });
         </script>
-
-    </div>
+                
     </body>
 </html>
