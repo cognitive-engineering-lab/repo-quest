@@ -6,11 +6,11 @@ Docker) of the [Forgejo](https://forgejo.org/) Git forge. RepoQuest uses the
 Forgejo interface for issues and pull requests to provide starter code and
 explain programming concepts.
 
-For instructions on running a quest using RepoQuest, see
-[docs/src/learners.md](docs/src/learners.md).
+For instructions on running a quest using RepoQuest, see [the documentation for
+learners](https://cel.cs.brown.edu/repo-quest/learners.html).
 
-For instructions on authoring a quest, see
-[docs/src/authors.md](docs/src/authors.md).
+For instructions on authoring a quest, see [the documentation for
+authors](https://cel.cs.brown.edu/repo-quest/authors.html).
 
 The remainder of this README is intended for RepoQuest developers.
 
