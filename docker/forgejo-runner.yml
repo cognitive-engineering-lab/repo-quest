@@ -1,3 +1,6 @@
+# Copied from:
+# https://code.forgejo.org/forgejo/runner/src/commit/e2af1219b1e86ad812f7b3444c0bb26851e68e5c/internal/pkg/config/config.example.yaml
+
 # This is the example configuration file with modifications to runner.labels and
 # container.network.
 #
@@ -162,6 +165,9 @@ container:
   # Specifies the network to which the container will connect.
   # Could be host, bridge or the name of a custom network.
   # If it's empty, create a network automatically.
+  #
+  # NOTE(wcrichto): this field needs to match the network defined in compose.yml.
+  #
   network: "repo-quest_default"
   # Whether to create networks with IPv6 enabled. Requires the Docker daemon to be set up accordingly.
   # Only takes effect if "network" is set to "".

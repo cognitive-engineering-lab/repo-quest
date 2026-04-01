@@ -58,6 +58,7 @@ async fn main() -> anyhow::Result<()> {
     info!("Quest directory {quest_dir:?}.");
 
     let forgejo = {
+        // This username/password should match the ones declared in run-forgejo.sh.
         let auth = forgejo_api::Auth::Password {
             username: "repoquest",
             password: "repoquest",
@@ -95,8 +96,7 @@ async fn main() -> anyhow::Result<()> {
     let addr = &SocketAddr::new(IpAddr::from(Ipv6Addr::UNSPECIFIED), 8000);
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, ServiceExt::<Request>::into_make_service(app))
-        .await
-        .unwrap();
-
+        .await?;
+    
     Ok(())
 }

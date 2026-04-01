@@ -1,3 +1,5 @@
+# Taken from:
+# https://codeberg.org/forgejo/-/packages/container/forgejo
 FROM codeberg.org/forgejo/forgejo:13-rootless
 
 USER root

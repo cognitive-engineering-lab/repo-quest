@@ -1,3 +1,5 @@
+# Taken from:
+# https://code.forgejo.org/forgejo/-/packages/container/runner
 FROM data.forgejo.org/forgejo/runner:12
 
 USER root

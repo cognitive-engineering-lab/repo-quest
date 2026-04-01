@@ -6,6 +6,8 @@ services:
     image: repoquest-forgejo
     build:
       dockerfile: docker/Dockerfile.forgejo
+    # Used to know when the container comes online. Dependencies won't start until the container passes
+    # the health check.
     healthcheck:
       test: '[ -f "$(dirname "$${GITEA_APP_INI}")"/configured ] && curl -s http://localhost:3000/healthz'
       start_period: 10s
@@ -31,6 +33,7 @@ services:
     stop_grace_period: 30s
     volumes:
       - type: bind
+        # TODO: see if we can automatically find this in a platform-specific way.        
         source: "${RQ_DOCKER_HOST:-/var/run/docker.sock}"
         target: /var/run/docker.sock
   repoquest:
@@ -47,6 +50,8 @@ services:
       - type: volume
         source: repoquest-bot
         target: /srv/repoquest
+  # Workaround to make it so RQ bot can run on the same port as Forgejo,
+  # due to issue w/ inability to pass custom port into frontend templates.
   reverse-proxy:
     image: docker.io/nginxinc/nginx-unprivileged:latest
     ports:
