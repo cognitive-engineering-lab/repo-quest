@@ -9,4 +9,4 @@ You can then browse the reference solution or make use of the solution by
 merging into the branch for the active chapter's task. If you do so, you will
 still need to finish the chapter by merging the task branch into main.
 
-![RepoQuest Sidebar](../../assets/sidebar.png)
+![RepoQuest Sidebar](../assets/sidebar.png)
