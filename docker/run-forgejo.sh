@@ -29,7 +29,7 @@ fi
 
 # The templates live on the volume, so they need to be overidden on start-up,
 # otherwise they don't get updated when a new image is built.
-cp -R /etc/templates/templates $GITEA_CUSTOM/
+cp -R /etc/templates/templates "$GITEA_CUSTOM/"
 
 # TODO: app.ini has the same problem, but it created only on the volume during
 # first run of docker-entrypoint.sh, so recreating it isn't as straightforward.
