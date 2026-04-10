@@ -1,0 +1,25 @@
+[package]
+name = "repo-quest"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ansi_term = "0.12.1"
+include_dir = "0.7.4"
+itertools = "0.14.0"
+termtree = "1.0.0"
+toml = "1.0.6"
+
+anyhow = { workspace = true }
+clap = { workspace = true }
+env_logger = { workspace = true }
+flate2 = { workspace = true }
+log = { workspace = true }
+mustache = { workspace = true }
+regex = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tar = { workspace = true }
+tempfile = { workspace = true }
+
+repo-quest-core = { path = "../repo-quest-core" }

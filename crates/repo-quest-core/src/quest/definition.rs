@@ -16,8 +16,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use super::template::Template;
 use crate::git::GitRepo;
-use crate::template::Template;
 
 /// A normalized git reference name.
 ///
@@ -49,7 +49,7 @@ pub struct GitCommitHash(pub String);
 /// NOTE: Forgejo only supports commenting on a single line of code. By
 /// convention we use the last line of the span, since that is the one required
 /// by GitHub. The start line is preserved for use when
-/// https://codeberg.org/forgejo/forgejo/issues/6093 is implemented.
+/// <https://codeberg.org/forgejo/forgejo/issues/6093> is implemented.
 ///
 /// `i64` is used instead of `u64` to match the Forgejo Rust bindings API.
 ///
@@ -67,7 +67,7 @@ pub struct ReviewLineSubject {
 /// Omitting the lines entirely means to refer to the file itself.
 ///
 /// NOTE: Forgejo only supports comments on a single line, so only one of
-/// old_line or new_line should be filled out. However, GitHub provides values
+/// `old_line` or `new_line` should be filled out. However, GitHub provides values
 /// for both (without explanation of the meaning), so we use a pair of options
 /// in order to preserve that information, even though there is not (at the
 /// moment) a sensible way to use it. (Something more like start being new/old
@@ -238,18 +238,17 @@ impl QuestDefinitionIndex {
         })?;
         let index_file = self.dir.join("data.json");
         fs::write(&index_file, index).with_context(|| {
-            format!(
-                "Could not write quest definition index to file {:?}",
-                index_file
-            )
+            format!("Could not write quest definition index to file {index_file:?}")
         })?;
         Ok(())
     }
 
+    #[must_use]
     pub fn len(&self) -> usize {
         self.index.len()
     }
 
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.index.is_empty()
     }

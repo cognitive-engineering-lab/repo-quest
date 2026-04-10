@@ -2,8 +2,8 @@ use std::{collections::HashMap, fs, path::Path};
 
 use anyhow::{Context as _, Result};
 use log::debug;
-use repo_quest::{
-    quest::definition::{
+use repo_quest_core::quest::{
+    definition::{
         Comment, IssueTemplate, PullRequestTemplate, QuestDefinitionMetadata, ReviewLineSubject,
         ReviewSubject, TaskTemplate,
     },
@@ -176,8 +176,8 @@ fn bundle_pull_request(branch_name: &String, pull_request: PullRequest) -> PullR
 
 fn bundle_pull_request_comment(
     comment: PullRequestComment,
-) -> repo_quest::quest::definition::PullRequestComment {
-    repo_quest::quest::definition::PullRequestComment {
+) -> repo_quest_core::quest::definition::PullRequestComment {
+    repo_quest_core::quest::definition::PullRequestComment {
         quote: comment.meta.map(|m| ReviewSubject {
             commit: None,
             file: m.file,

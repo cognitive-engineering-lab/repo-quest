@@ -11,11 +11,16 @@ use env_logger::Env;
 use log::info;
 use url::Url;
 
-use repo_quest::{
+use repo_quest_core::quest::{definition::*, instance::*};
+
+use self::{
     bot::{AppState, Errors},
     forgejo::ForgejoBackend,
-    quest::{definition::*, instance::*},
 };
+
+mod bot;
+mod forgejo;
+mod forgejo_hook;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -91,12 +96,11 @@ async fn main() -> anyhow::Result<()> {
         errors,
     };
 
-    let app = repo_quest::bot::new(state);
+    let app = bot::new(state);
     // run our app with hyper, listening globally on port 8000
     let addr = &SocketAddr::new(IpAddr::from(Ipv6Addr::UNSPECIFIED), 8000);
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-    axum::serve(listener, ServiceExt::<Request>::into_make_service(app))
-        .await?;
-    
+    axum::serve(listener, ServiceExt::<Request>::into_make_service(app)).await?;
+
     Ok(())
 }

@@ -34,13 +34,13 @@ use tower_http::{cors, normalize_path::NormalizePathLayer};
 use tower_layer::Layer as _;
 use url::Url;
 
-use crate::{
-    forgejo::ForgejoBackend,
+use repo_quest_core::{
+    BOT_AUTHOR,
     git::GitRepo,
     quest::{definition::*, instance::*},
 };
 
-pub const BOT_AUTHOR: Option<(&str, &str)> = Some(("RepoQuest", "repoquest@example.com"));
+use crate::forgejo::ForgejoBackend;
 
 /// The overall state of ReqoQuest. All of the state is loaded into memory at
 /// program startup. Unless a user has many quest definitions or very many quest
@@ -564,14 +564,14 @@ async fn create_reference_solution(
         pr.clone()
     } else {
         let requested_task = quest_definition
-        .metadata
-        .tasks
-        .get(chapter_id)
-        .with_context(|| {
-            format!(
-                "Quest {quest_id} for definition {quest_definition_id} has no chapter {chapter_id}."
-            )
-        })?;
+      .metadata
+      .tasks
+      .get(chapter_id)
+      .with_context(|| {
+        format!(
+          "Quest {quest_id} for definition {quest_definition_id} has no chapter {chapter_id}."
+        )
+      })?;
 
         // TODO: Figure out how to open the PR for various circumstances, such as
         // for a previously-completed chapter where the scaffolding branch has been

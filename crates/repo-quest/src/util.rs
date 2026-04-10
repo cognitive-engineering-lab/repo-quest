@@ -1,7 +1,7 @@
 use std::{path::Path, process::Command};
 
 use anyhow::Result;
-use repo_quest::command::RunCommand as _;
+use repo_quest_core::command::RunCommand as _;
 
 pub fn rsync(from: &Path, to: &Path) -> Result<()> {
     let to = std::fs::canonicalize(to)?;

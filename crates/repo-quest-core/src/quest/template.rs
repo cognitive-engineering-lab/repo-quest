@@ -15,7 +15,7 @@ impl Template {
     /// mapping is missing, leaves the template placeholder in place.
     ///
     /// This is essentially the same template instantiation algorithm from the
-    /// original RepoQuest, but with the data passed in instead of looked up on
+    /// original `RepoQuest`, but with the data passed in instead of looked up on
     /// the fly.
     pub fn instantiate(&self, data: &Data) -> Result<String> {
         let template = mustache::compile_str(&self.0).unwrap();

@@ -300,28 +300,6 @@ pub fn parse_commits_dir(commit_metas: Vec<CommitMeta>, commits_dir: &Path) -> R
     Ok(parsed_commits)
 }
 
-/// Gets all potential chapter directories at the given path, sorted by name in
-/// lexicographical order.
-///
-/// A potential chapter directory is a directory that is not named `main` and
-/// that does not begin with a `.`.
-#[allow(unused)]
-fn potential_chapter_dirs(dir: &Path) -> Result<Vec<PathBuf>, anyhow::Error> {
-    let chapter_dirs: Vec<PathBuf> = read_dir_sorted_paths(&dir.join("chapters"))?
-        .into_iter()
-        .filter(|path| {
-            path.is_dir()
-                && !path.ends_with("main")
-                && !path
-                    .file_name()
-                    .and_then(|path| path.to_str())
-                    .is_some_and(|path| path.starts_with("."))
-        })
-        .collect();
-
-    Ok(chapter_dirs)
-}
-
 #[cfg(test)]
 mod test {
     use super::*;

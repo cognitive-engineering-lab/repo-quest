@@ -3,10 +3,6 @@ use std::{
     sync::Arc,
 };
 
-use crate::quest::{
-    definition::{QuestDefinitionMetadata, TaskTemplate},
-    instance::{Issue, PullRequest, Task},
-};
 use anyhow::{Context as _, Result, anyhow};
 use forgejo_api::{
     Auth, Forgejo,
@@ -19,6 +15,10 @@ use forgejo_api::{
 };
 use log::debug;
 use mustache::MapBuilder;
+use repo_quest_core::quest::{
+    definition::{QuestDefinitionMetadata, TaskTemplate},
+    instance::{Issue, PullRequest, Task},
+};
 use url::Url;
 
 #[derive(Clone)]

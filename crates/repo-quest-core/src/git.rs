@@ -225,16 +225,17 @@ impl GitRepo {
             .arg(&tree_oid)
             .line_with_context(|| format!("Could not create commit for {self:?} tree object {tree_oid} with parent {parent_oid} and message {message:?}."))?;
 
-        self.git()
-            .arg("update-ref")
-            .arg(format!("refs/heads/{branch}"))
-            .arg(&commit_oid)
-            .arg(&parent_oid)
-            .run_with_context(|| {
-                format!(
-                    "Could not update ref refs/heads/{branch} to {commit_oid} with parent {parent_oid}."
-                )
-            })?;
+        self
+      .git()
+      .arg("update-ref")
+      .arg(format!("refs/heads/{branch}"))
+      .arg(&commit_oid)
+      .arg(&parent_oid)
+      .run_with_context(|| {
+        format!(
+          "Could not update ref refs/heads/{branch} to {commit_oid} with parent {parent_oid}."
+        )
+      })?;
 
         Ok(())
     }
@@ -352,6 +353,7 @@ impl GitRepo {
             .spawn()
             .with_context(|| format!("Could not archive {self:?} ref {gitref}."))?;
 
+        // TODO: this should use the flate2 impl to avoid a system dependency
         Command::new("tar")
             .current_dir(output)
             .stdin(Stdio::from(git.stdout.unwrap()))

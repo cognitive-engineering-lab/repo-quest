@@ -8,7 +8,7 @@ ADD ./ /root/app
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/root/app/target/ \
     cd /root/app && \
-    cargo build --release && \
+    cargo build --package repo-quest-bot --release && \
     cp target/release/repo-quest-bot /root/app/repo-quest-bot
 
 FROM alpine:latest

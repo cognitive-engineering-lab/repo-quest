@@ -8,11 +8,11 @@ use std::{
 use anyhow::{Context as _, Result, bail};
 use itertools::{EitherOrBoth, Itertools};
 use log::{debug, info, warn};
-use repo_quest::{bot::BOT_AUTHOR, git::GitRepo};
+use repo_quest_core::{BOT_AUTHOR, git::GitRepo};
 use tempfile::*;
 
 use crate::{dir::*, util::rsync};
-use repo_quest::git::todo::*;
+use repo_quest_core::git::todo::*;
 
 const OLD_BRANCH_PREFIX: &str = "quest";
 const NEW_BRANCH_PREFIX: &str = "changes";
@@ -555,6 +555,7 @@ fn dirify_branches<'a>(
             let msg = repo.commit_message(branch)?;
             fs::write(output_dir.join(format!("{commit_label}.txt")), msg)
                 .with_context(|| format!("Failed to write commit message for {branch}."))?;
+            // Preserve original metadata for this commit if it exists.
             if let Some(original_commit) = original_commits.remove(commit_label) {
                 main.push(original_commit.into_commit_meta());
             } else {

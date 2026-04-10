@@ -113,14 +113,16 @@ impl QuestInstanceIndex {
             .with_context(|| format!("Could not serialize quest index {:?}", self.index))?;
         let index_file = self.dir.join("data.json");
         fs::write(&index_file, index)
-            .with_context(|| format!("Could not write quest index to file {:?}", index_file))?;
+            .with_context(|| format!("Could not write quest index to file {index_file:?}"))?;
         Ok(())
     }
 
+    #[must_use]
     pub fn len(&self) -> usize {
         self.index.len()
     }
 
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.index.is_empty()
     }
@@ -174,10 +176,10 @@ impl QuestInstanceIndex {
         fs::create_dir_all(&dir)
             .with_context(|| format!("Could not create quest dir {:?}.", &dir))?;
         let data = serde_json::to_string(quest)
-            .with_context(|| format!("Could not serialize quest {:?}", quest))?;
+            .with_context(|| format!("Could not serialize quest {quest:?}"))?;
         let quest_file = dir.join("data.json");
         fs::write(&quest_file, data)
-            .with_context(|| format!("Could not write quest to file {:?}", quest_file))?;
+            .with_context(|| format!("Could not write quest to file {quest_file:?}"))?;
         Ok(())
     }
 
