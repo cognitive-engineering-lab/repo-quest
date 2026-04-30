@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use mustache::Data;
 use serde::{Deserialize, Serialize};
 
@@ -18,7 +18,8 @@ impl Template {
     /// original `RepoQuest`, but with the data passed in instead of looked up on
     /// the fly.
     pub fn instantiate(&self, data: &Data) -> Result<String> {
-        let template = mustache::compile_str(&self.0).unwrap();
+        let template =
+            mustache::compile_str(&self.0).context("failed to compile mustache template ")?;
 
         Ok(template.render_data_to_string(data)?)
     }

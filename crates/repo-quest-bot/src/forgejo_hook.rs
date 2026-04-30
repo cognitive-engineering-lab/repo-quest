@@ -30,7 +30,7 @@ pub async fn handler(
     State(state): State<Arc<Mutex<AppState>>>,
     Json(body): Json<ForgejoHookBody>,
 ) -> Result<()> {
-    debug!("Hook call:\n\n{:?}\n", body);
+    debug!("Hook call:\n\n{body:?}\n");
     if let Some(pr) = body.pull_request
         && body.action == "closed"
         && pr.merged

@@ -8,6 +8,7 @@ use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
+use tar::Archive;
 
 use crate::command::RunCommand as _;
 
@@ -37,7 +38,9 @@ impl GitRepo {
             .git()
             .arg("rev-parse")
             .arg("--is-inside-work-tree")
-            .run_with_context(|| format!("Could not open git repo at {:?}.", git_repo.dir))?;
+            .run_with_context(|| {
+                format!("Could not open git repo at `{}`.", git_repo.dir.display())
+            })?;
 
         Ok(git_repo)
     }
@@ -48,7 +51,7 @@ impl GitRepo {
             .arg("init")
             .arg("--bare")
             .arg(&dir)
-            .run_with_context(|| format!("Could not initilize git repo in {dir:?}."))?;
+            .run_with_context(|| format!("Could not initilize git repo in `{}`.", dir.display()))?;
 
         Ok(GitRepo { dir })
     }
@@ -60,7 +63,7 @@ impl GitRepo {
             .arg("--initial-branch")
             .arg("main")
             .arg(&dir)
-            .run_with_context(|| format!("Could not initilize git repo in {dir:?}."))?;
+            .run_with_context(|| format!("Could not initilize git repo in `{}`.", dir.display()))?;
 
         Ok(GitRepo { dir })
     }
@@ -339,7 +342,12 @@ impl GitRepo {
             .arg(gitref)
             .arg("--output")
             .arg(output)
-            .run_with_context(|| format!("Could not archive {self:?} ref {gitref} to {output:?}."))
+            .run_with_context(|| {
+                format!(
+                    "Could not archive {self:?} ref {gitref} to `{}`.",
+                    output.display()
+                )
+            })
     }
 
     pub fn copy_tree(&self, gitref: &str, output: &Path) -> Result<()> {
@@ -353,12 +361,18 @@ impl GitRepo {
             .spawn()
             .with_context(|| format!("Could not archive {self:?} ref {gitref}."))?;
 
-        // TODO: this should use the flate2 impl to avoid a system dependency
-        Command::new("tar")
-            .current_dir(output)
-            .stdin(Stdio::from(git.stdout.unwrap()))
-            .arg("-x")
-            .run_with_context(|| format!("Could not untar archive of {self:?} to {output:?}."))
+        #[expect(
+            clippy::missing_panics_doc,
+            reason = "git configured to have stdout piped"
+        )]
+        let stdout = git.stdout.unwrap();
+
+        Archive::new(stdout).unpack(output).with_context(|| {
+            format!(
+                "could not untar archive of {self:?} to `{}`",
+                output.display()
+            )
+        })
     }
 
     /// git diff --quiet && git diff --cached --quiet

@@ -1,7 +1,6 @@
 use std::{
     collections::HashMap,
     convert::Infallible,
-    fs,
     io::{Seek, Write as _},
     path::PathBuf,
     sync::Arc,
@@ -35,14 +34,17 @@ use tower_layer::Layer as _;
 use url::Url;
 
 use repo_quest_core::{
-    BOT_AUTHOR,
+    BOT_AUTHOR, fs,
     git::GitRepo,
-    quest::{definition::*, instance::*},
+    quest::{
+        definition::{QuestDefinition, QuestDefinitionIndex},
+        instance::{PullRequest, Quest, QuestInstanceIndex, QuestMetadata, Task},
+    },
 };
 
 use crate::forgejo::ForgejoBackend;
 
-/// The overall state of ReqoQuest. All of the state is loaded into memory at
+/// The overall state of `ReqoQuest`. All of the state is loaded into memory at
 /// program startup. Unless a user has many quest definitions or very many quest
 /// instances, having everything in memory shouldn't be an issue.
 ///
@@ -71,7 +73,7 @@ impl Errors {
         if let Err(err) = self.tx.send(()) {
             error!("{err:?}");
         }
-        self.save()
+        self.save();
     }
 
     pub fn clear(&mut self) {
@@ -82,8 +84,8 @@ impl Errors {
     fn save(&self) {
         match serde_json::to_string(&self.errors) {
             Ok(data) => {
-                if let Err(err) = fs::write(&self.path, data) {
-                    error!("Could not write error data to disk {err:?}.");
+                if let Err(err) = fs::write(&self.path, data, "error data") {
+                    error!("{err:?}");
                 }
             }
             Err(err) => {
@@ -95,7 +97,7 @@ impl Errors {
     pub fn load(path: PathBuf) -> anyhow::Result<Self> {
         let errors = {
             if path.is_file() {
-                let errors_json = fs::read_to_string(&path)?;
+                let errors_json = fs::read_to_string(&path, "error data")?;
                 serde_json::from_str(&errors_json)?
             } else {
                 Vec::new()
@@ -383,7 +385,7 @@ async fn get_quests(
     let state = state.lock().await;
     let quests = &state.quest_instances;
     let quest_defns = &state.quest_definitions;
-    let mut quests_info = HashMap::new();
+    let mut all_quests_info = HashMap::new();
     for id in quests.keys() {
         let quest = quests.metadata(id)?;
         let quest_defn = quest_defns.definition(quest.definition_id)?;
@@ -393,9 +395,9 @@ async fn get_quests(
             repo: quest.repo.clone(),
             task_info: quest.tasks.last().cloned(),
         };
-        quests_info.insert(id, quest_info);
+        all_quests_info.insert(id, quest_info);
     }
-    Ok(Json(quests_info))
+    Ok(Json(all_quests_info))
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -408,7 +410,7 @@ struct StartQuestQuery {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct StartQuestResponse {
-    /// RepoQuest ID for the quest
+    /// `RepoQuest` ID for the quest
     id: i64,
     /// Location of the just-created repo
     repo_url: Url,
@@ -461,7 +463,10 @@ async fn start_quest(
     local_repo.add_remote(
         "quest",
         defn_repo_path.to_str().with_context(|| {
-            format!("Could not convert template repo path {defn_repo_path:?} to string.")
+            format!(
+                "Could not convert template repo path `{}` to string.",
+                defn_repo_path.display()
+            )
         })?,
     )?;
 
@@ -473,16 +478,16 @@ async fn start_quest(
     let mut remote_url = repo_url.clone();
     remote_url
         .set_username("repoquest")
-        .map_err(|_| anyhow!("Can't set remote username."))?;
+        .map_err(|()| anyhow!("Can't set remote username."))?;
     remote_url
         .set_password(Some("repoquest"))
-        .map_err(|_| anyhow!("Can't set remote password"))?;
+        .map_err(|()| anyhow!("Can't set remote password"))?;
     remote_url
         .set_host(state.forgejo_url.host_str())
         .map_err(|_| anyhow!("Can't set remote host."))?;
     remote_url
         .set_port(state.forgejo_url.port())
-        .map_err(|_| anyhow!("Can't set remote port."))?;
+        .map_err(|()| anyhow!("Can't set remote port."))?;
 
     local_repo.add_remote("origin", remote_url.as_str())?;
 
@@ -490,13 +495,13 @@ async fn start_quest(
     local_repo.push("origin", "main", "main")?;
 
     // start first chapter, if there are chapters
-    let task = if !template.tasks.is_empty() {
+    let task = if template.tasks.is_empty() {
+        None
+    } else {
         // Forgejo can't accept PRs right away... this works around that.
         // TODO: don't return from repo creation until the repo is fully created.
         std::thread::sleep(Duration::from_secs(2));
         Some(set_current_chapter(&mut state, id, 0).await?)
-    } else {
-        None
     };
 
     Ok(Json(StartQuestResponse { id, repo_url, task }))
@@ -601,10 +606,10 @@ async fn create_reference_solution(
             .create_pr(
                 quest.owner.clone(),
                 quest.repo.clone(),
-                local_scaffold_branch.to_string(),
-                local_solution_branch.to_string(),
+                local_scaffold_branch.clone(),
+                local_solution_branch.clone(),
                 pr_title,
-                "".to_string(),
+                String::new(),
             )
             .await?;
 

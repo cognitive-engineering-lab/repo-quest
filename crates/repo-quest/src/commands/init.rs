@@ -14,7 +14,7 @@ pub fn init(quest_dir: &Path) -> Result<()> {
 
     SKEL_DIR
         .extract(quest_dir)
-        .with_context(|| format!("Could not initialize {quest_dir:?}."))?;
+        .with_context(|| format!("Could not initialize `{}`.", quest_dir.display()))?;
 
     Ok(())
 }

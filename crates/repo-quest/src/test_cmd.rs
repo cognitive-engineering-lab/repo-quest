@@ -32,17 +32,16 @@ impl TestChapterSelection {
 
     pub fn continue_after(&self) -> bool {
         match self {
-            TestChapterSelection::AllChapters => true,
+            TestChapterSelection::AllChapters | TestChapterSelection::FollowingChapters(_) => true,
             TestChapterSelection::OneChapter(_) => false,
-            TestChapterSelection::FollowingChapters(_) => true,
         }
     }
 
     fn name(&self) -> Option<&str> {
         match self {
             TestChapterSelection::AllChapters => None,
-            TestChapterSelection::OneChapter(name) => Some(name),
-            TestChapterSelection::FollowingChapters(name) => Some(name),
+            TestChapterSelection::OneChapter(name)
+            | TestChapterSelection::FollowingChapters(name) => Some(name),
         }
     }
 }
@@ -65,7 +64,7 @@ impl std::fmt::Display for TestResult {
         } else {
             ansi_term::Colour::Red.paint("UNEXPECTED RESULT")
         };
-        write!(f, "{}: {} {:?}", expected, status, self.commit)
+        write!(f, "{}: {} `{}`", expected, status, self.commit.display())
     }
 }
 
@@ -83,7 +82,7 @@ impl From<(Commit, ExitStatus)> for TestResult {
 pub fn test_quest(
     dir: &Path,
     skip_scaffold: bool,
-    chapter_selection: TestChapterSelection,
+    chapter_selection: &TestChapterSelection,
 ) -> Result<()> {
     let mut all_expected = true;
     let quest = dir::parse(dir)?;
@@ -94,7 +93,7 @@ pub fn test_quest(
     let mut found = false;
     if chapter_selection.run_main() {
         found = true;
-        for commit in quest.main.into_iter() {
+        for commit in quest.main {
             all_expected &= run_test(&test_cmd, commit)?;
         }
     }
@@ -136,8 +135,8 @@ fn run_test(cmd: &[String], commit: Commit) -> Result<bool> {
     cmd.current_dir(&commit.path);
     let res = cmd.output().with_context(|| {
         format!(
-            "Failed to run test command {cmd:?} for commit {:?}",
-            commit.path
+            "Failed to run test command {cmd:?} for commit `{}`",
+            commit.path.display()
         )
     })?;
     let res = TestResult::from((commit, res.status));

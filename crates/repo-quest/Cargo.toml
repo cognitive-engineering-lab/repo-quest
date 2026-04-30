@@ -1,7 +1,9 @@
 [package]
 name = "repo-quest"
-version = "0.1.0"
-edition = "2024"
+version = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
 
 [dependencies]
 ansi_term = "0.12.1"
@@ -23,3 +25,6 @@ tar = { workspace = true }
 tempfile = { workspace = true }
 
 repo-quest-core = { path = "../repo-quest-core" }
+
+[lints]
+workspace = true

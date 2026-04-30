@@ -56,9 +56,7 @@ impl ForgejoBackend {
             .filter_map(|r| r.name) // TODO: what does it mean for a repo to have no name?
             .collect();
 
-        if !repo_names.contains(&basename) {
-            Ok(basename)
-        } else {
+        if repo_names.contains(&basename) {
             let mut suffix = 1;
             let mut name = format!("{basename}-{suffix}");
             while repo_names.contains(&name) {
@@ -67,6 +65,8 @@ impl ForgejoBackend {
             }
 
             Ok(name)
+        } else {
+            Ok(basename)
         }
     }
 
@@ -153,6 +153,7 @@ impl ForgejoBackend {
         Ok(res)
     }
 
+    #[allow(clippy::too_many_lines)]
     pub async fn create_task(
         &self,
         username: String,
@@ -168,7 +169,7 @@ impl ForgejoBackend {
                 &username,
                 &repo_name,
                 CreateIssueOption {
-                    assignee: Some(username.to_string()),
+                    assignee: Some(username.clone()),
                     assignees: None,
                     body: None,
                     closed: None,
@@ -194,7 +195,7 @@ impl ForgejoBackend {
                 &username,
                 &repo_name,
                 CreatePullRequestOption {
-                    assignee: Some(username.to_string()),
+                    assignee: Some(username.clone()),
                     assignees: None,
                     base: Some("main".to_string()),
                     body: None,
@@ -370,7 +371,7 @@ impl ForgejoBackend {
                 &username,
                 &repo_name,
                 CreatePullRequestOption {
-                    assignee: Some(username.to_string()),
+                    assignee: Some(username.clone()),
                     assignees: None,
                     base: Some(base),
                     body: Some(body),

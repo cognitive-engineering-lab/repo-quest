@@ -2,10 +2,9 @@ use std::borrow::Cow;
 
 use crate::dir::QuestDefinition;
 
-use anyhow::Result;
 use termtree::Tree;
 
-pub fn quest_tree(quest: &'_ QuestDefinition) -> Result<Tree<Cow<'_, str>>> {
+pub fn quest_tree(quest: &'_ QuestDefinition) -> Tree<Cow<'_, str>> {
     let mut quest_tree = Tree::new(Cow::Borrowed(quest.title.as_str()));
     let mut main_tree = Tree::new(Cow::Borrowed("main"));
     for commit in &quest.main {
@@ -33,5 +32,5 @@ pub fn quest_tree(quest: &'_ QuestDefinition) -> Result<Tree<Cow<'_, str>>> {
         chapter_tree.push(solution_tree);
         quest_tree.push(chapter_tree);
     }
-    Ok(quest_tree)
+    quest_tree
 }

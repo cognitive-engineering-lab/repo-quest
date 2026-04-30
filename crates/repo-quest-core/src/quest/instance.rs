@@ -7,11 +7,10 @@ use anyhow::{Context as _, Result, bail};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, hash_map::Entry},
-    fs,
     path::{Path, PathBuf},
 };
 
-use crate::git::GitRepo;
+use crate::{fs, git::GitRepo};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -84,11 +83,12 @@ impl QuestInstanceIndex {
         let dir: PathBuf = path.as_ref().to_path_buf();
         let index_file = dir.join("data.json");
         let index = if index_file.exists() {
-            let file_contents = fs::read_to_string(&index_file).with_context(|| {
-                format!("Could not read quest definition index file {index_file:?}")
-            })?;
+            let file_contents = fs::read_to_string(&index_file, "quest definition index file")?;
             let index = serde_json::from_str(&file_contents).with_context(|| {
-                format!("Could not parse quest definition index from {index_file:?}")
+                format!(
+                    "Could not parse quest definition index from {}",
+                    index_file.display()
+                )
             })?;
             QuestInstanceIndex { dir, index }
         } else {
@@ -107,13 +107,11 @@ impl QuestInstanceIndex {
     ///
     /// See [`QuestInstanceIndex`] for the directory format.
     pub fn store(&self) -> Result<()> {
-        fs::create_dir_all(&self.dir)
-            .with_context(|| format!("Could not create quest instances dir {:?}.", &self.dir))?;
+        fs::create_dir_all(&self.dir, "quest instances dir")?;
         let index = serde_json::to_string(&self.index)
             .with_context(|| format!("Could not serialize quest index {:?}", self.index))?;
         let index_file = self.dir.join("data.json");
-        fs::write(&index_file, index)
-            .with_context(|| format!("Could not write quest index to file {index_file:?}"))?;
+        fs::write(&index_file, index, "quest index")?;
         Ok(())
     }
 
@@ -155,10 +153,13 @@ impl QuestInstanceIndex {
     pub fn metadata(&self, id: i64) -> Result<QuestMetadata> {
         let path = self.dir(id)?;
         let metadata_path = path.join("data.json");
-        let data = fs::read_to_string(&metadata_path)
-            .with_context(|| format!("Could not read quest definition file {metadata_path:?}"))?;
-        serde_json::from_str(&data)
-            .with_context(|| format!("Could not parse quest definition from {metadata_path:?}"))
+        let data = fs::read_to_string(&metadata_path, "quest definition file")?;
+        serde_json::from_str(&data).with_context(|| {
+            format!(
+                "Could not parse quest definition from {}",
+                metadata_path.display()
+            )
+        })
     }
 
     /// Quest definition for the quest with the given id.
@@ -173,13 +174,11 @@ impl QuestInstanceIndex {
     /// Writes the metadata for a quest to disk.
     pub fn store_quest(&self, id: i64, quest: &QuestMetadata) -> Result<()> {
         let dir = self.dir(id)?;
-        fs::create_dir_all(&dir)
-            .with_context(|| format!("Could not create quest dir {:?}.", &dir))?;
+        fs::create_dir_all(&dir, "quest dir")?;
         let data = serde_json::to_string(quest)
             .with_context(|| format!("Could not serialize quest {quest:?}"))?;
         let quest_file = dir.join("data.json");
-        fs::write(&quest_file, data)
-            .with_context(|| format!("Could not write quest to file {quest_file:?}"))?;
+        fs::write(&quest_file, data, "quest")?;
         Ok(())
     }
 

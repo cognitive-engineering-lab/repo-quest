@@ -1,18 +1,23 @@
-use std::{collections::HashMap, fs, path::Path};
+use std::{collections::HashMap, path::Path};
 
 use anyhow::{Context as _, Result};
 use log::debug;
-use repo_quest_core::quest::{
-    definition::{
-        Comment, IssueTemplate, PullRequestTemplate, QuestDefinitionMetadata, ReviewLineSubject,
-        ReviewSubject, TaskTemplate,
+use repo_quest_core::{
+    fs,
+    quest::{
+        definition::{
+            Comment, IssueTemplate, PullRequestTemplate, QuestDefinitionMetadata,
+            ReviewLineSubject, ReviewSubject, TaskTemplate,
+        },
+        template::Template,
     },
-    template::Template,
 };
 
 use crate::{commands::quest_to_hist, util::rsync};
 
-use super::*;
+use super::{
+    Chapter, CommitKind, Issue, LineSide, PullRequest, PullRequestComment, QuestDefinition,
+};
 
 /// Helper to take last element while ensuring modified Vec doesn't get used
 /// again by accident.
@@ -117,17 +122,19 @@ pub fn bundle(quest: QuestDefinition, output: &Path) -> Result<()> {
     let quest_json = serde_json::to_string(&quest_meta)
         .with_context(|| format!("Could not serialize quest {quest_meta:?}"))?;
     let quest_json_path = workdir.path().join("data.json");
-    fs::write(&quest_json_path, &quest_json)
-        .with_context(|| format!("Could not write quest index to file {quest_json_path:?}"))?;
+    fs::write(&quest_json_path, &quest_json, "quest index")?;
 
     let bundle_assets_dir = workdir.path().join("assets");
-    fs::create_dir_all(&bundle_assets_dir)
-        .with_context(|| "Could not create bundle assets dir {bundle_assets_dir:?}.")?;
+    fs::create_dir_all(&bundle_assets_dir, "bundle assets dir")?;
     debug!("Copy assets into working directory.");
     if let Some(asset_dir) = quest.assets_dir {
-        rsync(&asset_dir, &bundle_assets_dir).with_context(
-            || "Could not copy bundle assets from {assets_dir:?} to {bundle_assets_dir:?}.",
-        )?;
+        rsync(&asset_dir, &bundle_assets_dir).with_context(|| {
+            format!(
+                "Could not copy bundle assets from `{}` to `{}`.",
+                asset_dir.display(),
+                bundle_assets_dir.display()
+            )
+        })?;
     }
 
     debug!("Creating bundle archive.");
@@ -149,10 +156,10 @@ pub fn bundle(quest: QuestDefinition, output: &Path) -> Result<()> {
     Ok(())
 }
 
-fn bundle_pull_request(branch_name: &String, pull_request: PullRequest) -> PullRequestTemplate {
+fn bundle_pull_request(branch_name: &str, pull_request: PullRequest) -> PullRequestTemplate {
     debug!("Creating pull request data.");
     let (pr_title, pr_body) = match pull_request.primary_issue {
-        None => (branch_name.to_string(), "".to_string()),
+        None => (branch_name.to_string(), String::new()),
         Some(issue) => (
             match issue.meta {
                 None => branch_name.to_string(),
@@ -202,13 +209,13 @@ fn bundle_pull_request_comment(
     }
 }
 
-fn bundle_issue(branch_name: &String, issue: Issue) -> IssueTemplate {
+fn bundle_issue(branch_name: &str, issue: Issue) -> IssueTemplate {
     debug!("Creating issue data.");
     IssueTemplate {
         title: issue
             .primary_issue
             .meta
-            .map_or(branch_name.to_string(), |m| m.title),
+            .map_or_else(|| branch_name.to_string(), |m| m.title),
         body: Template(issue.primary_issue.content),
         comments: issue
             .comments

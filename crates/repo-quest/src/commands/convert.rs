@@ -1,18 +1,23 @@
 use std::{
     collections::HashMap,
-    fs,
     io::Write as _,
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context as _, Result, bail};
+use anyhow::{Context as _, Result, bail, ensure};
 use itertools::{EitherOrBoth, Itertools};
 use log::{debug, info, warn};
 use repo_quest_core::{BOT_AUTHOR, git::GitRepo};
-use tempfile::*;
+use tempfile::TempDir;
 
-use crate::{dir::*, util::rsync};
-use repo_quest_core::git::todo::*;
+use crate::{
+    dir::{
+        Chapter, ChapterMeta, Commit, CommitMeta, Issue, PullRequest, QuestDefinition, QuestMeta,
+        TestExpectation, parse,
+    },
+    util::rsync,
+};
+use repo_quest_core::{fs, git::todo::GitTodoList};
 
 const OLD_BRANCH_PREFIX: &str = "quest";
 const NEW_BRANCH_PREFIX: &str = "changes";
@@ -74,7 +79,7 @@ pub fn prepare_propagate_repo(
 
     // Augment the repo with the chapters that have changes and produce the
     // git rebase todo-list for propagating the changes.
-    let todo = dirs_to_change_branches(new_quest_commits, &rebase_repo)?;
+    let todo = dirs_to_change_branches(&new_quest_commits, &rebase_repo)?;
 
     // Move the current branch back to main.
     rebase_repo.switch_branch("main")?;
@@ -119,21 +124,15 @@ fn check_chapter_compatibility(
                     bail!(
                         "Propagate does not work with differing commit structures, only different commit content.\n\nChanged has a {new_label} chapter, original does not."
                     )
-                } else {
-                    check_optional_commit_dirs_aligned(
-                        old_source_dir,
-                        old_scaffold,
-                        new_source_dir,
-                        new_scaffold,
-                        old_label,
-                    )?;
-                    check_commits_aligned(
-                        old_source_dir,
-                        old_solution,
-                        new_source_dir,
-                        new_solution,
-                    )?;
                 }
+                check_optional_commit_dirs_aligned(
+                    old_source_dir,
+                    old_scaffold.as_ref(),
+                    new_source_dir,
+                    new_scaffold.as_ref(),
+                    old_label,
+                )?;
+                check_commits_aligned(old_source_dir, old_solution, new_source_dir, new_solution)?;
             }
             EitherOrBoth::Left(Chapter {
                 label: old_label, ..
@@ -153,9 +152,9 @@ fn check_chapter_compatibility(
 
 fn check_optional_commit_dirs_aligned(
     old_source_dir: &Path,
-    old_commits: &Option<Vec<Commit>>,
+    old_commits: Option<&Vec<Commit>>,
     new_source_dir: &Path,
-    new_commits: &Option<Vec<Commit>>,
+    new_commits: Option<&Vec<Commit>>,
     dirname: &str,
 ) -> Result<(), anyhow::Error> {
     for main_dirs in old_commits.iter().zip_longest(new_commits) {
@@ -193,28 +192,33 @@ fn check_commits_aligned(
                 let new_path = new_commit.path.strip_prefix(new_source_dir)?;
                 if old_path < new_path {
                     bail!(
-                        "Propagate does not work with differing commit structures, only different commit content.\n\nOriginal version has commit {old_path:?} which changed version does not.",
+                        "Propagate does not work with differing commit structures, only different commit content.\n\nOriginal version has commit `{}` which changed version does not.",
+                        old_path.display()
                     );
                 } else if old_path > new_path {
                     bail!(
-                        "Propagate does not work with differing commit structures, only different commit content.\n\nChanged version has commit {new_path:?} which old version does not.",
+                        "Propagate does not work with differing commit structures, only different commit content.\n\nChanged version has commit `{}` which old version does not.",
+                        new_path.display()
                     );
                 } else if old_commit.message != new_commit.message {
                     warn!(
-                        "Commit messages differ between commits in {old_path:?}. This will not prevent creation of the rebase repository, but commit messages are not updated by overlay.",
+                        "Commit messages differ between commits in `{}`. This will not prevent creation of the rebase repository, but commit messages are not updated by overlay.",
+                        old_path.display()
                     );
                 }
             }
             EitherOrBoth::Left(old_commit) => {
                 let old_path = old_commit.path.strip_prefix(old_source_dir)?;
                 bail!(
-                    "Propagate does not work with differing commit structures, only different commit content.\n\nOriginal version has commit {old_path:?} which changed version does not.",
+                    "Propagate does not work with differing commit structures, only different commit content.\n\nOriginal version has commit `{}` which changed version does not.",
+                    old_path.display()
                 );
             }
             EitherOrBoth::Right(new_commit) => {
                 let new_path = new_commit.path.strip_prefix(new_source_dir)?;
                 bail!(
-                    "Propagate does not work with differing commit structures, only different commit content.\n\nChanged version has commit {new_path:?} which original version does not.",
+                    "Propagate does not work with differing commit structures, only different commit content.\n\nChanged version has commit `{}` which original version does not.",
+                    new_path.display()
                 );
             }
         }
@@ -223,11 +227,11 @@ fn check_commits_aligned(
     Ok(())
 }
 
-/// Assumes check_compatibility succeeded.
+/// Assumes `check_compatibility` succeeded.
 ///
 /// Produces git rebase todo-list
 fn dirs_to_change_branches(
-    new_quest_commits: QuestDefinition,
+    new_quest_commits: &QuestDefinition,
     rebase_repo: &GitRepo,
 ) -> Result<GitTodoList> {
     let mut todo = GitTodoList::new();
@@ -280,7 +284,7 @@ fn create_commit(
     message: Option<&str>,
     dir: &Path,
 ) -> Result<()> {
-    info!("Processing {:?}", dir);
+    info!("Processing `{}`", dir.display());
     rsync(dir, &rebase_repo.dir)?;
     rebase_repo.add_all()?;
     rebase_repo.commit(message.unwrap_or(branch_name), BOT_AUTHOR)?;
@@ -298,7 +302,7 @@ fn create_commit_if_changed(
     message: Option<&str>,
     dir: &Path,
 ) -> Result<bool> {
-    info!("Processing {:?}", dir);
+    info!("Processing `{}`", dir.display());
     rsync(dir, &rebase_repo.dir)?;
     let root = &[Path::new(".")];
     if rebase_repo.changes(root)?.is_some()
@@ -321,32 +325,33 @@ fn create_commit_if_changed(
 pub fn overlay(hist: PathBuf, dir: &Path, branch_prefix: &str) -> Result<()> {
     // 1. make sure there's nothing uncommitted in dir
     let dir_repo = GitRepo::open(dir.to_path_buf()).with_context(|| {
-        format!("Cannot overwrite the quest in {dir:?}: it is not a git repository.")
+        format!(
+            "Cannot overwrite the quest in `{}`: it is not a git repository.",
+            dir.display()
+        )
     })?;
     let quest_files = &QUEST_FILES.map(Path::new);
     let untracked_files = dir_repo.untracked(quest_files)?;
     let changes = dir_repo.changes(quest_files)?;
     let staged_changes = dir_repo.staged_changes(quest_files)?;
-    if changes.is_some() || staged_changes.is_some() || !untracked_files.is_empty() {
-        bail!(
-            "Cannot overwrite quest in {dir:?}, there are uncommitted changes that would be affected:\n\nChanges:\n{}\n\nStaged changes:\n{}\n\nUntracked files:\n{}",
-            changes.unwrap_or_default(),
-            staged_changes.unwrap_or_default(),
-            untracked_files,
-        );
-    }
+    ensure!(
+        changes.is_none() && staged_changes.is_none() && untracked_files.is_empty(),
+        "Cannot overwrite quest in `{}`, there are uncommitted changes that would be affected:\n\nChanges:\n{}\n\nStaged changes:\n{}\n\nUntracked files:\n{}",
+        dir.display(),
+        changes.unwrap_or_default(),
+        staged_changes.unwrap_or_default(),
+        untracked_files,
+    );
     // 2. parse quest from dir
     let original_quest = parse(dir)?;
 
     // 3. remove chapters and main folders.
     let main_dir = dir.join("main");
-    fs::remove_dir_all(&main_dir).with_context(|| format!("Could not remove {dir:?}/main."))?;
-    fs::create_dir(&main_dir).with_context(|| format!("Could not recreate {dir:?}/main."))?;
-    let chapters_dir = dir.join("chapters");
-    fs::remove_dir_all(&chapters_dir)
-        .with_context(|| format!("Could not remove {dir:?}/chapters."))?;
-    fs::create_dir(&chapters_dir)
-        .with_context(|| format!("Could not recreate {dir:?}/chapters."))?;
+    fs::remove_dir_all(&main_dir, "main dir")?;
+    fs::create_dir(&main_dir, "main dir")?;
+    let all_chapters_dir = dir.join("chapters");
+    fs::remove_dir_all(&all_chapters_dir, "chapters dir")?;
+    fs::create_dir(&all_chapters_dir, "chapters dir")?;
 
     // 4a. recreate folders based on hist format
     // 4b. copy back in issues, etc., from matching chapters
@@ -357,14 +362,14 @@ pub fn overlay(hist: PathBuf, dir: &Path, branch_prefix: &str) -> Result<()> {
         let main = dirify_branches(
             &main_dir,
             &hist_repo,
-            branches.iter().map(|s| s.as_str()),
+            branches.iter().map(std::string::String::as_str),
             original_quest.main.clone(),
             &format!("{branch_prefix}/main/"),
         )?;
         // create an empty initial commit for main if none is provided by the
         // hist repo
         if main.is_empty() {
-            fs::create_dir_all(main_dir.join("initial-commit"))?;
+            fs::create_dir_all(main_dir.join("initial-commit"), "initial commit dir")?;
             vec![CommitMeta {
                 label: "initial-commit".to_string(),
                 expected: TestExpectation::Pass,
@@ -381,69 +386,21 @@ pub fn overlay(hist: PathBuf, dir: &Path, branch_prefix: &str) -> Result<()> {
         .collect();
     let mut chapters = Vec::new();
     let chapter_branch_prefix = format!("{branch_prefix}/chapter/");
-    for (chapter_label, chapter_branches) in branches
+    for (chapter_label, chapter_branches) in &branches
         .iter()
         .filter(|b| b.starts_with(&chapter_branch_prefix))
-        .chunk_by(|branch| branch.split("/").dropping(2).next())
-        .into_iter()
+        .chunk_by(|branch| branch.split('/').dropping(2).next())
     {
-        info!("Processing chapter {chapter_label:?}.");
         let chapter_branches: Vec<_> = chapter_branches.collect();
-        let chapter_label = chapter_label.with_context(|| {
-            format!("Error getting chapter label from branch names: {chapter_branches:?}.")
-        })?;
-        let chapter_dir = chapters_dir.join(chapter_label);
-        fs::create_dir(&chapter_dir)
-            .with_context(|| format!("Could not create chapter dir {chapter_dir:?}."))?;
-
-        // if there is a matching original chapter, preserve the issue/pr
-        //
-        // TODO: would it be better to just save the files somewhere and copy them back?
-        let original_chapter = original_chapters.get(chapter_label);
-        if let Some(original_chapter) = original_chapter {
-            debug!("Recreating issues.");
-            write_issue(&chapter_dir, &original_chapter.issue)?;
-            debug!("Recreating prs.");
-            write_pr(&chapter_dir, &original_chapter.pull_request)?;
-        }
-
-        debug!("Creating scaffold commits for {chapter_label}.");
-        let scaffold = dirify_branches(
-            &chapter_dir.join("scaffold"),
+        let chapter_meta = process_chapter(
+            branch_prefix,
+            &all_chapters_dir,
             &hist_repo,
-            chapter_branches.iter().map(|s| s.as_str()),
-            original_chapter
-                .and_then(|chapter| chapter.scaffold.clone())
-                .unwrap_or_else(Vec::new),
-            &format!("{branch_prefix}/chapter/{chapter_label}/scaffold/"),
+            &original_chapters,
+            chapter_label,
+            &chapter_branches,
         )?;
-
-        debug!("Creating solution commits for {chapter_label}.");
-        let solution = dirify_branches(
-            &chapter_dir.join("solution"),
-            &hist_repo,
-            chapter_branches.iter().map(|s| s.as_str()),
-            original_chapter
-                .map(|chapter| chapter.solution.clone())
-                .unwrap_or_else(Vec::new),
-            &format!("{branch_prefix}/chapter/{chapter_label}/solution/"),
-        )?;
-
-        // only add the directory to the metadata if the chapter is new or the
-        // directory existed before
-        let scaffold = if let Some(original_chapter) = original_chapters.get(&chapter_label)
-            && original_chapter.scaffold.is_none()
-            && scaffold.is_empty()
-        {
-            None
-        } else {
-            Some(scaffold)
-        };
-        chapters.push(ChapterMeta {
-            label: chapter_label.to_string(),
-            scaffold,
-            solution,
-        })
+        chapters.push(chapter_meta);
     }
 
     // 6. recreate quest.toml with update chapters/commits
@@ -461,37 +418,110 @@ pub fn overlay(hist: PathBuf, dir: &Path, branch_prefix: &str) -> Result<()> {
         dir.join("quest.toml"),
         &toml::ser::to_string_pretty(&meta)
             .with_context(|| format!("Failed to serialize quest metadata {meta:?}."))?,
-    )
-    .context("Failed to write quest metadata.")?;
+        "quest metadata",
+    )?;
 
     Ok(())
+}
+
+fn process_chapter(
+    branch_prefix: &str,
+    all_chapters_dir: &Path,
+    hist_repo: &GitRepo,
+    original_chapters: &HashMap<&str, &Chapter>,
+    chapter_label: Option<&str>,
+    chapter_branches: &[&String],
+) -> Result<ChapterMeta> {
+    info!("Processing chapter {chapter_label:?}.");
+    let chapter_label = chapter_label.with_context(|| {
+        format!("Error getting chapter label from branch names: {chapter_branches:?}.")
+    })?;
+    let chapter_dir = all_chapters_dir.join(chapter_label);
+    fs::create_dir(&chapter_dir, "chapter dir")?;
+
+    // if there is a matching original chapter, preserve the issue/pr
+    //
+    // TODO: would it be better to just save the files somewhere and copy them back?
+    let original_chapter = original_chapters.get(chapter_label);
+    if let Some(original_chapter) = original_chapter {
+        debug!("Recreating issues.");
+        write_issue(&chapter_dir, &original_chapter.issue)?;
+        debug!("Recreating prs.");
+        write_pr(&chapter_dir, &original_chapter.pull_request)?;
+    }
+
+    debug!("Creating scaffold commits for {chapter_label}.");
+    let scaffold = dirify_branches(
+        &chapter_dir.join("scaffold"),
+        hist_repo,
+        chapter_branches.iter().map(|s| s.as_str()),
+        original_chapter
+            .and_then(|chapter| chapter.scaffold.clone())
+            .unwrap_or_default(),
+        &format!("{branch_prefix}/chapter/{chapter_label}/scaffold/"),
+    )?;
+
+    debug!("Creating solution commits for {chapter_label}.");
+    let solution = dirify_branches(
+        &chapter_dir.join("solution"),
+        hist_repo,
+        chapter_branches.iter().map(|s| s.as_str()),
+        original_chapter.map_or_else(Vec::new, |chapter| chapter.solution.clone()),
+        &format!("{branch_prefix}/chapter/{chapter_label}/solution/"),
+    )?;
+
+    // only add the directory to the metadata if the chapter is new or the
+    // directory existed before
+    let scaffold = if let Some(original_chapter) = original_chapters.get(&chapter_label)
+        && original_chapter.scaffold.is_none()
+        && scaffold.is_empty()
+    {
+        None
+    } else {
+        Some(scaffold)
+    };
+
+    Ok(ChapterMeta {
+        label: chapter_label.to_string(),
+        scaffold,
+        solution,
+    })
 }
 
 fn write_pr(chapter_dir: &Path, pull_request: &PullRequest) -> Result<()> {
     let file = chapter_dir.join("pr.md");
     if let Some(primary_issue) = &pull_request.primary_issue {
         write!(
-            &fs::File::create_new(file)?,
+            &fs::File::create_new(file).with_context(|| format!(
+                "Failed to create primary issue for `{}`.",
+                chapter_dir.display()
+            ))?,
             "+++\n{}+++\n{}",
             toml::ser::to_string_pretty(&primary_issue.meta)?,
             primary_issue.content
         )
-        .with_context(|| format!("Failed to write primary issue for {chapter_dir:?}."))?;
+        .with_context(|| {
+            format!(
+                "Failed to write primary issue for {}.",
+                chapter_dir.display()
+            )
+        })?;
     }
 
     if let Some(comments) = &pull_request.comments {
         let issue_comments_dir = chapter_dir.join("pr");
-        fs::create_dir_all(&issue_comments_dir).with_context(|| {
-            format!("Failed to create issue comments dir {issue_comments_dir:?}.")
-        })?;
+        fs::create_dir_all(&issue_comments_dir, "issue comments dir")?;
         for comment in comments {
             write!(
-                &fs::File::create_new(&comment.path)?,
+                &fs::File::create_new(&comment.path).with_context(|| format!(
+                    "Failed to create comment `{}`.",
+                    comment.path.display()
+                ))?,
                 "+++\n{}+++\n{}",
                 toml::ser::to_string_pretty(&comment.meta)?,
                 comment.content
             )
-            .with_context(|| format!("Failed to write comment {:?}.", &comment.path))?;
+            .with_context(|| format!("Failed to write comment `{}`.", comment.path.display()))?;
         }
     }
 
@@ -506,16 +536,18 @@ fn write_issue(chapter_dir: &Path, issue: &Issue) -> Result<()> {
         toml::ser::to_string_pretty(&issue.primary_issue.meta)?,
         issue.primary_issue.content
     )
-    .with_context(|| format!("Failed to write primary issue for {chapter_dir:?}."))?;
+    .with_context(|| {
+        format!(
+            "Failed to write primary issue for `{}`.",
+            chapter_dir.display()
+        )
+    })?;
 
     if let Some(comments) = &issue.comments {
         let issue_comments_dir = chapter_dir.join("issue");
-        fs::create_dir_all(&issue_comments_dir).with_context(|| {
-            format!("Failed to create issue comments dir {issue_comments_dir:?}.")
-        })?;
+        fs::create_dir_all(&issue_comments_dir, "issue comments dir")?;
         for comment in comments {
-            fs::write(&comment.path, &comment.content)
-                .with_context(|| format!("Failed to write comment {:?}.", &comment.path))?;
+            fs::write(&comment.path, &comment.content, "comment")?;
         }
     }
 
@@ -546,15 +578,20 @@ fn dirify_branches<'a>(
     let mut main = Vec::new();
     for branch in branches {
         if let Some(commit_label) = branch.strip_prefix(branch_prefix) {
-            if commit_label.contains("/") {
+            if commit_label.contains('/') {
                 bail!("Malformed commit branch name: {branch} contains / in label.");
             }
-            fs::create_dir_all(output_dir.join(commit_label))
-                .with_context(|| format!("Failed to create chapter commit dir for {branch}."))?;
+            fs::create_dir_all(
+                output_dir.join(commit_label),
+                format!("chapter commit dir for {branch}"),
+            )?;
             repo.copy_tree(branch, &output_dir.join(commit_label))?;
             let msg = repo.commit_message(branch)?;
-            fs::write(output_dir.join(format!("{commit_label}.txt")), msg)
-                .with_context(|| format!("Failed to write commit message for {branch}."))?;
+            fs::write(
+                output_dir.join(format!("{commit_label}.txt")),
+                msg,
+                format!("commit message for {branch}"),
+            )?;
             // Preserve original metadata for this commit if it exists.
             if let Some(original_commit) = original_commits.remove(commit_label) {
                 main.push(original_commit.into_commit_meta());

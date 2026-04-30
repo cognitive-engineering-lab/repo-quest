@@ -12,12 +12,11 @@ use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
-    fs,
     path::{Path, PathBuf},
 };
 
 use super::template::Template;
-use crate::git::GitRepo;
+use crate::{fs, git::GitRepo};
 
 /// A normalized git reference name.
 ///
@@ -211,11 +210,12 @@ impl QuestDefinitionIndex {
         let dir: PathBuf = path.as_ref().to_path_buf();
         let index_file = dir.join("data.json");
         let index = if index_file.exists() {
-            let file_contents = fs::read_to_string(&index_file).with_context(|| {
-                format!("Could not read quest definition index file {index_file:?}")
-            })?;
+            let file_contents = fs::read_to_string(&index_file, "quest definition index")?;
             let index = serde_json::from_str(&file_contents).with_context(|| {
-                format!("Could not parse quest definition index from {index_file:?}")
+                format!(
+                    "Could not parse quest definition index from {}",
+                    index_file.display()
+                )
             })?;
             QuestDefinitionIndex { dir, index }
         } else {
@@ -231,15 +231,15 @@ impl QuestDefinitionIndex {
     ///
     /// See [`QuestDefinitionIndex`] for the directory format.
     pub fn store(&self) -> Result<()> {
-        fs::create_dir_all(&self.dir)
-            .with_context(|| format!("Could not create quest definition dir {:?}.", self.dir))?;
+        fs::create_dir_all(&self.dir, "quest definition dir")?;
         let index = serde_json::to_string(&self.index).with_context(|| {
-            format!("Could not serialize quest definition index {:?}", self.dir)
+            format!(
+                "Could not serialize quest definition index {}",
+                self.dir.display()
+            )
         })?;
         let index_file = self.dir.join("data.json");
-        fs::write(&index_file, index).with_context(|| {
-            format!("Could not write quest definition index to file {index_file:?}")
-        })?;
+        fs::write(&index_file, index, "quest definition index")?;
         Ok(())
     }
 
@@ -288,10 +288,13 @@ impl QuestDefinitionIndex {
     pub fn metadata(&self, id: usize) -> Result<QuestDefinitionMetadata> {
         let path = self.dir(id)?;
         let metadata_path = path.join("data.json");
-        let data = fs::read_to_string(&metadata_path)
-            .with_context(|| format!("Could not read quest definition file {metadata_path:?}"))?;
-        serde_json::from_str(&data)
-            .with_context(|| format!("Could not parse quest definition from {metadata_path:?}"))
+        let data = fs::read_to_string(&metadata_path, "quest definition file")?;
+        serde_json::from_str(&data).with_context(|| {
+            format!(
+                "Could not parse quest definition from {}",
+                metadata_path.display()
+            )
+        })
     }
 
     /// Quest definition for the quest with the given id.

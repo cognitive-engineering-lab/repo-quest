@@ -3,11 +3,14 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context as _, Result, bail};
+use anyhow::{Context as _, Result, bail, ensure};
 use log::{debug, warn};
 use regex::Regex;
 
-use super::*;
+use super::{
+    Chapter, ChapterMeta, Commit, CommitMeta, Deserialize, Issue, IssueComment, PrimaryIssue,
+    PullRequest, PullRequestComment, QuestDefinition, QuestMeta,
+};
 
 /// Parse a directory into a [`QuestDefinition`].
 ///
@@ -48,7 +51,7 @@ pub fn parse(dir: &Path) -> Result<QuestDefinition> {
 }
 
 fn parse_chapters(dir: &Path, chapter_metas: Vec<ChapterMeta>) -> Result<Vec<Chapter>> {
-    debug!("Parsing chapters: {:?}", chapter_metas);
+    debug!("Parsing chapters: {chapter_metas:?}");
 
     let dir = dir.join("chapters");
     let mut chapters = Vec::with_capacity(chapter_metas.len());
@@ -63,11 +66,17 @@ fn parse_chapter(dir: &Path, chapter_meta: ChapterMeta) -> Result<Chapter> {
     debug!("Parsing chapter: {chapter_meta:?}");
 
     let chapter_dir = dir.join(&chapter_meta.label);
-    if !chapter_dir.exists() {
-        bail!("Chapter directory {chapter_dir:?} does not exist.");
-    } else if !chapter_dir.is_dir() {
-        bail!("Chapter directory {chapter_dir:?} exists, but is not a directory.");
-    }
+    ensure!(
+        chapter_dir.exists(),
+        "Chapter directory {} does not exist.",
+        chapter_dir.display()
+    );
+    ensure!(
+        chapter_dir.is_dir(),
+        "Chapter directory {} exists, but is not a directory.",
+        chapter_dir.display()
+    );
+
     let issue = parse_issue(&chapter_dir)?;
     let pull_request = parse_pull_request(&chapter_dir)?;
 
@@ -77,12 +86,11 @@ fn parse_chapter(dir: &Path, chapter_meta: ChapterMeta) -> Result<Chapter> {
         None
     };
     let solution = parse_commits_dir(chapter_meta.solution, &chapter_dir.join("solution"))?;
-    if solution.is_empty() {
-        bail!(
-            "Solution for chapter {} must have at least one entry.",
-            chapter_meta.label
-        );
-    }
+    ensure!(
+        !solution.is_empty(),
+        "Solution for chapter {} must have at least one entry.",
+        chapter_meta.label
+    );
 
     Ok(Chapter {
         label: chapter_meta.label,
@@ -97,7 +105,12 @@ fn parse_chapter(dir: &Path, chapter_meta: ChapterMeta) -> Result<Chapter> {
 fn parse_branch_name(chapter_dir: &Path) -> Result<String, anyhow::Error> {
     Ok(chapter_dir
         .file_name()
-        .with_context(|| format!("Could not extract branchname from {:?}.", chapter_dir))?
+        .with_context(|| {
+            format!(
+                "Could not extract branchname from `{}`.",
+                chapter_dir.display()
+            )
+        })?
         .to_string_lossy()
         .into_owned())
 }
@@ -156,21 +169,25 @@ where
 
 fn parse_primary_issue(issue_path: &Path) -> Result<PrimaryIssue> {
     let issue_file_content = fs::read_to_string(issue_path)
-        .with_context(|| format!("Could not read issue file {issue_path:?}"))?;
+        .with_context(|| format!("Could not read issue file `{}`", issue_path.display()))?;
 
-    if let Some((frontmatter, content)) = parse_frontmatter(&issue_file_content)
-        .with_context(|| format!("Could not parse frontmatter from {issue_path:?}"))?
-    {
-        Ok(PrimaryIssue {
+    let frontmatter_opt = parse_frontmatter(&issue_file_content).with_context(|| {
+        format!(
+            "Could not parse frontmatter from `{}`",
+            issue_path.display()
+        )
+    })?;
+
+    Ok(match frontmatter_opt {
+        Some((frontmatter, content)) => PrimaryIssue {
             meta: Some(frontmatter),
             content: content.to_string(),
-        })
-    } else {
-        Ok(PrimaryIssue {
+        },
+        None => PrimaryIssue {
             meta: None,
             content: issue_file_content,
-        })
-    }
+        },
+    })
 }
 
 fn read_dir_sorted_paths(dir: &Path) -> Result<Vec<PathBuf>> {
@@ -182,11 +199,11 @@ fn read_dir_sorted_paths(dir: &Path) -> Result<Vec<PathBuf>> {
 fn read_dir_paths(dir: &Path) -> Result<Vec<PathBuf>> {
     Ok(dir
         .read_dir()
-        .with_context(|| format!("Could not read directory {dir:?}"))?
+        .with_context(|| format!("Could not read directory `{}`", dir.display()))?
         .collect::<Result<Vec<_>, _>>()
-        .with_context(|| format!("Failure while reading directory {dir:?}"))?
+        .with_context(|| format!("Failure while reading directory `{}`", dir.display()))?
         .iter()
-        .map(|entry| entry.path())
+        .map(std::fs::DirEntry::path)
         .collect())
 }
 
@@ -195,9 +212,17 @@ fn comment_files(comments_dir: &Path) -> Result<Option<Vec<PathBuf>>> {
         let mut comment_files = Vec::new();
         for path in read_dir_sorted_paths(comments_dir)? {
             if !path.is_file() {
-                warn!("Comments directory {comments_dir:?} contains non-file {path:?}");
+                warn!(
+                    "Comments directory `{}` contains non-file `{}`",
+                    comments_dir.display(),
+                    path.display()
+                );
             } else if path.extension().is_none_or(|extension| extension != "md") {
-                warn!("Comments directory {comments_dir:?} contains non-.md file {path:?}");
+                warn!(
+                    "Comments directory `{}` contains non-.md file `{}`",
+                    comments_dir.display(),
+                    path.display()
+                );
             } else {
                 comment_files.push(path);
             }
@@ -213,7 +238,7 @@ fn parse_issue_comments(comments_dir: &Path) -> Result<Option<Vec<IssueComment>>
         let mut comments = Vec::with_capacity(comment_files.len());
         for path in comment_files {
             let content = fs::read_to_string(&path)
-                .with_context(|| format!("Could not read comment file {path:?}"))?;
+                .with_context(|| format!("Could not read comment file {}", path.display()))?;
             comments.push(IssueComment { path, content });
         }
         Ok(Some(comments))
@@ -253,11 +278,16 @@ fn parse_pull_request_comments(comments_dir: &Path) -> Result<Option<Vec<PullReq
 
 fn parse_pull_request_comment(comment_path: &Path) -> Result<PullRequestComment> {
     let comment_file_content = fs::read_to_string(comment_path)
-        .with_context(|| format!("Could not read comment file {comment_path:?}"))?;
+        .with_context(|| format!("Could not read comment file `{}`", comment_path.display()))?;
 
     // TODO: validate filename in frontmatter
-    if let Some((frontmatter, content)) = parse_frontmatter(&comment_file_content)
-        .with_context(|| format!("Could not parse TOML frontmatter from {comment_path:?}"))?
+    if let Some((frontmatter, content)) =
+        parse_frontmatter(&comment_file_content).with_context(|| {
+            format!(
+                "Could not parse TOML frontmatter from `{}`",
+                comment_path.display()
+            )
+        })?
     {
         Ok(PullRequestComment {
             path: comment_path.to_path_buf(),
@@ -280,17 +310,21 @@ pub fn parse_commits_dir(commit_metas: Vec<CommitMeta>, commits_dir: &Path) -> R
     let mut parsed_commits = Vec::new();
     for commit_meta in commit_metas {
         let dir = commits_dir.join(&commit_meta.label);
-        if !dir.exists() {
-            bail!("Chapter directory {dir:?} does not exist.");
-        } else if !dir.is_dir() {
-            bail!("Chapter directory {dir:?} exists, but is not a directory.");
-        }
+        ensure!(
+            dir.exists(),
+            "Chapter directory `{}` does not exist.",
+            dir.display()
+        );
+        ensure!(
+            dir.is_dir(),
+            "Chapter directory `{}` exists, but is not a directory.",
+            dir.display()
+        );
         let txt = dir.with_added_extension("txt");
         let msg = if txt.is_file() {
-            Some(
-                fs::read_to_string(&txt)
-                    .with_context(|| format!("Could not open commit message file {txt:?}"))?,
-            )
+            Some(fs::read_to_string(&txt).with_context(|| {
+                format!("Could not open commit message file `{}`", txt.display())
+            })?)
         } else {
             None
         };
@@ -302,6 +336,8 @@ pub fn parse_commits_dir(commit_metas: Vec<CommitMeta>, commits_dir: &Path) -> R
 
 #[cfg(test)]
 mod test {
+    use crate::dir::{IssueMeta, TestExpectation};
+
     use super::*;
 
     #[test]
@@ -390,10 +426,10 @@ Content line 2
             ))
         );
 
-        let data = r#"
+        let data = r"
 Content line 1
 Content line 2
-"#;
+";
         let res = parse_frontmatter::<IssueMeta>(data).unwrap();
         assert_eq!(res, None);
 

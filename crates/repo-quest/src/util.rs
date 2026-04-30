@@ -12,5 +12,11 @@ pub fn rsync(from: &Path, to: &Path) -> Result<()> {
         .arg("--exclude=.git")
         .arg(".")
         .arg(&to)
-        .run_with_context(|| format!("Could not rsync files from {from:?} to {to:?}."))
+        .run_with_context(|| {
+            format!(
+                "Could not rsync files from `{}` to `{}`.",
+                from.display(),
+                to.display()
+            )
+        })
 }

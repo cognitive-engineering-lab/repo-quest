@@ -11,7 +11,7 @@ use env_logger::Env;
 use log::info;
 use url::Url;
 
-use repo_quest_core::quest::{definition::*, instance::*};
+use repo_quest_core::quest::{definition::QuestDefinitionIndex, instance::QuestInstanceIndex};
 
 use self::{
     bot::{AppState, Errors},
@@ -25,7 +25,7 @@ mod forgejo_hook;
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
-    /// Directory where RepoQuest bot state is stored
+    /// Directory where `RepoQuest` bot state is stored
     #[arg(long)]
     state_dir: PathBuf,
     /// Base URL for the Forgejo instance
@@ -55,12 +55,15 @@ async fn main() -> anyhow::Result<()> {
     let given_quest_dir = state_dir;
     if !given_quest_dir.is_dir() {
         fs::create_dir_all(&given_quest_dir)
-            .with_context(|| format!("Could not create dir {given_quest_dir:?}"))?;
+            .with_context(|| format!("Could not create dir `{}`", given_quest_dir.display()))?;
     }
-    let quest_dir = given_quest_dir
-        .canonicalize()
-        .with_context(|| format!("Could not canonicalize quest dir path {given_quest_dir:?}"))?;
-    info!("Quest directory {quest_dir:?}.");
+    let quest_dir = given_quest_dir.canonicalize().with_context(|| {
+        format!(
+            "Could not canonicalize quest dir path `{}`",
+            given_quest_dir.display()
+        )
+    })?;
+    info!("Quest directory `{}`.", quest_dir.display());
 
     let forgejo = {
         // This username/password should match the ones declared in run-forgejo.sh.
@@ -84,7 +87,7 @@ async fn main() -> anyhow::Result<()> {
         .await?;
 
     let path = quest_dir.join("errors.json");
-    info!("Reading stored server errors from {path:?}.");
+    info!("Reading stored server errors from `{}`.", path.display());
     let errors = Errors::load(path)?;
 
     let state = AppState {

@@ -15,7 +15,7 @@ use anyhow::{Context as _, Result};
 use clap::{Parser, ValueEnum};
 use env_logger::Env;
 
-/// repo-quest is an authoring tool for RepoQuest quests.
+/// repo-quest is an authoring tool for `RepoQuest` quests.
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
@@ -53,7 +53,7 @@ pub enum Command {
         /// The directory in which to initialize the quest
         quest: PathBuf,
     },
-    /// Bundles a quest definition for use with a RepoQuest Forgejo instance.
+    /// Bundles a quest definition for use with a `RepoQuest` Forgejo instance.
     #[command(after_help=after_help_dir())]
     Bundle {
         /// The path to the directory format of the quest to bundle.
@@ -221,7 +221,7 @@ fn main() -> Result<()> {
                     .context("Could not determine quest dir path.")?,
             };
             let quest = dir::parse(&quest)?;
-            let quest_tree = commands::quest_tree(&quest)?;
+            let quest_tree = commands::quest_tree(&quest);
             println!("{quest_tree}");
         }
         Command::Hist { quest, hist } => {
@@ -246,7 +246,7 @@ fn main() -> Result<()> {
                 Some(hist) => hist,
                 None => dir.join("hist"),
             };
-            commands::overlay(hist, &dir, QUEST_BRANCH_PREFIX)?
+            commands::overlay(hist, &dir, QUEST_BRANCH_PREFIX)?;
         }
         Command::Check { quest } => {
             let quest = match quest {
@@ -285,9 +285,9 @@ fn main() -> Result<()> {
                 .map(TestChapterSelection::OneChapter)
                 .or_else(|| following_chapters.map(TestChapterSelection::FollowingChapters))
                 .unwrap_or(TestChapterSelection::AllChapters);
-            test_quest(&dir, skip_scaffold, chapter_selection)?;
+            test_quest(&dir, skip_scaffold, &chapter_selection)?;
         }
-    };
+    }
 
     Ok(())
 }

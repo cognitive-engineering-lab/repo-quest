@@ -58,8 +58,8 @@ impl TestExpectation {
         Self::Pass
     }
 
-    pub(crate) fn is_pass(&self) -> bool {
-        *self == TestExpectation::Pass
+    pub(crate) fn is_pass(self) -> bool {
+        self == TestExpectation::Pass
     }
 }
 
@@ -172,11 +172,7 @@ pub struct QuestDefinition {
 
 impl QuestDefinition {
     pub fn meta(self) -> QuestMeta {
-        let chapters = self
-            .chapters
-            .into_iter()
-            .map(|chapter| chapter.meta())
-            .collect();
+        let chapters = self.chapters.into_iter().map(Chapter::meta).collect();
         let main = self
             .main
             .into_iter()
@@ -316,7 +312,7 @@ pub enum CommitKind<'a> {
     Solution { chapter_label: &'a str },
 }
 
-impl<'a> CommitKind<'a> {
+impl CommitKind<'_> {
     pub fn branch_name(&self, prefix: &str, commit_dir: &Path) -> String {
         let suffix = &commit_dir.file_name().unwrap().to_string_lossy();
         match self {
