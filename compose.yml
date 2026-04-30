@@ -53,11 +53,11 @@ services:
   # Workaround to make it so RQ bot can run on the same port as Forgejo,
   # due to issue w/ inability to pass custom port into frontend templates.
   reverse-proxy:
-    image: docker.io/nginxinc/nginx-unprivileged:latest
+    image: ghcr.io/cognitive-engineering-lab/repoquest-nginx:${RQ_IMAGE_TAG:-latest}
+    build:
+      dockerfile: docker/Dockerfile.nginx
     ports:
       - "${RQ_PORT:-8085}:8085"
-    volumes:
-      - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf
     depends_on:
       - forgejo
       - repoquest
