@@ -3,7 +3,7 @@ volumes:
   repoquest-bot:
 services:
   forgejo:
-    image: repoquest-forgejo
+    image: ghcr.io/cognitive-engineering-lab/repoquest-forgejo:${RQ_IMAGE_TAG:-latest}
     build:
       dockerfile: docker/Dockerfile.forgejo
     # Used to know when the container comes online. Dependencies won't start until the container passes
@@ -22,7 +22,7 @@ services:
         source: repoquest-forgejo
         target: /var/lib/gitea
   forgejo-runner:
-    image: repoquest-forgejo-runner
+    image: ghcr.io/cognitive-engineering-lab/repoquest-forgejo-runner:${RQ_IMAGE_TAG:-latest}
     build:
       dockerfile: docker/Dockerfile.forgejo-runner
     depends_on:
@@ -37,7 +37,7 @@ services:
         source: "${RQ_DOCKER_HOST:-/var/run/docker.sock}"
         target: /var/run/docker.sock
   repoquest:
-    image: repoquest
+    image: ghcr.io/cognitive-engineering-lab/repoquest:${RQ_IMAGE_TAG:-latest}
     build:
       dockerfile: docker/Dockerfile.repoquest
     depends_on:
