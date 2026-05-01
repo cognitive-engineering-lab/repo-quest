@@ -29,3 +29,9 @@ jobs:
 
       - name: Build images
         run: docker compose build
+
+      - name: Push dry run
+        run: docker compose push --dry-run
+
+      - name: Publish dry run
+        run: docker compose publish -y "ghcr.io/cognitive-engineering-lab/repoquest-compose:$RQ_IMAGE_TAG" --dry-run

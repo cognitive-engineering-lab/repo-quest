@@ -16,7 +16,8 @@ services:
       - RQ_PORT
       - RQ_SSH_PORT
     ports:
-      - "${RQ_SSH_PORT:-2222}:2222"
+      - target: 2222
+        published: "${RQ_SSH_PORT:-2222}"
     volumes:
       - type: volume
         source: repoquest-forgejo
@@ -57,7 +58,8 @@ services:
     build:
       dockerfile: docker/Dockerfile.nginx
     ports:
-      - "${RQ_PORT:-8085}:8085"
+      - target: 8085
+        published: "${RQ_PORT:-8085}"      
     depends_on:
       - forgejo
       - repoquest
