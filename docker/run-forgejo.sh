@@ -10,6 +10,16 @@ register() {
             --password repoquest \
             --email repoquest@example.com
     echo "Registered admin user 'repoquest' with Forgejo."
+
+    forgejo admin user create \
+            --username hero \
+            --password repoquest \
+            --email hero@example.com \
+    # NOTE(2026-06-11): --must-change-password false does not seem to be
+    # working, necessitating the command below.
+    forgejo admin user must-change-password --unset hero
+    echo "Registered user 'hero' with Forgejo."
+
     # The runner labels will be set by the runner when it connects.
     forgejo forgejo-cli actions register \
             --secret "0123456789012345678901234567890123456789"
@@ -29,6 +39,7 @@ fi
 
 # The templates live on the volume, so they need to be overidden on start-up,
 # otherwise they don't get updated when a new image is built.
+mkdir -p "$GITEA_CUSTOM/templates"
 cp -R /etc/templates/templates "$GITEA_CUSTOM/"
 
 # TODO: app.ini has the same problem, but it created only on the volume during

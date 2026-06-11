@@ -40,9 +40,6 @@ jobs:
       - name: Build images
         run: docker compose build
 
-      - name: Push versioned images
-        run: docker compose push
-
       - name: Publish Compose application
         run: docker compose publish -y "ghcr.io/cognitive-engineering-lab/repoquest-compose:$RQ_IMAGE_TAG"
 
