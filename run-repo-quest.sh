@@ -2,5 +2,5 @@
 
 DOCKER_HOST=$(docker context inspect --format '{{.Endpoints.docker.Host}}')
 export RQ_DOCKER_HOST=${DOCKER_HOST#unix://}
-docker compose --file oci://ghcr.io/cognitive-engineering-lab/repoquest-compose:v0.1.0 up --detach --yes
+docker compose --file oci://ghcr.io/cognitive-engineering-lab/repoquest-compose:v0.1.1 up --detach --yes
 open http://localhost:8085
