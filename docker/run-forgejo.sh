@@ -42,6 +42,9 @@ fi
 mkdir -p "$GITEA_CUSTOM/templates"
 cp -R /etc/templates/templates "$GITEA_CUSTOM/"
 
+mkdir -p "$GITEA_CUSTOM/public/assets"
+cp -R /etc/templates/public "$GITEA_CUSTOM/"
+
 # TODO: app.ini has the same problem, but it created only on the volume during
 # first run of docker-entrypoint.sh, so recreating it isn't as straightforward.
 

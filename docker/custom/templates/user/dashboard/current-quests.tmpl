@@ -1,89 +1,91 @@
 {{ if .IsSigned }}
-<h2>{{svg "octicon-tasklist" 24 "tw-text-placeholder-text"}} Current Quests</h2>
-<p class="help">These are the repositories for your quests.</p>
 <div>
-    <div id="active-quest-list" class="flex-list"></div>
-
-    <script>
-     function populateQuests() {
-         fetch('{{AppSubUrl}}/rq/quest')
-             .then(function(response) {
-                 if (!response.ok) {
-                     throw new Error("Error starting quest: {response.status} {response.body}");
-                 }
-                 return response.json();
-             })
-             .then(function(response) {
-                 const list = document.getElementById('active-quest-list');
-                 for (let key in response) {
-                     if (response.hasOwnProperty(key)) {
-                         const quest = response[key];
-                         const item = document.createElement('div');
-                         item.classList.add("flex-item");
-
-                         const icon = document.createElement('div');
-                         icon.insertAdjacentHTML("beforeend", '{{svg "octicon-repo" 16 "tw-text-placeholder-text"}}');
-                         icon.classList.add("flex-item-icon");
-
-                         const main = document.createElement('div');
-                         main.classList.add("flex-item-main");
-
-                         const header = document.createElement('div');
-                         header.classList.add("flex-item-header");
-
-                         const repoLink = document.createElement('a');
-                         repoLink.href = `{{AppSubUrl}}/${quest.owner}/${quest.repo}`;
-                         repoLink.textContent = quest.name;
-
-                         const title = document.createElement('div');
-                         title.classList.add("flex-item-title");
-
-                         const body = document.createElement('div');
-                         body.classList.add("flex-item-body");
-
-                         const trailing = document.createElement('div');
-                         trailing.classList.add("flex-item-trailing");
-
-                         const repoNameLink = document.createElement('a');
-                         repoNameLink.href = `{{AppSubUrl}}/${quest.owner}/${quest.repo}`;
-                         repoNameLink.textContent = `${quest.owner}/${quest.repo}`;
-                         body.append(repoNameLink);
-
-                         if (quest.taskInfo) {
-                             const issue = quest.taskInfo.issue;
-                             const issueLink = document.createElement('a');
-                             issueLink.href = `{{AppSubUrl}}/${issue.owner}/${issue.repo}/issues/${issue.number}`;
-                             issueLink.innerHTML = `{{svg "octicon-issue-opened" 16 "tw-text-placeholder-text"}} issue #${issue.number}`;
-
-                             const pr = quest.taskInfo.pr;
-                             const prLink = document.createElement('a');
-                             prLink.href = `{{AppSubUrl}}/${pr.owner}/${pr.repo}/pulls/${pr.number}`;
-                             prLink.innerHTML = `{{svg "octicon-git-pull-request" 16 "tw-text-placeholder-text"}} PR #${pr.number}`;
-
-                             trailing.append(issueLink, " ", prLink);
-                         }
-
-                         title.appendChild(repoLink);
-                         header.appendChild(title);
-                         header.appendChild(trailing);
-                         main.appendChild(header);
-                         main.appendChild(body);
-                         item.appendChild(icon);
-                         item.appendChild(main);
-                         list.appendChild(item);
-                     }
-                 }
-             });
-     }
-
-     // repopulate quests on every load,
-     // so that quests started by pressing a start quest button
-     // show when returning to the page via the back button
-     window.addEventListener("pageshow", (event) => {
-         const list = document.getElementById('active-quest-list');
-         list.innerHTML = "";
-         populateQuests()
-     });
-    </script>
+    <h2>{{svg "octicon-tasklist" 24 "tw-text-placeholder-text"}} Current Quests</h2>
+    <p class="help">These are the repositories for your quests.</p>
+    <div>
+        <div id="active-quest-list" class="flex-list"></div>
+    </div>
 </div>
+
+<script>
+    function populateQuests() {
+        fetch('{{AppSubUrl}}/rq/quest')
+            .then(function(response) {
+                if (!response.ok) {
+                    throw new Error("Error starting quest: {response.status} {response.body}");
+                }
+                return response.json();
+            })
+            .then(function(response) {
+                const list = document.getElementById('active-quest-list');
+                for (let key in response) {
+                    if (response.hasOwnProperty(key)) {
+                        const quest = response[key];
+                        const item = document.createElement('div');
+                        item.classList.add("flex-item");
+
+                        const icon = document.createElement('div');
+                        icon.insertAdjacentHTML("beforeend", '{{svg "octicon-repo" 16 "tw-text-placeholder-text"}}');
+                        icon.classList.add("flex-item-icon");
+
+                        const main = document.createElement('div');
+                        main.classList.add("flex-item-main");
+
+                        const header = document.createElement('div');
+                        header.classList.add("flex-item-header");
+
+                        const repoLink = document.createElement('a');
+                        repoLink.href = `{{AppSubUrl}}/${quest.owner}/${quest.repo}`;
+                        repoLink.textContent = quest.name;
+
+                        const title = document.createElement('div');
+                        title.classList.add("flex-item-title");
+
+                        const body = document.createElement('div');
+                        body.classList.add("flex-item-body");
+
+                        const trailing = document.createElement('div');
+                        trailing.classList.add("flex-item-trailing");
+
+                        const repoNameLink = document.createElement('a');
+                        repoNameLink.href = `{{AppSubUrl}}/${quest.owner}/${quest.repo}`;
+                        repoNameLink.textContent = `${quest.owner}/${quest.repo}`;
+                        body.append(repoNameLink);
+
+                        if (quest.taskInfo) {
+                            const issue = quest.taskInfo.issue;
+                            const issueLink = document.createElement('a');
+                            issueLink.href = `{{AppSubUrl}}/${issue.owner}/${issue.repo}/issues/${issue.number}`;
+                            issueLink.innerHTML = `{{svg "octicon-issue-opened" 16 "tw-text-placeholder-text"}} issue #${issue.number}`;
+
+                            const pr = quest.taskInfo.pr;
+                            const prLink = document.createElement('a');
+                            prLink.href = `{{AppSubUrl}}/${pr.owner}/${pr.repo}/pulls/${pr.number}`;
+                            prLink.innerHTML = `{{svg "octicon-git-pull-request" 16 "tw-text-placeholder-text"}} PR #${pr.number}`;
+
+                            trailing.append(issueLink, " ", prLink);
+                        }
+
+                        title.appendChild(repoLink);
+                        header.appendChild(title);
+                        header.appendChild(trailing);
+                        main.appendChild(header);
+                        main.appendChild(body);
+                        item.appendChild(icon);
+                        item.appendChild(main);
+                        list.appendChild(item);
+                    }
+                }
+            });
+    }
+
+    // repopulate quests on every load,
+    // so that quests started by pressing a start quest button
+    // show when returning to the page via the back button
+    window.addEventListener("pageshow", (event) => {
+        const list = document.getElementById('active-quest-list');
+        list.innerHTML = "";
+        populateQuests()
+    });
+</script>
 {{ end }}

@@ -4,13 +4,26 @@
     <div class="ui container flex-container">
         <div class="flex-container-main">
             {{template "base/alert" .}}
-            <div>
+            <div id="greetings">
+                <h1>RepoQuest</h1>
+                <p>Welcome to RepoQuest! To get started, upload a quest bundle on the right and click "Add quest".</p>
+            </div>
+            <div class="flex-container" id="quest-container">
                 {{template "user/dashboard/current-quests" .}}
 
                 {{template "user/dashboard/new-quest-form" .}}
             </div>
-		</div>
-		{{template "user/dashboard/repolist" .}}
+		</div>		
 	</div>
 </div>
+<style>
+    #greetings {
+        margin-bottom: 3rem;
+    }
+
+    #quest-container {
+        justify-content: space-between;
+        gap: 1rem;
+    }
+</style>
 {{template "base/footer" .}}

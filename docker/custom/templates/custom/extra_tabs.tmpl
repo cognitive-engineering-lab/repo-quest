@@ -1,12 +1,12 @@
 {{ if .IsSigned }}
 <style>
  #rq-sidebar {
-     position:fixed;
-     height: calc(100dvh - 2 * 49px);
+     position:relative;
+     height: calc(100dvh - 49px - 4rem);
      width: 20em;
-     top:49px;
-     right:0;
-     z-index:10;
+     margin-top: 2rem;
+     /*top:49px;
+     right:0;*/
      background: var(--color-box-body);
      border: solid 1px var(--color-secondary);
      border-right: none;
@@ -18,42 +18,23 @@
      -webkit-transition: width 0.2s ease, -webkit-transform 0.2s ease;
  }
 
- div.rq-sidebar-closed {
-     transform: translateX(17em);
- }
-
- div.rq-sidebar-closed .rq-sidebar-toggle {
-     transform: rotate(180deg);
- }
-
- #rq-sidebar-toggle {
-     position: absolute;
-     top: 50%;
-     width: 24px;
-     left: -24px;
-     background: var(--color-box-body);
-     border: solid 1px var(--color-secondary);
-     border-right: none;
-     border-radius: var(--border-radius);
-     height: 64px;
-     color: var(--color-text);
-     align-items: center;
-     justify-content: center;
- }
-
  #rq-error-notice {
      display: none;
      background: var(--color-error-bg);
      border: var(--color-error-border);
      color: var(--color-error-text);
  }
+
+#rq-page-container {
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+}
 </style>
 
-<div id="rq-sidebar" class="ui container rq-sidebar-open">
-    <button id="rq-sidebar-toggle">
-        {{svg "octicon-chevron-right" 16 "rq-sidebar-toggle"}}
-    </button>
-
+<script>
+    window.sidebarHtml = `
+<div id="rq-sidebar" class="ui container">
     <div class="ui top attached header">
         <h1 class="tw-break-anywhere" style="margin: 0px;">RepoQuest</h1>
     </div>
@@ -99,165 +80,11 @@
         <button onclick="clear_errors()">Clear all errors.</button>
     </div>
 </div>
+`;
 
-<script>
- function toggleSidebar(event) {
-     const sidebar = document.getElementById("rq-sidebar");
-     if (sidebar.classList.contains("rq-sidebar-open")) {
-         sidebar.classList.remove("rq-sidebar-open");
-         sidebar.classList.add("rq-sidebar-closed");
-     } else {
-         sidebar.classList.remove("rq-sidebar-closed");
-         sidebar.classList.add("rq-sidebar-open");
-     }
- }
-
- const toggle = document.getElementById("rq-sidebar-toggle");
- toggle.addEventListener("click", toggleSidebar);
+    window.appSubUrl = "{{AppSubUrl}}";
+    window.repoId = "{{.Repository.ID}}";
 </script>
-
-<script>
- function error_notice(msg) {
-     const notice = document.getElementById("rq-error-notice");
-     const list = document.getElementById("rq-error-list");
-
-     var entry = document.createElement('li');
-     entry.appendChild(document.createTextNode(msg));
-     list.appendChild(entry);
-
-     notice.style.display = "block";
-
-     throw new Error(msg);
- }
-
- function clear_errors() {
-     const notice = document.getElementById("rq-error-notice");
-     notice.style.display = "none";
-
-     fetch("{{AppSubUrl}}/rq/error/clear", {
-         method: "POST",
-     }).then(function(response) {
-         if (!response.ok) {
-             error_notice(`Error getting clearing errors: ${response.status} ${response.body}`);
-         }
-     });
- }
-
- {
-     let websocket = null;
-
-     function listen_errors() {
-         websocket = new WebSocket("{{AppSubUrl}}/rq/error/listen");
-         websocket.addEventListener("message", (e) => {
-             let errors = JSON.parse(e.data);
-             if (errors.length > 0) {
-                 error_notice(`Server has encountered errors: ${errors[errors.length-1]}`);
-             }
-         });
-     }
-
-     // For why we explicitly close and restart the socket, see
-     // https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API/Writing_WebSocket_client_applications#working_with_the_bfcache
-     window.addEventListener("pagehide", () => {
-         if (websocket) {
-             websocket.close();
-             websocket = null;
-             const list = document.getElementById("rq-error-list");
-             list.innerHTML = "";
-         }
-     });
-
-     window.addEventListener("pageshow", (event) => {
-         if (event.persisted) {
-             listen_errors()
-         }
-     });
-
-     // the server always responds with the current state of errors, so no need
-     // for a separate check.
-     listen_errors()
- }
-</script>
-
-<script>
- fetch("{{AppSubUrl}}/rq/quest/{{.Repository.ID}}/chapter/current", {
-     method: "GET",
-     headers: { "Content-Type": "application/json" },
- }).then(function(response) {
-     if (!response.ok) {
-         error_notice(`Error getting current quest chapter: ${response.status} ${response.body}`);
-     }
-     return response.json();
- }).then(function(response) {
-     const currentIssueLink = document.getElementById("current-task-link");
-     if (!response) {
-         currentIssueLink.remove();
-     } else {
-         const issue = response.task.issue;
-         currentIssueLink.href = `{{AppSubUrl}}/${issue.owner}/${issue.repo}/issues/${issue.number}`;
-         /* currentIssueLink.content = issue.title; */
-     }
-
-     const currentPrLink = document.getElementById("current-pr-link");
-     if (!response) {
-         currentPrLink.remove();
-     } else {
-         const pr = response.task.pr;
-         currentPrLink.href = `{{AppSubUrl}}/${pr.owner}/${pr.repo}/pulls/${pr.number}`;
-         /* currentPrLink.content = pr.title; */
-     }
-     const curTaskNameSpan = document.getElementById("current-task-name");
-     if (!response) {
-         curTaskNameSpan.remove();
-     } else {
-         curTaskNameSpan.innerHTML = response.taskName;
-     }
- });
-
-
- function createSolution(event) {
-     fetch("{{AppSubUrl}}/rq/quest/{{.Repository.ID}}/chapter/current/reference_solution", {
-         method: "POST",
-         headers: { "Content-Type": "application/json" },
-     }).then(function(response) {
-         if (!response.ok) {
-             error_notice(`Error starting quest: ${response.status} ${response.body}`);
-         }
-         return response.json();
-     }).then(function(pr) {
-         window.location.href = `{{AppSubUrl}}/${pr.owner}/${pr.repo}/pulls/${pr.number}`;
-     });
- }
-
- fetch("{{AppSubUrl}}/rq/quest/{{.Repository.ID}}/chapter/current/reference_solution", {
-     method: "GET",
-     headers: { "Content-Type": "application/json" },
- }).then(function(response) {
-     if (!response.ok) {
-         error_notice(`Error checking reference solution status: ${response.status} ${response.body}`);
-     }
-     return response.json();
- }).then(function(pr) {
-     const solnButtonSpan = document.getElementById("solution-button-span");
-     if (!pr) {
-         const button = document.createElement("a");
-         button.type = "button";
-         button.classList.add("ui");
-         button.classList.add("fluid");
-         button.classList.add("button");
-         button.addEventListener("click", createSolution);
-         button.append("Add Solution PR");
-         solnButtonSpan.replaceWith(button)
-     } else {
-         const link = document.createElement("a");
-         link.href = `{{AppSubUrl}}/${pr.owner}/${pr.repo}/pulls/${pr.number}`;
-         link.classList.add("text");
-         link.classList.add("flex-text-block");
-         link.append("Pull Request");
-         solnButtonSpan.replaceWith(link)
-     }
- });
- // <button class="right button ui">Add Solution</button>
-</script>
+<script src="/assets/rq-sidebar.js" defer></script>
 
 {{ end }}

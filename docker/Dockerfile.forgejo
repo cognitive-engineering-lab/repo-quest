@@ -11,6 +11,7 @@ USER git
 
 ADD --chmod=644 ./docker/app.ini /etc/templates/app.ini
 ADD --chown=644:644 ./docker/custom/templates "/etc/templates/templates"
+ADD --chown=644:644 ./docker/custom/public "/etc/templates/public"
 
 ENV RQ_PORT=8085
 
