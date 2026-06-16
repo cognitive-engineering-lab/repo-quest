@@ -1,0 +1,20 @@
+# CI-only override: build every image for both amd64 and arm64.
+#
+# Kept out of compose.yml because a multi-platform build cannot be loaded into
+# the local Docker image store, which would break `docker compose build` for
+# local development. Used via `docker compose -f compose.yml -f compose.ci.yml`.
+services:
+  forgejo:
+    build:
+      platforms: &platforms
+        - linux/amd64
+        - linux/arm64
+  forgejo-runner:
+    build:
+      platforms: *platforms
+  repoquest:
+    build:
+      platforms: *platforms
+  reverse-proxy:
+    build:
+      platforms: *platforms
