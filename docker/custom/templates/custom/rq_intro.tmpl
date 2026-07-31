@@ -1,0 +1,69 @@
+{{ if .IsSigned }}
+<style>
+ #rq-intro {
+     margin-bottom: 1rem;
+     font-size: 120%;
+ }
+
+ #rq-intro > summary {
+     cursor: pointer;
+     font-weight: var(--font-weight-medium);
+     list-style: none;
+ }
+
+ #rq-intro > summary::-webkit-details-marker {
+     display: none;
+ }
+
+ #rq-intro > summary .rq-intro-marker {
+     transition: transform 0.1s ease;
+ }
+
+ #rq-intro[open] > summary .rq-intro-marker {
+     transform: rotate(90deg);
+ }
+
+ #rq-intro-body {
+     padding: 2em 0;
+ }
+</style>
+
+<template id="rq-intro-template">
+    <details id="rq-intro" class="ui segment container">
+        <summary>
+            <span class="rq-intro-marker">{{svg "octicon-chevron-right" 16 "tw-text-placeholder-text"}}</span>
+            Intro to RepoQuest
+        </summary>
+        <div id="rq-intro-body">
+	    <p>
+		RepoQuest teaches you programming concepts through hands-on exercises.
+		Your quest takes place in a Git repository.
+		You will learn by contributing to this repo, and each contribution will build on the previous one.
+	    </p>
+	    <p>
+		You're running a Git forge called <a href="https://forgejo.org/">Forgejo</a>.
+		Forgejo is like GitHub, but it can run entirely on your computer.
+		You will interact with the RepoQuest forge like you would any forge: by cloning, committing, pushing, and making pull requests.
+		Try cloning this repo to a convenient directory on your computer by running:
+	    </p>
+	    <pre><code>git clone <span class="rq-intro-clone-url js-clone-url"></span></code></pre>
+	    <p>
+		On your quest, you will be given a sequence of challenges, represented as issues.
+		Each issue gets its own branch and pull request.
+		You will solve the issue on its branch, and merge its pull request when you're ready.
+		RepoQuest will automatically open the next issue until you've completed the quest.
+		You can see the current challenge in the sidebar on the right.
+	    </p>
+	    <p>
+		Good luck and have fun!
+	    </p>
+            <p>
+                <a class="rq-intro-issue-link ui button primary" href="#">
+		    Go to your first issue
+		</a>
+            </p>
+        </div>
+    </details>
+</template>
+<script src="/assets/rq-intro.js" defer></script>
+{{ end }}

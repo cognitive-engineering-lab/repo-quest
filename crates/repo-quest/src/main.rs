@@ -9,7 +9,7 @@ use std::{
     path::{self, Path, PathBuf},
 };
 
-use crate::test_cmd::{TestChapterSelection, test_quest};
+use crate::test_cmd::{test_quest, TestChapterSelection};
 
 use anyhow::{Context as _, Result};
 use clap::{Parser, ValueEnum};

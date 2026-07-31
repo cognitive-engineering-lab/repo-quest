@@ -10,7 +10,10 @@
                     <input name="quest-bundle" type="file" accept=".tar.gz,.tgz" />
                 </label>
             </fieldset>
-            <input class="ui button primary" type="submit" value="Add quest" />
+            <div class="tw-flex tw-items-center tw-gap-2">
+                <input class="ui button primary" type="submit" value="Start quest" />
+                <span id="install-quest-spinner" class="is-loading loading-icon-2px tw-hidden" style="width: 1.5rem; height: 1.5rem;"></span>
+            </div>
         </form>
     </div>
 </div>
@@ -18,19 +21,25 @@
 <script>
  async function submitInstallQuest(event) {
      event.preventDefault();
+     const spinner = document.getElementById("install-quest-spinner");
      event.submitter.disabled = true;
-     const formData = new FormData(event.target);
-     let response = await fetch("{{AppSubUrl}}/rq/quest_definition", {
-         method: "POST",
-         body: formData,
-     });
-     if (!response.ok) {
-        throw new Error(`Error starting quest: ${response.status} ${response.body}`);
+     spinner.classList.remove("tw-hidden");
+     try {
+         const formData = new FormData(event.target);
+         let response = await fetch("{{AppSubUrl}}/rq/quest_definition", {
+             method: "POST",
+             body: formData,
+         });
+         if (!response.ok) {
+            throw new Error(`Error starting quest: ${response.status} ${response.body}`);
+         }
+         let json = await response.json();
+         await submitStartQuest("{{.SignedUser.Name}}", json.id);
+         event.target.reset();
+     } finally {
+         event.submitter.disabled = false;
+         spinner.classList.add("tw-hidden");
      }
-     let json = await response.json();
-     await submitStartQuest("{{.SignedUser.Name}}", json.id);
-     event.submitter.disabled = false;     
-     event.target.reset();
  }
 
  async function submitStartQuest(username, questTemplateId) {
@@ -43,13 +52,9 @@
     if (!response.ok) {
         throw new Error(`Error starting quest: ${response.status} ${response.body}`);
     }
-    let json = await response.json();     
-    if (json.task) {
-        const issue = json.task.issue;
-        window.location.href = `{{AppSubUrl}}/${issue.owner}/${issue.repo}/issues/${issue.number}`;
-    } else {
-        window.location.href = json.repo_url;
-    }
+    let json = await response.json();
+    const repoPath = new URL(json.repoUrl).pathname;
+    window.location.href = `${repoPath}?rq_intro=1`;
  }
 
  // Register submit handler for adding quest definition

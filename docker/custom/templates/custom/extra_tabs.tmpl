@@ -43,7 +43,7 @@
             <span class="text flex-text-block">
                 <strong>
                     {{svg "octicon-tasklist" 16 "tw-text-placeholder-text"}}
-                    Current Task
+                    Current Challenge
                 </strong>
             </span>
         </div>
@@ -86,5 +86,7 @@
     window.repoId = "{{.Repository.ID}}";
 </script>
 <script src="/assets/rq-sidebar.js" defer></script>
+
+{{if eq .Link .RepoLink}}{{template "custom/rq_intro" .}}{{end}}
 
 {{ end }}
