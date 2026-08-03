@@ -212,9 +212,19 @@ impl ForgejoBackend {
         let pr_number = pr.number.ok_or(anyhow!("No PR id."))?;
         debug!("Created pull request {username}/{repo_name}/{pr_number}.");
 
+        let repo_url = self
+            .forgejo
+            .repo_get(&username, &repo_name)
+            .await
+            .with_context(|| format!("Couldn't get repo {username}/{repo_name}."))?
+            .html_url
+            .with_context(|| format!("Repo {username}/{repo_name} has no URL."))?;
+        task_info = task_info.insert_str("repo-url", repo_url);
+        task_info = task_info.insert_str("repo-name", repo_name.clone());
         task_info = task_info.insert_map(&template.task_id, |info| {
             info.insert_str("pr", format!("#{pr_number}"))
                 .insert_str("issue", format!("#{issue_number}"))
+                .insert_str("branch", template.scaffolding.0.clone())
         });
 
         let data = task_info.build();

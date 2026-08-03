@@ -60,7 +60,7 @@ pub fn bundle(quest: QuestDefinition, output: &Path) -> Result<()> {
         },
     ) in quest.chapters.into_iter().enumerate()
     {
-        let scaffold_branch_name = format!("{label}-scaffold");
+        let scaffold_branch_name = label.clone();
         let solution_branch_name = format!("{label}-solution");
 
         let scaffold_commit_kind = CommitKind::Scaffold {

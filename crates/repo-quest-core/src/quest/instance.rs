@@ -186,7 +186,7 @@ impl QuestInstanceIndex {
     ///
     /// Fails if a quest with the given id already exists.
     pub fn insert_quest(&mut self, id: i64, quest: &QuestMetadata) -> Result<()> {
-        let dir_name = format!("{}-{}", quest.definition_id, &id.to_string());
+        let dir_name = format!("{}-{id}", quest.definition_id);
         match self.index.entry(id) {
             Entry::Occupied(_) => bail!("Quest with given id {id} already exists."),
             Entry::Vacant(vacant_entry) => vacant_entry.insert(dir_name.into()),

@@ -125,7 +125,7 @@ impl GitRepo {
                 "-c",
                 &format!("user.name={name}"),
                 "-c",
-                &format!("user.email={email}",),
+                &format!("user.email={email}"),
             ]);
         }
         cmd.arg("commit")

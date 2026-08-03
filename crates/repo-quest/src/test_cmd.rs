@@ -133,13 +133,14 @@ fn run_test(cmd: &[String], commit: Commit) -> Result<bool> {
     let mut cmd = std::process::Command::new(exe);
     cmd.args(args);
     cmd.current_dir(&commit.path);
-    let res = cmd.output().with_context(|| {
+    let cmd_result = cmd.output().with_context(|| {
         format!(
             "Failed to run test command {cmd:?} for commit `{}`",
             commit.path.display()
         )
     })?;
-    let res = TestResult::from((commit, res.status));
-    println!("{res}");
-    Ok(res.expected)
+    log::debug!("{}", String::from_utf8(cmd_result.stderr)?);
+    let test_result = TestResult::from((commit, cmd_result.status));
+    println!("{test_result}");
+    Ok(test_result.expected)
 }

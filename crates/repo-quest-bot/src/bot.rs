@@ -581,13 +581,10 @@ async fn create_reference_solution(
         // TODO: Figure out how to open the PR for various circumstances, such as
         // for a previously-completed chapter where the scaffolding branch has been
         // deleted.
-        let remote_solution_branch = format!(
-            "refs/remotes/quest/{}",
-            &requested_task.reference_solution.0
-        );
+        let remote_solution_branch =
+            format!("refs/remotes/quest/{}", requested_task.reference_solution.0);
         let local_solution_branch = &requested_task.reference_solution.0;
-        let remote_scaffold_branch =
-            format!("refs/remotes/quest/{}", &requested_task.scaffolding.0);
+        let remote_scaffold_branch = format!("refs/remotes/quest/{}", requested_task.scaffolding.0);
         let local_scaffold_branch = &requested_task.scaffolding.0;
 
         let initial_scaffold_hash = &requested_task_instance.initial_scaffolding_hash;
@@ -600,7 +597,7 @@ async fn create_reference_solution(
 
         let pr_title = format!(
             "Reference solution for {}",
-            &requested_task.issue_template.title,
+            requested_task.issue_template.title,
         );
         let pr = forgejo
             .create_pr(
@@ -694,7 +691,7 @@ async fn get_chapters(
         .with_context(|| {
             format!(
                 "No quest template id {}, for quest {quest_id}.",
-                &quest.definition_id
+                quest.definition_id
             )
         })?
         .metadata
@@ -797,8 +794,8 @@ pub async fn set_current_chapter(
     {
         return Err(anyhow!(
             "Pull request {}/{}#{} not merged.",
-            &quest.owner,
-            &quest.repo,
+            quest.owner,
+            quest.repo,
             task.pr.number
         )
         .into());
