@@ -5,15 +5,21 @@
         <div class="flex-container-main">
             {{template "base/alert" .}}
             <div id="greetings">
-                <h1>RepoQuest</h1>
-                <p>Welcome to RepoQuest! To get started, upload a quest bundle on the right and click "Add quest".</p>
+                <h1>
+		    <img class="rq-logo" src="/assets/rq-logo.svg" />
+		    RepoQuest
+		</h1>
+                <p>
+		    Welcome to RepoQuest, a platform for interactive tutorials about software development.
+		    To get started, upload a quest bundle on the right and click "Start quest".
+		</p>
             </div>
             <div class="flex-container" id="quest-container">
                 {{template "user/dashboard/current-quests" .}}
 
                 {{template "user/dashboard/new-quest-form" .}}
             </div>
-		</div>		
+		</div>
 	</div>
 </div>
 <style>

@@ -1,0 +1,107 @@
+<style>
+ #rq-sidebar {
+     position:relative;
+     /* height: calc(100dvh - 49px - 4rem); */
+     width: 20em;
+     margin-top: 1rem;
+     /*border-right: none;*/
+     margin-left: 0;
+     margin-right: 0;
+     display: flex;
+     flex-direction: column;
+     padding-right: env(safe-area-inset-right, 0);
+     transition: width 0.2s ease, transform 0.2s ease;
+     -webkit-transition: width 0.2s ease, -webkit-transform 0.2s ease;
+ }
+
+ #rq-error-notice {
+     display: none;
+     background: var(--color-error-bg);
+     border: var(--color-error-border);
+     color: var(--color-error-text);
+ }
+
+ #rq-page-container {
+     display: flex;
+     justify-content: center;
+     gap: 2rem;
+ }
+</style>
+
+<template id="rq-sidebar-template">
+    <div id="rq-sidebar" class="ui container">
+	<div class="rq-logo-badge">
+	    <img class="rq-logo" src="/assets/rq-logo.svg" />
+	</div>
+        <div class="ui top attached header">
+            <h2 class="tw-break-anywhere" style="margin: 0px;">
+		RepoQuest
+	    </h2>
+        </div>
+        <div class="ui attached segment">
+            <div class="ui floating">
+		<h3>
+                    {{svg "octicon-book" 16 "tw-text-placeholder-text"}}
+                    Your Quest
+		</h3>
+
+	    </div>
+            <div class="ui list">
+                <strong>Title: </strong><span id="current-quest-title"></span>
+            </div>
+
+	</div>
+        <div class="ui attached segment">
+            <div class="ui floating">
+                <h3>
+                    {{svg "octicon-tasklist" 16 "tw-text-placeholder-text"}}
+                    Current Challenge
+                </h3>
+            </div>
+            <div class="ui list">
+                <strong>Description: </strong><span id="current-task-name"></span>
+            </div>
+	    <div class="ui list">
+                <strong>Branch: </strong><code><a href="" id="current-branch-name"></a></code>
+            </div>
+
+            <div class="ui list">
+                <span><a id="current-task-link">
+		    {{svg "octicon-issue-opened" 16 "tw-text-placeholder-text"}}
+		    Issue
+		</a></span> |
+		<span><a id="current-pr-link">
+		    {{svg "octicon-git-pull-request" 16 "tw-text-placeholder-text"}}
+		    Pull Request
+		</a></span>
+            </div>
+            <div class="divider"></div>
+            <div class="ui floating">
+                <h3>
+                    {{svg "octicon-question" 16 "tw-text-placeholder-text"}}
+                    Quest Help
+                </h3>
+                </span>
+            </div>
+            <div class="tw-mt-2">
+                <span id="solution-button-span"></span>
+            </div>
+        </div>
+        <div id="rq-error-notice" class="ui attached segment">
+            <h3>Error</h3>
+            RepoQuest has encountered errors. Please <a
+							 href="https://github.com/cognitive-engineering-lab/repo-quest/issues/new">submit
+		a bug report</a> that includes the quests you have installed and <a
+										     href="{{AppSubUrl}}/rq/error/log">the server error messages</a> and any error messages below.
+            <ul id="rq-error-list">
+            </ul>
+            <button id="rq-error-clear">Clear all errors.</button>
+        </div>
+    </div>
+</template>
+
+<script>
+ window.appSubUrl = "{{AppSubUrl}}";
+ window.repoId = "{{.Repository.ID}}";
+</script>
+<script src="/assets/rq-sidebar.js" defer></script>

@@ -1,5 +1,45 @@
 <style>
  .chroma .go {
-   color: black;
+     color: black;
+ }
+
+ .ui.segment.rq-border {
+     background-image:
+	 linear-gradient(var(--color-box-body), var(--color-box-body)),
+	 linear-gradient(90deg, #2DA44E, #8BC34A, #4FC3F7, #1976D2);
+     background-origin: border-box;
+     background-clip: padding-box, border-box;
+     border-color: transparent;
+     border-size: 1px;
+     border-radius: var(--border-radius);
+ }
+
+ .ui.segment.rq-callout {
+     margin-bottom: 1rem;
+     font-size: 120%;
+     position: relative;
+ }
+
+ .ui.segment .rq-callout-header {
+     font-weight: var(--font-weight-medium);
+ }
+
+ .rq-logo-badge {
+     position: absolute;
+     top: 1em;
+     right: 1em;
+     z-index: 100;
+ }
+
+ .rq-logo {
+     height: 30px;
+     vertical-align: middle;
+ }
+
+ h1, h2, h3 {
+     > svg {
+	 vertical-align: center !important;
+     }
  }
 </style>
+<script src="/assets/rq-prelude.js" defer></script>

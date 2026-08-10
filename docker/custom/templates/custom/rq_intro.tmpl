@@ -1,13 +1,7 @@
 {{ if .IsSigned }}
 <style>
- #rq-intro {
-     margin-bottom: 1rem;
-     font-size: 120%;
- }
-
  #rq-intro > summary {
      cursor: pointer;
-     font-weight: var(--font-weight-medium);
      list-style: none;
  }
 
@@ -24,13 +18,16 @@
  }
 
  #rq-intro-body {
-     padding: 2em 0;
+     padding: 1em 0;
  }
 </style>
 
 <template id="rq-intro-template">
-    <details id="rq-intro" class="ui segment container">
-        <summary>
+    <details id="rq-intro" class="rq-callout rq-border ui segment container">
+	<div class="rq-logo-badge">
+	    <img class="rq-logo" src="/assets/rq-logo.svg" />
+	</div>
+        <summary class="rq-callout-header">
             <span class="rq-intro-marker">{{svg "octicon-chevron-right" 16 "tw-text-placeholder-text"}}</span>
             Intro to RepoQuest
         </summary>

@@ -33,16 +33,15 @@ use tower_http::{cors, normalize_path::NormalizePathLayer};
 use tower_layer::Layer as _;
 use url::Url;
 
+use crate::forgejo::ForgejoBackend;
 use repo_quest_core::{
     BOT_AUTHOR, fs,
     git::GitRepo,
     quest::{
-        definition::{QuestDefinition, QuestDefinitionIndex},
+        definition::{QuestDefinition, QuestDefinitionIndex, QuestDefinitionMetadata},
         instance::{PullRequest, Quest, QuestInstanceIndex, QuestMetadata, Task},
     },
 };
-
-use crate::forgejo::ForgejoBackend;
 
 /// The overall state of `ReqoQuest`. All of the state is loaded into memory at
 /// program startup. Unless a user has many quest definitions or very many quest
@@ -200,6 +199,7 @@ pub fn new(
         //
         // POST: Creates a quest and returns the ID of the quest on success.
         .route("/quest", get(get_quests).post(start_quest))
+        .route("/quest/{questId}", get(get_quest))
         // GET: Gets the list of chapters for a quest and the corresponding
         // issue IDs and PR IDs, if there are any. The chapter ID is the index
         // in the list and if there are no issue IDs or PRs, the chapter hasn't
@@ -666,6 +666,14 @@ struct NextChapterBody {
     chapter_number: usize,
 }
 
+/// Lists every chapter of a quest, where instantiated chapters are `Some` and
+/// not-yet-started chapters are `None`.
+fn chapter_list(tasks: &[Task], task_templates_len: usize) -> Vec<Option<Task>> {
+    let mut chapters = tasks.iter().cloned().map(Some).collect::<Vec<_>>();
+    chapters.resize(task_templates_len.max(chapters.len()), None);
+    chapters
+}
+
 async fn get_chapters(
     State(state): State<Arc<Mutex<AppState>>>,
     Path(quest_id): Path<i64>,
@@ -677,13 +685,6 @@ async fn get_chapters(
     let quest = quests
         .metadata(quest_id)
         .with_context(|| format!("No quest with id {quest_id}."))?;
-
-    let mut tasks = quest
-        .tasks
-        .iter()
-        .cloned()
-        .map(Some)
-        .collect::<Vec<Option<Task>>>();
 
     let quest_definitions = &state.quest_definitions;
     let task_templates_len = quest_definitions
@@ -698,9 +699,32 @@ async fn get_chapters(
         .tasks
         .len();
 
-    tasks.extend((1..task_templates_len - tasks.len()).map(|_| None));
+    Ok(Json(chapter_list(&quest.tasks, task_templates_len)))
+}
 
-    Ok(Json(tasks))
+async fn get_quest(
+    State(state): State<Arc<Mutex<AppState>>>,
+    Path(quest_id): Path<i64>,
+) -> Result<Json<QuestDefinitionMetadata>> {
+    let state = state.lock().await;
+
+    let quests = &state.quest_instances;
+
+    let quest = quests
+        .metadata(quest_id)
+        .with_context(|| format!("No quest with id {quest_id}."))?;
+
+    let quest_definitions = &state.quest_definitions;
+    let quest_definition = quest_definitions
+        .definition(quest.definition_id)
+        .with_context(|| {
+            format!(
+                "No quest template id {}, for quest {quest_id}.",
+                quest.definition_id
+            )
+        })?;
+
+    Ok(Json(quest_definition.metadata.clone()))
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -708,6 +732,7 @@ async fn get_chapters(
 struct ChapterInfo {
     id: usize,
     task_name: String,
+    branch_name: String,
     task: Task,
 }
 
@@ -730,8 +755,10 @@ async fn get_current_chapter(
         let cur_task = &quest.tasks[cur_task_id];
         let cur_task_definition = &quest_definition.metadata.tasks[cur_task_id];
         let task_name = cur_task_definition.issue_template.title.clone();
+        let branch_name = cur_task_definition.scaffolding.0.clone();
         Some(ChapterInfo {
             id: cur_task_id,
+            branch_name,
             task_name,
             task: cur_task.clone(),
         })
@@ -930,4 +957,64 @@ async fn clear_errors(State(state): State<Arc<Mutex<AppState>>>) -> Result<()> {
     let mut state = state.lock().await;
     state.errors.clear();
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use repo_quest_core::quest::instance::Issue;
+
+    use super::*;
+
+    fn task(number: i64) -> Task {
+        Task {
+            issue: Issue {
+                owner: "owner".into(),
+                repo: "repo".into(),
+                number,
+            },
+            pr: PullRequest {
+                owner: "owner".into(),
+                repo: "repo".into(),
+                number: number + 1,
+            },
+            initial_scaffolding_hash: "deadbeef".into(),
+            reference_solution: None,
+        }
+    }
+
+    fn shape(chapters: &[Option<Task>]) -> Vec<Option<i64>> {
+        chapters
+            .iter()
+            .map(|task| task.as_ref().map(|task| task.issue.number))
+            .collect()
+    }
+
+    #[test]
+    fn chapter_list_pads_unstarted_chapters() {
+        let tasks = [task(0), task(1)];
+        assert_eq!(
+            shape(&chapter_list(&tasks, 4)),
+            vec![Some(0), Some(1), None, None]
+        );
+    }
+
+    #[test]
+    fn chapter_list_pads_nothing_when_all_chapters_started() {
+        let tasks = [task(0), task(1)];
+        assert_eq!(shape(&chapter_list(&tasks, 2)), vec![Some(0), Some(1)]);
+    }
+
+    #[test]
+    fn chapter_list_pads_every_chapter_when_quest_unstarted() {
+        assert_eq!(shape(&chapter_list(&[], 3)), vec![None, None, None]);
+    }
+
+    #[test]
+    fn chapter_list_keeps_extra_tasks() {
+        let tasks = [task(0), task(1), task(2)];
+        assert_eq!(
+            shape(&chapter_list(&tasks, 1)),
+            vec![Some(0), Some(1), Some(2)]
+        );
+    }
 }

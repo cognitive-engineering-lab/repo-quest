@@ -21,11 +21,10 @@ compose configuration.
 
 ### Source code organization
 
-One binary (`repo-quest`) is the tool for authoring quests. The other
-(`repo-quest-bot`) is the service that runs to support the customized version of
-Forgejo. For historical reasons, the Rust code is organized so that the
-code specific to the authoring tool is contained in the directory for its binary
-while the library contains both the share code and the bot-specific code.
+The Rust code is a Cargo workspace with three crates. One binary (`repo-quest`)
+is the tool for authoring quests. The other (`repo-quest-bot`) is the service
+that runs to support the customized version of Forgejo. The `repo-quest-core`
+library contains the code shared between the two binaries.
 
 There are two things called "quest definitions" in the source. One corresponds
 to the bundled quest. The other corresponds to the authoring tool. The two

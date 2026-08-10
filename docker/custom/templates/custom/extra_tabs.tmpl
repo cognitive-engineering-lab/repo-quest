@@ -1,92 +1,14 @@
 {{ if .IsSigned }}
-<style>
- #rq-sidebar {
-     position:relative;
-     height: calc(100dvh - 49px - 4rem);
-     width: 20em;
-     margin-top: 2rem;
-     /*top:49px;
-     right:0;*/
-     background: var(--color-box-body);
-     border: solid 1px var(--color-secondary);
-     border-right: none;
-     border-radius: var(--border-radius);
-     display: flex;
-     flex-direction: column;
-     padding-right: env(safe-area-inset-right, 0);
-     transition: width 0.2s ease, transform 0.2s ease;
-     -webkit-transition: width 0.2s ease, -webkit-transform 0.2s ease;
- }
+{{template "custom/rq_sidebar" .}}
 
- #rq-error-notice {
-     display: none;
-     background: var(--color-error-bg);
-     border: var(--color-error-border);
-     color: var(--color-error-text);
- }
+{{if eq .Link .RepoLink}}
+{{template "custom/rq_intro" .}}
+{{end}}
 
-#rq-page-container {
-    display: flex;
-    justify-content: center;
-    gap: 2rem;
-}
-</style>
-
-<script>
-    window.sidebarHtml = `
-<div id="rq-sidebar" class="ui container">
-    <div class="ui top attached header">
-        <h1 class="tw-break-anywhere" style="margin: 0px;">RepoQuest</h1>
-    </div>
-    <div class="ui attached segment">
-        <div class="ui floating">
-            <span class="text flex-text-block">
-                <strong>
-                    {{svg "octicon-tasklist" 16 "tw-text-placeholder-text"}}
-                    Current Challenge
-                </strong>
-            </span>
-        </div>
-        <div class="ui list">
-            <span id="current-task-name"></span>
-        </div>
-        <div class="ui list">
-            <span><a id="current-task-link">Issue</a></span>
-        </div>
-        <div class="ui list">
-            <span><a id="current-pr-link">Pull Request</a></span>
-        </div>
-        <div class="divider"></div>
-        <div class="ui floating">
-            <span class="text flex-text-block">
-                <strong>
-                    {{svg "octicon-git-pull-request" 16 "tw-text-placeholder-text"}}
-                    Reference Solution
-                </strong>
-            </span>
-        </div>
-        <div class="tw-mt-2">
-            <span id="solution-button-span"></span>
-        </div>
-    </div>
-    <div id="rq-error-notice" class="ui attached segment">
-        <h3>Error</h3>
-        RepoQuest has encountered errors. Please <a
-        href="https://github.com/cognitive-engineering-lab/repo-quest/issues/new">submit
-        a bug report</a> that includes the quests you have installed and <a
-        href="{{AppSubUrl}}/rq/error/log">the server error messages</a> and any error messages below.
-        <ul id="rq-error-list">
-        </ul>
-        <button onclick="clear_errors()">Clear all errors.</button>
-    </div>
-</div>
-`;
-
-    window.appSubUrl = "{{AppSubUrl}}";
-    window.repoId = "{{.Repository.ID}}";
-</script>
-<script src="/assets/rq-sidebar.js" defer></script>
-
-{{if eq .Link .RepoLink}}{{template "custom/rq_intro" .}}{{end}}
+{{if .Issue}}
+{{if and .Issue.IsPull .HasMerged}}
+{{template "custom/rq_next" .}}
+{{end}}
+{{end}}
 
 {{ end }}

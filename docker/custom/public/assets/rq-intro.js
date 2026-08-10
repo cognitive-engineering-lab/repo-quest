@@ -32,43 +32,34 @@ function fillCloneCommand(intro) {
 
     const url = cloneUrl();
     if (url) {
-	console.log("FUCK", url);
 	target.textContent = url;
     } else {
 	target.closest("pre").remove();
     }
 }
 
-async function loadIntroIssueLink(intro) {
+function setIntroIssueLink(intro, chapter) {
     const link = intro.querySelector("a.rq-intro-issue-link");
     if (!link) {
 	throw new Error("Internal error: missing link in template");
     }
 
-    const response = await fetch(
-	`${window.appSubUrl}/rq/quest/${window.repoId}/chapter/current`,
-	{
-	    method: "GET",
-	    headers: { "Content-Type": "application/json" },
-	},
-    );
-    if (!response.ok) {
-	throw new Error(
-	    `Error getting current quest chapter: ${response.status} ${response.body}`,
-	);
-    }
-
-    const chapter = await response.json();
     const issue = chapter.task.issue;
     link.href = `${window.appSubUrl}/${issue.owner}/${issue.repo}/issues/${issue.number}`;
 }
 
-function insertIntro() {
+async function insertIntro() {
     const container = document.querySelector(
 	".page-content.repository",
     );
     const template = document.getElementById("rq-intro-template");
     if (!container || !template) {
+	return;
+    }
+
+    // The intro is only relevant while the learner is on the first chapter.
+    const chapter = await getJson(`/rq/quest/${window.repoId}/chapter/current`);
+    if (!chapter || chapter.id !== 0) {
 	return;
     }
 
@@ -80,7 +71,7 @@ function insertIntro() {
     intro.addEventListener("toggle", () => setIntroCollapsed(!intro.open));
 
     fillCloneCommand(intro);
-    loadIntroIssueLink(intro);
+    setIntroIssueLink(intro, chapter);
 }
 
 insertIntro();

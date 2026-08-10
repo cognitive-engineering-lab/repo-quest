@@ -1,0 +1,52 @@
+{{ if .IsSigned }}
+<style>
+ .rq-next-body {
+     padding: 1em 0 0 0;
+ }
+</style>
+
+<template id="rq-next-template">
+    <div id="rq-next" class="rq-callout rq-border ui segment container">
+	<div class="rq-logo-badge">
+	    <img class="rq-logo" src="/assets/rq-logo.svg" />
+	</div>
+        <div class="rq-callout-header">
+            {{svg "octicon-git-merge" 16 "tw-text-placeholder-text"}}
+            Challenge complete
+        </div>
+        <div class="rq-next-body" data-rq-next-state="pending" hidden>
+            <p>
+                <span class="is-loading loading-icon-2px" style="width: 1.5rem; height: 1.5rem; display: inline-block; vertical-align: middle;"></span>
+                RepoQuest is preparing your next challenge&hellip;
+            </p>
+        </div>
+        <div class="rq-next-body" data-rq-next-state="ready" hidden>
+            <p>
+                Your next challenge is ready:
+                <strong class="rq-next-name"></strong>
+            </p>
+            <p>
+                <a class="rq-next-issue-link ui button primary" href="#">
+                    Go to issue
+                </a>
+            </p>
+        </div>
+        <div class="rq-next-body" data-rq-next-state="done" hidden>
+            <p>
+                Congratulations, your quest is complete. You have completed every challenge.
+            </p>
+        </div>
+        <div class="rq-next-body" data-rq-next-state="timeout" hidden>
+            <p>
+                RepoQuest is still preparing your next challenge.
+                <a href="">Reload this page</a>
+                to check again.
+            </p>
+        </div>
+    </div>
+</template>
+<script>
+    window.rqPrNumber = {{.Issue.Index}};
+</script>
+<script src="/assets/rq-next.js" defer></script>
+{{ end }}
