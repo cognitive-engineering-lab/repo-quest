@@ -214,6 +214,12 @@ pub fn new(
             "/quest/{questId}/chapter/current",
             get(get_current_chapter).post(post_set_current_chapter),
         )
+        // POST: Jumps ahead to the given chapter, resetting the quest repo to
+        // the reference solution for the preceding chapter.
+        .route(
+            "/quest/{questId}/skip/{chapterId}",
+            post(post_skip_to_chapter),
+        )
         // GET: Gets the PR ID for the reference solution for the given chapter
         // if there is one, or whether there is one available (if there isn't).
         //
@@ -393,7 +399,7 @@ async fn get_quests(
             name: quest_defn.metadata.title.clone(),
             owner: quest.owner.clone(),
             repo: quest.repo.clone(),
-            task_info: quest.tasks.last().cloned(),
+            task_info: quest.current_task().cloned(),
         };
         all_quests_info.insert(id, quest_info);
     }
@@ -440,12 +446,12 @@ async fn start_quest(
     let repo_url = forgejo_repo.html_url.context("Forgejo repo has no url.")?;
 
     // define quest instance
-    let quest = QuestMetadata {
-        definition_id: query.quest_template_id,
-        owner: query.username,
-        repo: forgejo_repo.name.context("No repo name")?,
-        tasks: Vec::new(),
-    };
+    let quest = QuestMetadata::new(
+        query.quest_template_id,
+        query.username,
+        forgejo_repo.name.context("No repo name")?,
+        template.tasks.len(),
+    );
 
     // write quest to file and add to index
     debug!("Storing quest metadata.");
@@ -555,14 +561,16 @@ async fn create_reference_solution(
 
     let quest_definition = defns.definition(quest_definition_id)?;
 
-    let current_chapter = quest.tasks.len().checked_sub(1);
     let chapter_id = chapter_id
-        .or(current_chapter)
+        .or(quest.current_chapter)
         .context("No chapter for which to get reference solution.")?;
 
+    // Taken before the mutable borrow below, which covers all of `quest`.
+    let owner = quest.owner.clone();
+    let repo = quest.repo.clone();
+
     let requested_task_instance = quest
-        .tasks
-        .get_mut(chapter_id)
+        .task_mut(chapter_id)
         .with_context(|| format!("Quest instance {quest_id} has no chapter {chapter_id}."))?;
 
     let pr = if let Some(pr) = &requested_task_instance.reference_solution {
@@ -601,8 +609,8 @@ async fn create_reference_solution(
         );
         let pr = forgejo
             .create_pr(
-                quest.owner.clone(),
-                quest.repo.clone(),
+                owner,
+                repo,
                 local_scaffold_branch.clone(),
                 local_solution_branch.clone(),
                 pr_title,
@@ -644,17 +652,12 @@ async fn get_reference_solution(
     } = query;
 
     let quest = state.quest_instances.metadata(quest_id)?;
-    let chapter_id = chapter_id.unwrap_or(
-        quest
-            .tasks
-            .len()
-            .checked_sub(1)
-            .with_context(|| format!("Quest instance {quest_id} has no chapters."))?,
-    );
+    let chapter_id = chapter_id.or(quest.current_chapter).with_context(|| {
+        format!("Quest instance {quest_id} has no chapter for which to get a reference solution.")
+    })?;
 
     let task = quest
-        .tasks
-        .get(chapter_id)
+        .task(chapter_id)
         .with_context(|| format!("Quest instance {quest_id} has no chapter {chapter_id}."))?;
 
     Ok(Json(task.reference_solution.clone()))
@@ -666,40 +669,18 @@ struct NextChapterBody {
     chapter_number: usize,
 }
 
-/// Lists every chapter of a quest, where instantiated chapters are `Some` and
-/// not-yet-started chapters are `None`.
-fn chapter_list(tasks: &[Task], task_templates_len: usize) -> Vec<Option<Task>> {
-    let mut chapters = tasks.iter().cloned().map(Some).collect::<Vec<_>>();
-    chapters.resize(task_templates_len.max(chapters.len()), None);
-    chapters
-}
-
 async fn get_chapters(
     State(state): State<Arc<Mutex<AppState>>>,
     Path(quest_id): Path<i64>,
 ) -> Result<Json<Vec<Option<Task>>>> {
     let state = state.lock().await;
 
-    let quests = &state.quest_instances;
-
-    let quest = quests
+    let quest = state
+        .quest_instances
         .metadata(quest_id)
         .with_context(|| format!("No quest with id {quest_id}."))?;
 
-    let quest_definitions = &state.quest_definitions;
-    let task_templates_len = quest_definitions
-        .definition(quest.definition_id)
-        .with_context(|| {
-            format!(
-                "No quest template id {}, for quest {quest_id}.",
-                quest.definition_id
-            )
-        })?
-        .metadata
-        .tasks
-        .len();
-
-    Ok(Json(chapter_list(&quest.tasks, task_templates_len)))
+    Ok(Json(quest.tasks))
 }
 
 async fn get_quest(
@@ -751,8 +732,10 @@ async fn get_current_chapter(
         .definition(quest.definition_id)
         .with_context(|| format!("No quest definition with id {}.", quest.definition_id))?;
 
-    let response = if let Some(cur_task_id) = quest.tasks.len().checked_sub(1) {
-        let cur_task = &quest.tasks[cur_task_id];
+    let response = if let Some(cur_task_id) = quest.current_chapter {
+        let cur_task = quest.current_task().with_context(|| {
+            format!("Quest {quest_id} is on chapter {cur_task_id}, which has not been started.")
+        })?;
         let cur_task_definition = &quest_definition.metadata.tasks[cur_task_id];
         let task_name = cur_task_definition.issue_template.title.clone();
         let branch_name = cur_task_definition.scaffolding.0.clone();
@@ -783,7 +766,129 @@ async fn post_set_current_chapter(
     ))
 }
 
+/// Advances the quest to `chapter_number`, which must be the chapter following
+/// the current one, and whose predecessor must have been completed.
 pub async fn set_current_chapter(
+    state: &mut AppState,
+    quest_id: i64,
+    chapter_number: usize,
+) -> Result<Task> {
+    let quest = state
+        .quest_instances
+        .metadata(quest_id)
+        .with_context(|| format!("No quest with id {quest_id}."))?;
+
+    if quest.next_chapter() != chapter_number {
+        return Err(AppError(anyhow!(
+            "Requested chapter {chapter_number} is not the next chapter."
+        )));
+    }
+
+    // Confirm that previous task is complete.
+    if let Some(task) = quest.current_task()
+        && !state
+            .forgejo
+            .is_pull_request_merged(&quest.owner, &quest.repo, task.pr.number)
+            .await?
+    {
+        return Err(anyhow!(
+            "Pull request {}/{}#{} not merged.",
+            quest.owner,
+            quest.repo,
+            task.pr.number
+        )
+        .into());
+    }
+
+    start_chapter(state, quest_id, chapter_number).await
+}
+
+async fn post_skip_to_chapter(
+    State(state): State<Arc<Mutex<AppState>>>,
+    Path((quest_id, chapter_number)): Path<(i64, usize)>,
+) -> Result<Json<Task>> {
+    info!("Skip quest {quest_id} ahead to chapter {chapter_number}.");
+
+    let mut state = state.lock().await;
+    Ok(Json(
+        skip_to_chapter(&mut state, quest_id, chapter_number).await?,
+    ))
+}
+
+/// Jumps ahead to `chapter_number` without requiring the intervening chapters
+/// to be completed.
+///
+/// The skipped chapters are never instantiated: instead `main` is reset to the
+/// reference solution for the chapter preceding `chapter_number`, so that the
+/// learner starts from the code they would have had if they had solved
+/// everything up to that point.
+pub async fn skip_to_chapter(
+    state: &mut AppState,
+    quest_id: i64,
+    chapter_number: usize,
+) -> Result<Task> {
+    let AppState {
+        quest_instances: ref quests,
+        quest_definitions: ref defns,
+        ..
+    } = *state;
+
+    let Quest {
+        metadata: quest,
+        repo: local_repo,
+        ..
+    } = quests
+        .quest(quest_id)
+        .with_context(|| format!("No quest with id {quest_id}."))?;
+
+    if chapter_number >= quest.chapter_count() {
+        return Err(anyhow!(
+            "Quest {quest_id} has no chapter {chapter_number}; it has {} chapters.",
+            quest.chapter_count()
+        )
+        .into());
+    }
+
+    // Skipping backwards would have to retract issues, pull requests, and
+    // branches that have already been created.
+    if let Some(current_chapter) = quest.current_chapter
+        && chapter_number <= current_chapter
+    {
+        return Err(anyhow!(
+            "Quest {quest_id} is already on chapter {current_chapter}, so it cannot skip back to chapter {chapter_number}."
+        )
+		   .into());
+    }
+
+    let quest_definition = defns.definition(quest.definition_id)?;
+    let base_branch = match chapter_number.checked_sub(1) {
+        None => "main".to_string(),
+        Some(prev_chapter_number) => quest_definition
+            .metadata
+            .tasks
+            .get(prev_chapter_number)
+            .with_context(|| {
+                format!("Missing definition of task for chapter {prev_chapter_number}.")
+            })?
+            .reference_solution
+            .0
+            .clone(),
+    };
+
+    local_repo.switch_branch("main")?;
+    local_repo.hard_reset(&format!("refs/remotes/quest/{base_branch}"))?;
+    local_repo.force_push("origin", "main", "main")?;
+
+    start_chapter(state, quest_id, chapter_number).await
+}
+
+/// Instantiates `chapter_number` by creating its scaffolding branch, issue, and
+/// pull request, and makes it the current chapter.
+///
+/// This does not check that moving to `chapter_number` is a legal transition,
+/// and it assumes `main` already holds the code that the chapter builds on. See
+/// [`set_current_chapter`] for the checked, sequential version.
+pub async fn start_chapter(
     state: &mut AppState,
     quest_id: i64,
     chapter_number: usize,
@@ -804,29 +909,6 @@ pub async fn set_current_chapter(
         .with_context(|| format!("No quest with id {quest_id}."))?;
 
     let quest_definition = defns.definition(quest.definition_id)?;
-
-    let next_task_pos = quest.tasks.len();
-
-    if next_task_pos != chapter_number {
-        return Err(AppError(anyhow!(
-            "Requested chapter {chapter_number} is not the next chapter."
-        )));
-    }
-
-    // Confirm that previous task is complete.
-    if let Some(task) = quest.tasks.last()
-        && !forgejo
-            .is_pull_request_merged(&quest.owner, &quest.repo, task.pr.number)
-            .await?
-    {
-        return Err(anyhow!(
-            "Pull request {}/{}#{} not merged.",
-            quest.owner,
-            quest.repo,
-            task.pr.number
-        )
-        .into());
-    }
 
     let task_template = quest_definition
         .metadata
@@ -872,7 +954,7 @@ pub async fn set_current_chapter(
     );
 
     for (task_id, chapter_num) in quest_definition.metadata.task_ids {
-        if let Some(task) = quest.tasks.get(chapter_num) {
+        if let Some(task) = quest.task(chapter_num) {
             task_info = task_info.insert_map("chapter", |chapter_map| {
                 chapter_map.insert_map(task_id.clone(), |info| {
                     info.insert_str("pr", format!("#{}", task.pr.number))
@@ -899,7 +981,7 @@ pub async fn set_current_chapter(
         .metadata(quest_id)
         .with_context(|| format!("No quest with id {quest_id}."))?;
 
-    quest.tasks.push(task.clone());
+    quest.start_chapter(chapter_number, task.clone())?;
 
     quests.store_quest(quest_id, &quest)?;
 
@@ -957,64 +1039,4 @@ async fn clear_errors(State(state): State<Arc<Mutex<AppState>>>) -> Result<()> {
     let mut state = state.lock().await;
     state.errors.clear();
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use repo_quest_core::quest::instance::Issue;
-
-    use super::*;
-
-    fn task(number: i64) -> Task {
-        Task {
-            issue: Issue {
-                owner: "owner".into(),
-                repo: "repo".into(),
-                number,
-            },
-            pr: PullRequest {
-                owner: "owner".into(),
-                repo: "repo".into(),
-                number: number + 1,
-            },
-            initial_scaffolding_hash: "deadbeef".into(),
-            reference_solution: None,
-        }
-    }
-
-    fn shape(chapters: &[Option<Task>]) -> Vec<Option<i64>> {
-        chapters
-            .iter()
-            .map(|task| task.as_ref().map(|task| task.issue.number))
-            .collect()
-    }
-
-    #[test]
-    fn chapter_list_pads_unstarted_chapters() {
-        let tasks = [task(0), task(1)];
-        assert_eq!(
-            shape(&chapter_list(&tasks, 4)),
-            vec![Some(0), Some(1), None, None]
-        );
-    }
-
-    #[test]
-    fn chapter_list_pads_nothing_when_all_chapters_started() {
-        let tasks = [task(0), task(1)];
-        assert_eq!(shape(&chapter_list(&tasks, 2)), vec![Some(0), Some(1)]);
-    }
-
-    #[test]
-    fn chapter_list_pads_every_chapter_when_quest_unstarted() {
-        assert_eq!(shape(&chapter_list(&[], 3)), vec![None, None, None]);
-    }
-
-    #[test]
-    fn chapter_list_keeps_extra_tasks() {
-        let tasks = [task(0), task(1), task(2)];
-        assert_eq!(
-            shape(&chapter_list(&tasks, 1)),
-            vec![Some(0), Some(1), Some(2)]
-        );
-    }
 }

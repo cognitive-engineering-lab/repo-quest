@@ -14,6 +14,24 @@
      -webkit-transition: width 0.2s ease, -webkit-transform 0.2s ease;
  }
 
+ #rq-tools > summary {
+     cursor: pointer;
+ }
+
+ #rq-tools > summary h3 {
+     display: inline;
+ }
+
+ #rq-tools-body {
+     padding-top: 0.5em;
+ }
+
+ #rq-skip-select {
+     display: block;
+     width: 100%;
+     box-sizing: border-box;
+ }
+
  #rq-error-notice {
      display: none;
      background: var(--color-error-bg);
@@ -81,11 +99,27 @@
                     {{svg "octicon-question" 16 "tw-text-placeholder-text"}}
                     Quest Help
                 </h3>
-                </span>
             </div>
-            <div class="tw-mt-2">
-                <span id="solution-button-span"></span>
-            </div>
+            <div id="solution-button" class="tw-mt-2"></div>
+        </div>
+        <div class="ui attached segment">
+            <details id="rq-tools">
+                <summary>
+                    <h3>
+                        {{svg "octicon-tools" 16 "tw-text-placeholder-text"}}
+                        Quest Tools
+                    </h3>
+                </summary>
+                <div id="rq-tools-body">
+                    <div class="ui list">
+                        <strong>Skip ahead</strong>
+                    </div>
+                    <!-- Deliberately not `ui dropdown`: Forgejo initializes
+                         every such element into a Fomantic dropdown, which
+                         hides the native select and sizes itself to content. -->
+                    <select id="rq-skip-select"></select>
+                </div>
+            </details>
         </div>
         <div id="rq-error-notice" class="ui attached segment">
             <h3>Error</h3>

@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context as _, Result, bail, ensure};
+use anyhow::{Context as _, Result, ensure};
 use log::{debug, warn};
 use regex::Regex;
 
@@ -24,9 +24,10 @@ pub fn parse(dir: &Path) -> Result<QuestDefinition> {
 
     let main_dir = dir.join("main");
     let main = parse_commits_dir(meta.main, &main_dir)?;
-    if main.is_empty() {
-        bail!("Directory for main branch must have at least one entry.");
-    }
+    ensure!(
+        !main.is_empty(),
+        "Directory for main branch must have at least one entry."
+    );
 
     let assets_dir = {
         let assets_dir = dir.join("assets");

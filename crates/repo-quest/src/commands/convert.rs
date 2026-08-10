@@ -116,15 +116,14 @@ fn check_chapter_compatibility(
                     ..
                 },
             ) => {
-                if old_label < new_label {
-                    bail!(
-                        "Propagate does not work with differing commit structures, only different commit content.\n\nOriginal has a {old_label} chapter, changed does not."
-                    );
-                } else if old_label > new_label {
-                    bail!(
-                        "Propagate does not work with differing commit structures, only different commit content.\n\nChanged has a {new_label} chapter, original does not."
-                    )
-                }
+                ensure!(
+                    old_label >= new_label,
+                    "Propagate does not work with differing commit structures, only different commit content.\n\nOriginal has a {old_label} chapter, changed does not."
+                );
+                ensure!(
+                    old_label <= new_label,
+                    "Propagate does not work with differing commit structures, only different commit content.\n\nChanged has a {new_label} chapter, original does not."
+                );
                 check_optional_commit_dirs_aligned(
                     old_source_dir,
                     old_scaffold.as_ref(),
@@ -190,17 +189,17 @@ fn check_commits_aligned(
             EitherOrBoth::Both(old_commit, new_commit) => {
                 let old_path = old_commit.path.strip_prefix(old_source_dir)?;
                 let new_path = new_commit.path.strip_prefix(new_source_dir)?;
-                if old_path < new_path {
-                    bail!(
-                        "Propagate does not work with differing commit structures, only different commit content.\n\nOriginal version has commit `{}` which changed version does not.",
-                        old_path.display()
-                    );
-                } else if old_path > new_path {
-                    bail!(
-                        "Propagate does not work with differing commit structures, only different commit content.\n\nChanged version has commit `{}` which old version does not.",
-                        new_path.display()
-                    );
-                } else if old_commit.message != new_commit.message {
+                ensure!(
+                    old_path >= new_path,
+                    "Propagate does not work with differing commit structures, only different commit content.\n\nOriginal version has commit `{}` which changed version does not.",
+                    old_path.display()
+                );
+                ensure!(
+                    old_path <= new_path,
+                    "Propagate does not work with differing commit structures, only different commit content.\n\nChanged version has commit `{}` which old version does not.",
+                    new_path.display()
+                );
+                if old_commit.message != new_commit.message {
                     warn!(
                         "Commit messages differ between commits in `{}`. This will not prevent creation of the rebase repository, but commit messages are not updated by overlay.",
                         old_path.display()

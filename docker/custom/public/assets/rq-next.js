@@ -37,7 +37,7 @@ function classify({ chapters, current }) {
     return null;
 }
 
-function render(box, { state, chapter }) {
+function renderNext(box, { state, chapter }) {
     for (const body of box.querySelectorAll("[data-rq-next-state]")) {
         body.hidden = body.dataset.rqNextState !== state;
     }
@@ -63,16 +63,28 @@ async function insertNext() {
 
     const box = template.content.firstElementChild.cloneNode(true);
     container.prepend(box);
-    render(box, status);
+    renderNext(box, status);
+
+    // Only reached when this page's pull request is the current chapter's, i.e.
+    // the quest has not advanced past it yet.
+    const advancing = status.state === "pending";
 
     const deadline = Date.now() + POLL_TIMEOUT_MS;
     while (status.state === "pending" && Date.now() < deadline) {
         await sleep(POLL_INTERVAL_MS);
         status = classify(await questState()) ?? status;
-        render(box, status);
+        renderNext(box, status);
     }
 
-    if (status.state === "pending") render(box, { state: "timeout" });
+    if (status.state === "pending") {
+        renderNext(box, { state: "timeout" });
+        return;
+    }
+
+    // The sidebar was rendered against the chapter we just finished.
+    if (advancing && status.state === "ready") {
+        reportErrors(renderSidebar());
+    }
 }
 
 insertNext();

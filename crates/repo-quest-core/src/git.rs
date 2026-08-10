@@ -145,6 +145,24 @@ impl GitRepo {
             })
     }
 
+    /// Like [`GitRepo::push`], but overwrites the remote branch even when the
+    /// local branch is not a descendant of it.
+    pub fn force_push(
+        &self,
+        remote_name: &str,
+        local_branch: &str,
+        remote_branch: &str,
+    ) -> Result<()> {
+        self.git()
+            .arg("push")
+            .arg("--force")
+            .arg(remote_name)
+            .arg(format!("{local_branch}:{remote_branch}"))
+            .run_with_context(|| {
+                format!("Could not force push to remote {remote_name} for repo {self:?}.")
+            })
+    }
+
     pub fn create_branch(&self, branch_source: &str, branch_name: &str) -> Result<()> {
         self.git()
             .arg("branch")

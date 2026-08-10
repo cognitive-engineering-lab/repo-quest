@@ -52,9 +52,73 @@ pub struct QuestMetadata {
     pub owner: String,
     /// The Forgejo repo for this quest.
     pub repo: String,
-    /// The instantiated tasks for this quest, in the same order as the
-    /// `task_order` field in the `QuestDefinition`.
-    pub tasks: Vec<Task>,
+    /// The tasks for this quest, indexed by chapter number, in the same order
+    /// as the `task_order` field in the `QuestDefinition`. A chapter is `None`
+    /// if it has not been instantiated, either because the quest has not
+    /// reached it or because it was skipped.
+    pub tasks: Vec<Option<Task>>,
+    /// The chapter that the quest is currently on, or `None` if no chapter has
+    /// been started yet.
+    pub current_chapter: Option<usize>,
+}
+
+impl QuestMetadata {
+    /// Creates a quest with no chapters started, with room for `chapter_count`
+    /// chapters.
+    #[must_use]
+    pub fn new(definition_id: usize, owner: String, repo: String, chapter_count: usize) -> Self {
+        QuestMetadata {
+            definition_id,
+            owner,
+            repo,
+            tasks: vec![None; chapter_count],
+            current_chapter: None,
+        }
+    }
+
+    /// The total number of chapters in the quest, started or not.
+    #[must_use]
+    pub fn chapter_count(&self) -> usize {
+        self.tasks.len()
+    }
+
+    /// The task for the given chapter, if that chapter has been started.
+    #[must_use]
+    pub fn task(&self, chapter: usize) -> Option<&Task> {
+        self.tasks.get(chapter)?.as_ref()
+    }
+
+    /// The task for the given chapter, if that chapter has been started.
+    pub fn task_mut(&mut self, chapter: usize) -> Option<&mut Task> {
+        self.tasks.get_mut(chapter)?.as_mut()
+    }
+
+    /// The task for the chapter the quest is currently on.
+    #[must_use]
+    pub fn current_task(&self) -> Option<&Task> {
+        self.task(self.current_chapter?)
+    }
+
+    /// The chapter that would follow the current one.
+    ///
+    /// Note that this is relative to the current chapter, so it does not
+    /// account for skipped chapters, which are never returned to.
+    #[must_use]
+    pub fn next_chapter(&self) -> usize {
+        self.current_chapter.map_or(0, |chapter| chapter + 1)
+    }
+
+    /// Records `task` as the instantiation of `chapter` and makes that chapter
+    /// current.
+    pub fn start_chapter(&mut self, chapter: usize, task: Task) -> Result<()> {
+        let slot = self
+            .tasks
+            .get_mut(chapter)
+            .with_context(|| format!("Quest has no chapter {chapter}."))?;
+        *slot = Some(task);
+        self.current_chapter = Some(chapter);
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -193,5 +257,100 @@ impl QuestInstanceIndex {
         };
         self.store_quest(id, quest)?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn quest(chapter_count: usize) -> QuestMetadata {
+        QuestMetadata::new(0, "hero".into(), "quest".into(), chapter_count)
+    }
+
+    fn task(number: i64) -> Task {
+        Task {
+            issue: Issue {
+                owner: "hero".into(),
+                repo: "quest".into(),
+                number,
+            },
+            pr: PullRequest {
+                owner: "hero".into(),
+                repo: "quest".into(),
+                number: number + 1,
+            },
+            initial_scaffolding_hash: "deadbeef".into(),
+            reference_solution: None,
+        }
+    }
+
+    #[test]
+    fn fresh_quest_starts_at_chapter_zero() {
+        let quest = quest(3);
+        assert_eq!(quest.current_chapter, None);
+        assert_eq!(quest.next_chapter(), 0);
+        assert!(quest.current_task().is_none());
+        assert_eq!(quest.chapter_count(), 3);
+    }
+
+    #[test]
+    fn starting_a_chapter_makes_it_current() {
+        let mut quest = quest(3);
+        quest.start_chapter(0, task(1)).unwrap();
+
+        assert_eq!(quest.current_chapter, Some(0));
+        assert_eq!(quest.next_chapter(), 1);
+        assert_eq!(quest.current_task().unwrap().issue.number, 1);
+    }
+
+    #[test]
+    fn skipping_leaves_intervening_chapters_uninstantiated() {
+        let mut quest = quest(5);
+        quest.start_chapter(0, task(1)).unwrap();
+        quest.start_chapter(3, task(7)).unwrap();
+
+        assert_eq!(quest.current_chapter, Some(3));
+        assert_eq!(quest.next_chapter(), 4);
+        assert_eq!(quest.current_task().unwrap().issue.number, 7);
+        assert_eq!(quest.task(0).unwrap().issue.number, 1);
+        assert!(quest.task(1).is_none(), "chapter 1 was skipped");
+        assert!(quest.task(2).is_none(), "chapter 2 was skipped");
+        assert_eq!(
+            quest.tasks.len(),
+            5,
+            "skipping does not change the chapter count",
+        );
+    }
+
+    #[test]
+    fn cannot_start_a_chapter_outside_the_quest() {
+        let mut quest = quest(2);
+        assert!(quest.start_chapter(2, task(1)).is_err());
+        assert_eq!(quest.current_chapter, None);
+    }
+
+    #[test]
+    fn task_mut_reaches_started_chapters_only() {
+        let mut quest = quest(2);
+        quest.start_chapter(0, task(1)).unwrap();
+
+        quest.task_mut(0).unwrap().reference_solution = Some(PullRequest {
+            owner: "hero".into(),
+            repo: "quest".into(),
+            number: 42,
+        });
+
+        assert_eq!(
+            quest
+                .task(0)
+                .unwrap()
+                .reference_solution
+                .as_ref()
+                .unwrap()
+                .number,
+            42
+        );
+        assert!(quest.task_mut(1).is_none());
     }
 }

@@ -42,17 +42,13 @@ pub async fn handler(
             .id;
 
         let quest = state.quest_instances.quest(quest_id)?;
-        let corresponding_pr = match quest.metadata.tasks.last() {
+        let corresponding_pr = match quest.metadata.current_task() {
             Some(cur_task) => cur_task.pr.number == pr.number,
             None => pr.number == 0,
         };
         if corresponding_pr {
-            let quest_defn = state
-                .quest_definitions
-                .definition(quest.metadata.definition_id)?;
-
-            let next_chapter_number = quest.metadata.tasks.len();
-            if next_chapter_number < quest_defn.metadata.tasks.len() {
+            let next_chapter_number = quest.metadata.next_chapter();
+            if next_chapter_number < quest.metadata.chapter_count() {
                 quest.repo.fetch("origin")?;
                 quest.repo.hard_reset("refs/remotes/origin/main")?;
                 set_current_chapter(&mut state, quest_id, next_chapter_number).await?;
