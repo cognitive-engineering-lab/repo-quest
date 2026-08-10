@@ -41,7 +41,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build multi-platform images
-        run: RQ_IMAGE_TAG=$RQ_VERSION docker compose -f compose.yml -f compose.ci.yml build
+        run: RQ_IMAGE_TAG=$RQ_VERSION docker compose -f compose.yml build
 
       - name: Publish dry run
         run: docker compose publish -y "ghcr.io/cognitive-engineering-lab/repoquest-compose:$RQ_VERSION" --dry-run
