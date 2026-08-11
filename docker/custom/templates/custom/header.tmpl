@@ -1,6 +1,6 @@
 <style>
  .chroma .go {
-     color: black;
+     color: var(--color-text);
  }
 
  .ui.segment.rq-border {
@@ -37,8 +37,12 @@
  }
 
  h1, h2, h3 {
-     > svg {
-	 vertical-align: center !important;
+     > svg.svg {
+	 vertical-align: middle;
+
+	 @supports (-moz-appearance: none) {
+	     vertical-align: center;
+	 }
      }
  }
 </style>

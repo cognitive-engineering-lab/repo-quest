@@ -3,6 +3,7 @@
      position:relative;
      /* height: calc(100dvh - 49px - 4rem); */
      width: 20em;
+     min-width: 20em;
      margin-top: 1rem;
      /*border-right: none;*/
      margin-left: 0;
@@ -82,7 +83,6 @@
 	    <div class="ui list">
                 <strong>Branch: </strong><code><a href="" id="current-branch-name"></a></code>
             </div>
-
             <div class="ui list">
                 <span><a id="current-task-link">
 		    {{svg "octicon-issue-opened" 16 "tw-text-placeholder-text"}}
@@ -93,8 +93,9 @@
 		    Pull Request
 		</a></span>
             </div>
-            <div class="divider"></div>
-            <div class="ui floating">
+	</div>
+        <div class="ui attached segment">
+	    <div class="ui floating">
                 <h3>
                     {{svg "octicon-question" 16 "tw-text-placeholder-text"}}
                     Quest Help
