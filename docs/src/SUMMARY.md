@@ -7,7 +7,6 @@
 - [Following quests](./learners.md)
   - [Requirements](./learners/requirements.md)
   - [Starting the RepoQuest environment](./learners/starting-repoquest.md)
-  - [Adding a quest](./learners/adding-a-quest.md)
   - [Starting a quest](./learners/starting-a-quest.md)
   - [Completing a chapter](./learners/completing-a-chapter.md)
   - [Using a reference solution](./learners/using-a-reference-solution.md)

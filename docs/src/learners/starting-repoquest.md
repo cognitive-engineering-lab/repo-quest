@@ -1,18 +1,45 @@
 # Starting the RepoQuest environment
 
-To start the RepoQuest environment using Docker, clone the RepoQuest repository.
-In the root of the repository run
+You have a few options for starting RepoQuest, ordered by complexity.
+
+## 1. `curl | sh`
+
+The quickest way to get started is to run our provided shell script:
 
 ```sh
-docker compose up --build --detach
+curl -sSl https://raw.githubusercontent.com/cognitive-engineering-lab/repo-quest/refs/heads/main/run-repo-quest.sh | sh
 ```
 
-To start RepoQuest using Podman, clone the repository and in the root of the
-repository run
+## 2. Compose with remote script
+
+RepoQuest is run through a Compose script, which can be managed by either Docker or Podman. We will use `docker` in this book, but the commands should be interchangeable for `podman`.
+
+First, you will need to set an environment variable telling RepoQuest where your Docker socket lives (for use in running sub-containers in Forgejo's CI):
 
 ```sh
-podman compose up --build --detach
+export DOCKER_HOST=$(docker context inspect --format '{{.Endpoints.docker.Host}}')
+export RQ_DOCKER_HOST=${DOCKER_HOST#unix://}
 ```
+
+Second, you will need to run `compose up` using the Compose script uploaded to the container registry:
+
+```sh
+docker compose up --file oci://ghcr.io/cognitive-engineering-lab/repoquest-compose:latest
+```
+
+Note that you can replace `latest` with a particular version of RepoQuest such as `v0.1.0`.
+
+## 3. Compose from source
+
+Alternatively, if you have cloned the RepoQuest source, you can build and the images locally. In the root of the repository, run:
+
+```sh
+export DOCKER_HOST=$(docker context inspect --format '{{.Endpoints.docker.Host}}')
+export RQ_DOCKER_HOST=${DOCKER_HOST#unix://}
+docker compose up --build
+```
+
+## RepoQuest options
 
 You can control the port that RepoQuest uses for its HTTP server with the
 `RQ_PORT` environment variable and the port used for its SSH server with the
@@ -40,19 +67,3 @@ configuration and the quest data.
 To start a quest after registering, first [upload a quest definition
 bundle](http://localhost:8085) (such as [rqst-async.tgz](#TODO)), and then start
 the quest.
-
-### Forgejo Actions CI support
-
-In order to support Forgejo Actions, the socket for communicating with Docker or
-Podman must be made available to the Forgejo Runner container. For Docker the
-default configuration should work with no changes. For rootless Podman, you will
-have to start the service that provides the socket and then specify the path to
-the socket via the environment variable `RQ_DOCKER_HOST`.
-
-For example,
-
-```sh
-systemctl --user start podman.socket
-RQ_DOCKER_HOST="$XDG_RUNTIME_DIR/podman/podman.sock" \
-    podman compose up --build --detach
-```

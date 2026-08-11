@@ -1,8 +1,8 @@
 # RepoQuest
 
 RepoQuest is an experimental tool for interactive programming tutorials. Each
-lesson takes place in a Git repository hosted in a local instance (running in
-Docker) of the [Forgejo](https://forgejo.org/) Git forge. RepoQuest uses the
+lesson takes place in a Git repository hosted in a local container of the
+[Forgejo](https://forgejo.org/) Git forge. RepoQuest uses the
 Forgejo interface for issues and pull requests to provide starter code and
 explain programming concepts.
 
