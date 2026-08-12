@@ -33,11 +33,13 @@ function showError(msg) {
 
     notice.style.display = "block";
 
-    throw new Error(msg);
+    // NOTE(wc): for now, let's not rethrow these errors and only handle them within RQ.
+    // Prevents an excessive # of red boxes from showing on screen.
+    // throw new Error(msg);
 }
 
 function reportErrors(promise) {
-    promise.catch((err) => showError(err.message));
+    promise.catch((err) => showError(`Client error: ${err.message}`));
 }
 
 async function clearErrors() {
@@ -54,11 +56,9 @@ function listenForErrors() {
         websocket = new WebSocket(`${window.appSubUrl}/rq/error/listen`);
         websocket.addEventListener("message", (e) => {
             let errors = JSON.parse(e.data);
-            if (errors.length > 0) {
-                showError(
-                    `Server has encountered errors: ${errors[errors.length - 1]}`,
-                );
-            }
+	    if (errors.length === 0) return;
+	    let error = errors[errors.length - 1];
+	    showError(`Server error: ${error}`);
         });
     }
 
@@ -143,7 +143,7 @@ function renderReferenceSolution(pr) {
         link.href = `${window.appSubUrl}/${pr.owner}/${pr.repo}/pulls/${pr.number}`;
         link.classList.add("text");
         link.classList.add("flex-text-block");
-        link.append("Pull Request");
+        link.append("Reference solution pull request");
         solnButton.replaceChildren(link);
     }
 }

@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     convert::Infallible,
+    fmt::Write as _,
     io::{Seek, Write as _},
     path::PathBuf,
     sync::Arc,
@@ -16,7 +17,7 @@ use axum::{
         DefaultBodyLimit, Multipart, Path, Request, State, WebSocketUpgrade,
         ws::{Message, WebSocket},
     },
-    http::StatusCode,
+    http::{Response, StatusCode},
     response::IntoResponse,
     routing::{any, get, post},
 };
@@ -136,11 +137,11 @@ pub struct AppError(
 
 impl IntoResponse for AppError {
     fn into_response(self) -> axum::response::Response {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("{}\n{:?}", self.0, self.0.source()),
-        )
-            .into_response()
+        let mut s = self.0.to_string();
+        if let Some(source) = self.0.source() {
+            let _ = write!(s, " - {source}");
+        }
+        (StatusCode::INTERNAL_SERVER_ERROR, s).into_response()
     }
 }
 
@@ -155,10 +156,20 @@ async fn log_error_responses(
 
     let mut state = state.lock().await;
     if response.status().is_server_error() {
-        state.errors.push(format!("{response:?}"));
+        let (parts, body) = response.into_parts();
+        let bytes = axum::body::to_bytes(body, 64 * 1024)
+            .await
+            .unwrap_or_default();
+        state.errors.push(format!(
+            "{} {}:\n{}",
+            parts.status.as_u16(),
+            parts.status.canonical_reason().unwrap_or_default(),
+            String::from_utf8_lossy(&bytes),
+        ));
+        Response::from_parts(parts, Body::from(bytes))
+    } else {
+        response
     }
-
-    response
 }
 
 pub fn new(

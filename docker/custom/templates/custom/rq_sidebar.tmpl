@@ -45,6 +45,14 @@
      justify-content: center;
      gap: 2rem;
  }
+
+ #rq-error-list {
+     padding-left: 1em;
+
+     > li {
+	 margin-block-end: 1em;
+     }
+ }
 </style>
 
 <template id="rq-sidebar-template">
@@ -52,11 +60,6 @@
 	<div class="rq-logo-badge">
 	    <img class="rq-logo" src="/assets/rq-logo.svg" />
 	</div>
-        <div class="ui top attached header">
-            <h2 class="tw-break-anywhere" style="margin: 0px;">
-		RepoQuest
-	    </h2>
-        </div>
         <div class="ui attached segment">
             <div class="ui floating">
 		<h3>
@@ -102,6 +105,14 @@
                 </h3>
             </div>
             <div id="solution-button" class="tw-mt-2"></div>
+	    <div class="ui list">
+		<details>
+		    <summary><i>How do I go to the next challenge?</i></summary>
+		    <p>
+			The next challenge appears once you have (1) merged the current challenge's pull request, and (2) closed the current challenge's issue. Make the PR is merged (not closed), and then refresh the page if no changes appear.
+		    </p>
+		</details>
+	    </div>
         </div>
         <div class="ui attached segment">
             <details id="rq-tools">
