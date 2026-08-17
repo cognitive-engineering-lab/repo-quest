@@ -40,12 +40,14 @@ pub fn parse(dir: &Path) -> Result<QuestDefinition> {
 
     Ok(QuestDefinition {
         title: meta.title,
+	version: meta.version,
         author: meta.author,
         main,
         chapters,
-        repo: meta.repo,
+        repository: meta.repository,
         rq_version: meta.rq_version,
         description: meta.description,
+	quest_repo: meta.quest_repo,
         assets_dir,
         test_cmd: meta.test_cmd,
     })

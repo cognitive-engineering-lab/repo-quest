@@ -53,6 +53,13 @@
 	 margin-block-end: 1em;
      }
  }
+
+ .faq details > div {
+     background-color: var(--color-nav-bg);
+     padding: 0.5em;
+     margin-top: 0.25em;
+     border: 1px solid var(--color-secondary);
+ }
 </style>
 
 <template id="rq-sidebar-template">
@@ -69,7 +76,7 @@
 
 	    </div>
             <div class="ui list">
-                <strong>Title: </strong><span id="current-quest-title"></span>
+                <strong>Title: </strong><a href="" id="current-quest-link"></a>
             </div>
 
 	</div>
@@ -97,20 +104,42 @@
 		</a></span>
             </div>
 	</div>
-        <div class="ui attached segment">
+        <div class="ui attached segment faq">
 	    <div class="ui floating">
                 <h3>
                     {{svg "octicon-question" 16 "tw-text-placeholder-text"}}
                     Quest Help
                 </h3>
             </div>
-            <div id="solution-button" class="tw-mt-2"></div>
+            <div class="ui list">
+		<details>
+		    <summary>How do I complete this challenge?</summary>
+		    <div>
+			<p>If you can't figure out a solution, you can either read or directly use the reference solution. Click the button below to create a PR onto your challenge branch containing the reference solution. You can read it and close it, or merge it.</p>
+			<div id="solution-button" class="tw-mt-2"></div>
+		    </div>
+		</details>
+	    </div>
 	    <div class="ui list">
 		<details>
-		    <summary><i>How do I go to the next challenge?</i></summary>
-		    <p>
-			The next challenge appears once you have (1) merged the current challenge's pull request, and (2) closed the current challenge's issue. Make the PR is merged (not closed), and then refresh the page if no changes appear.
-		    </p>
+		    <summary>How do I go to the next challenge?</summary>
+		    <div>
+			<p>
+			    The next challenge appears once you have (1) merged the current challenge's pull request, and (2) closed the current challenge's issue. Make sure the challenge PR is merged (not closed), and then refresh the page if no changes appear.
+			</p>
+		    </div>
+		</details>
+	    </div>
+	    <div class="ui list">
+		<details>
+		    <summary>How do I report a bug?</summary>
+		    <div>
+			<p>
+			    If the bug is more related to your current quest (e.g. typos in issues, confusing code), please file an issue on <a href="" id="quest-bug-link">its repository</a>.
+			</p>
+			<p>If the bug is more related to RepoQuest, please file an issue on <a href="https://github.com/cognitive-engineering-lab/repo-quest">its repository</a>.</p>
+			<p>You can also join <a href="https://cognitive-engineering-lab.zulipchat.com/#narrow/channel/453057-repo-quest">our Zulip</a> to discuss any issues.</p>
+		    </div>
 		</details>
 	    </div>
         </div>
@@ -135,10 +164,7 @@
         </div>
         <div id="rq-error-notice" class="ui attached segment">
             <h3>Error</h3>
-            RepoQuest has encountered errors. Please <a
-							 href="https://github.com/cognitive-engineering-lab/repo-quest/issues/new">submit
-		a bug report</a> that includes the quests you have installed and <a
-										     href="{{AppSubUrl}}/rq/error/log">the server error messages</a> and any error messages below.
+            RepoQuest has encountered errors. Please <a href="https://github.com/cognitive-engineering-lab/repo-quest/issues/new">submit a bug report</a> that includes the quests you have installed and <a href="{{AppSubUrl}}/rq/error/log">the server error messages</a> and any error messages below.
             <ul id="rq-error-list">
             </ul>
             <button id="rq-error-clear">Clear all errors.</button>

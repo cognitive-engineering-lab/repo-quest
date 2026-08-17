@@ -85,8 +85,12 @@ function listenForErrors() {
 }
 
 function renderCurrentQuest(quest) {
-    const currentQuestSpan = document.getElementById("current-quest-title");
-    currentQuestSpan.innerHTML = quest.title;
+    const currentQuestLink = document.getElementById("current-quest-link");
+    currentQuestLink.innerHTML = quest.title;
+    currentQuestLink.href = quest.repository;
+
+    const questBugLink = document.getElementById("quest-bug-link");
+    questBugLink.href = quest.repository;
 }
 
 function renderCurrentChapter(chapter) {

@@ -35,10 +35,12 @@ pub use self::bundle::bundle;
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct QuestMeta {
     pub title: String,
+    pub version: String,
     pub author: String,
-    pub repo: String,
+    pub repository: String,
     pub rq_version: String,
     pub description: String,
+    pub quest_repo: String,
     /// Must be non-empty
     pub main: Vec<CommitMeta>,
     pub chapters: Vec<ChapterMeta>,
@@ -155,10 +157,12 @@ pub struct ChapterMeta {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct QuestDefinition {
     pub title: String,
+    pub version: String,
     pub author: String,
-    pub repo: String,
+    pub repository: String,
     pub rq_version: String,
     pub description: String,
+    pub quest_repo: String,
     /// Must be non-empty
     pub main: Vec<Commit>,
     pub chapters: Vec<Chapter>,
@@ -180,10 +184,12 @@ impl QuestDefinition {
             .collect();
         QuestMeta {
             title: self.title,
+	    version: self.version,
             author: self.author,
-            repo: self.repo,
+            repository: self.repository,
             rq_version: self.rq_version,
             description: self.description,
+	    quest_repo: self.quest_repo,
             main,
             chapters,
             test_cmd: self.test_cmd,

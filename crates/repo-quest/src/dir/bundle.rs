@@ -111,8 +111,9 @@ pub fn bundle(quest: QuestDefinition, output: &Path) -> Result<()> {
     let quest_meta = QuestDefinitionMetadata {
         title: quest.title,
         author: quest.author,
+	repository: quest.repository,
         description: quest.description,
-        generated_repo_name: quest.repo,
+        generated_repo_name: quest.quest_repo,
         tasks,
         task_ids,
     };

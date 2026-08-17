@@ -161,6 +161,7 @@ pub struct QuestDefinitionMetadata {
     pub author: String,
     /// A brief description of the quest.
     pub description: String,
+    pub repository: String,
     /// The name to use for the repository generated for the user to use for the
     /// quest.
     ///
