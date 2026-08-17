@@ -184,12 +184,12 @@ impl QuestDefinition {
             .collect();
         QuestMeta {
             title: self.title,
-	    version: self.version,
+            version: self.version,
             author: self.author,
             repository: self.repository,
             rq_version: self.rq_version,
             description: self.description,
-	    quest_repo: self.quest_repo,
+            quest_repo: self.quest_repo,
             main,
             chapters,
             test_cmd: self.test_cmd,
