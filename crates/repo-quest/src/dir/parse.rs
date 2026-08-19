@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context as _, Result, ensure};
+use anyhow::{Context as _, Result, bail, ensure};
 use log::{debug, warn};
 use regex::Regex;
 
@@ -182,14 +182,11 @@ fn parse_primary_issue(issue_path: &Path) -> Result<PrimaryIssue> {
     })?;
 
     Ok(match frontmatter_opt {
-        Some((frontmatter, content)) => PrimaryIssue {
-            meta: Some(frontmatter),
+        Some((meta, content)) => PrimaryIssue {
+            meta,
             content: content.to_string(),
         },
-        None => PrimaryIssue {
-            meta: None,
-            content: issue_file_content,
-        },
+        None => bail!("Missing frontmatter in `{}`", issue_path.display())
     })
 }
 
@@ -468,9 +465,9 @@ Content line 2
             issue,
             Issue {
                 primary_issue: PrimaryIssue {
-                    meta: Some(IssueMeta {
+                    meta: IssueMeta {
                         title: "Warmup".to_string()
-                    }),
+                    },
                     content: "Issue content referencing #{{ chapter.pr }}.\n".to_string()
                 },
                 comments: Some(vec![

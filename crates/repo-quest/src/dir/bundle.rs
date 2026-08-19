@@ -90,7 +90,7 @@ pub fn bundle(quest: QuestDefinition, output: &Path) -> Result<()> {
         // in the next chapter
         last_solution_ref = last_solution_branch;
 
-        let issue_template = bundle_issue(&label, issue);
+        let issue_template = bundle_issue(issue);
         let pr_template = bundle_pull_request(&label, pull_request);
 
         tasks.push(TaskTemplate {
@@ -162,10 +162,7 @@ fn bundle_pull_request(branch_name: &str, pull_request: PullRequest) -> PullRequ
     let (pr_title, pr_body) = match pull_request.primary_issue {
         None => (branch_name.to_string(), String::new()),
         Some(issue) => (
-            match issue.meta {
-                None => branch_name.to_string(),
-                Some(issue) => issue.title,
-            },
+            issue.meta.title,
             issue.content,
         ),
     };
@@ -210,13 +207,13 @@ fn bundle_pull_request_comment(
     }
 }
 
-fn bundle_issue(branch_name: &str, issue: Issue) -> IssueTemplate {
+fn bundle_issue(issue: Issue) -> IssueTemplate {
     debug!("Creating issue data.");
     IssueTemplate {
         title: issue
             .primary_issue
             .meta
-            .map_or_else(|| branch_name.to_string(), |m| m.title),
+            .title,
         body: Template(issue.primary_issue.content),
         comments: issue
             .comments
