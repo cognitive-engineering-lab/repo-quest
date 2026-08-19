@@ -242,7 +242,7 @@ pub struct Issue {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PrimaryIssue {
-    pub meta: Option<IssueMeta>,
+    pub meta: IssueMeta,
     pub content: String,
 }
 
